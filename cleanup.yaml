@@ -1,0 +1,13 @@
+---
+# Master cleanup sequence — removes sensor from all OS families
+- import_playbook: playbooks/ubuntu_cleanup.yaml
+  vars:
+    target_group: ubuntu_prod_vms
+
+- import_playbook: playbooks/redhat_cleanup.yaml
+  vars:
+    target_group: redhat_prod_vms
+
+- import_playbook: playbooks/windows_cleanup.yaml
+  vars:
+    target_group: windows_prod_vms

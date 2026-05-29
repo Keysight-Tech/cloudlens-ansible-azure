@@ -1,0 +1,22 @@
+---
+# Container defaults — overridden by inventory/group_vars/all.yaml from customer_input.yaml
+cloudlens_agent_container_name: "cloudlens-agent"
+custom_tags: "Env=Azure"
+
+registry_type: "insecure"
+local_ca_path: "files/cloudlenscerts.crt"
+ca_cert_dir: "/etc/ssl/certs"
+
+# Log rotation
+log_max_size: "50m"
+log_max_file: "5"
+
+# RHEL-specific
+podman_command: podman
+redhat_ca_cert_dir: "/etc/pki/ca-trust/source/anchors"
+
+# Windows-specific
+local_installer_path: "{{ playbook_dir }}/../files/cloudlens-win-sensor-6.12.0.316.exe"
+cloudlens_installer_filename: "cloudlens-win-sensor-6.12.0.316.exe"
+ssl_verify: "no"
+auto_update: "yes"

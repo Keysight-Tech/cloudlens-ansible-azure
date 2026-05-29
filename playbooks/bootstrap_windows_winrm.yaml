@@ -1,0 +1,74 @@
+---
+# =====================================================================
+# Azure Windows WinRM Bootstrap
+# =====================================================================
+# Most Azure Windows VMs ship with WinRM disabled.
+# This playbook uses `az vm run-command invoke` (NOT WinRM) to enable
+# WinRM on every Windows VM in the target group.
+#
+# Run this ONCE per VM before any windows.yaml deployment.
+# =====================================================================
+- name: Bootstrap WinRM on Azure Windows VMs via Azure Run Command
+  hosts: "{{ target_group | default('windows_prod_vms') }}"
+  gather_facts: no
+  connection: local
+  vars_files:
+    - ../vars/cloudlens.yaml
+
+  tasks:
+    - name: Verify Azure CLI is available
+      ansible.builtin.command: az --version
+      delegate_to: localhost
+      run_once: true
+      register: az_check
+      changed_when: false
+      failed_when: az_check.rc != 0
+
+    - name: Set vm name and resource group from inventory facts
+      ansible.builtin.set_fact:
+        vm_name: "{{ name | default(inventory_hostname_short) }}"
+        vm_rg: "{{ azure_resource_group | default(resource_group) }}"
+
+    - name: Enable WinRM via Azure VM Run Command
+      ansible.builtin.command: >
+        az vm run-command invoke
+        --resource-group "{{ vm_rg }}"
+        --name "{{ vm_name }}"
+        --command-id RunPowerShellScript
+        --scripts "winrm quickconfig -force; Enable-PSRemoting -Force; New-NetFirewallRule -DisplayName 'WinRM-HTTP' -Direction Inbound -Protocol TCP -LocalPort 5985 -Action Allow -ErrorAction SilentlyContinue; Set-Item WSMan:\\localhost\\Service\\Auth\\Basic $true -Force; Set-Item WSMan:\\localhost\\Service\\AllowUnencrypted $true -Force; Restart-Service WinRM; 'WinRM enabled successfully'"
+      delegate_to: localhost
+      register: winrm_enable
+      retries: 2
+      delay: 10
+      until: winrm_enable.rc == 0
+      failed_when: winrm_enable.rc != 0
+      changed_when: "'WinRM enabled successfully' in winrm_enable.stdout"
+
+    - name: Open NSG rule for WinRM port 5985
+      ansible.builtin.command: >
+        az network nsg rule create
+        --resource-group "{{ vm_rg }}"
+        --nsg-name "{{ vm_name }}-nsg"
+        --name AllowWinRM
+        --priority 1010
+        --source-address-prefixes Internet
+        --destination-port-ranges 5985
+        --access Allow
+        --protocol Tcp
+        --direction Inbound
+      delegate_to: localhost
+      register: nsg_rule
+      failed_when: false
+      changed_when: nsg_rule.rc == 0
+
+    - name: Wait for WinRM to be reachable
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: 5985
+        timeout: 120
+        delay: 5
+      delegate_to: localhost
+
+    - name: Display bootstrap status
+      ansible.builtin.debug:
+        msg: "✓ WinRM enabled on {{ vm_name }} ({{ ansible_host }})"

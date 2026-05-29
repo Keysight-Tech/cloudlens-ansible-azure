@@ -1,0 +1,14 @@
+---
+# Windows-specific connection vars (WinRM)
+ansible_user: "{{ windows.ansible_user | default('azureuser') }}"
+ansible_password: "{{ windows.ansible_password | default(lookup('env', 'ANSIBLE_WINRM_PASSWORD')) }}"
+ansible_connection: winrm
+ansible_winrm_transport: "{{ windows.ansible_winrm_transport | default('ntlm') }}"
+ansible_winrm_server_cert_validation: "{{ windows.ansible_winrm_server_cert_validation | default('ignore') }}"
+ansible_port: 5985
+
+# Installer paths
+local_installer_path: "{{ windows.installer_path | default('files/cloudlens-win-sensor-6.12.0.316.exe') }}"
+cloudlens_installer_filename: "{{ windows.installer_filename | default('cloudlens-win-sensor-6.12.0.316.exe') }}"
+ssl_verify: "{{ cloudlens.ssl_verify | default('no') }}"
+auto_update: "{{ cloudlens.auto_update | default('yes') }}"

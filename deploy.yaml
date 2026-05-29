@@ -1,0 +1,19 @@
+---
+# Master deployment sequence — all OS families
+# Customer inputs read from customer_input.yaml
+
+- import_playbook: playbooks/bootstrap_windows_winrm.yaml
+  vars:
+    target_group: windows_prod_vms
+
+- import_playbook: playbooks/ubuntu.yaml
+  vars:
+    target_group: ubuntu_prod_vms
+
+- import_playbook: playbooks/redhat.yaml
+  vars:
+    target_group: redhat_prod_vms
+
+- import_playbook: playbooks/windows.yaml
+  vars:
+    target_group: windows_prod_vms
