@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <title>CloudLens Ansible for Azure | Keysight Technologies</title>
+  <meta name="description" content="Deploy CloudLens sensors to any Azure VM in under 60 seconds. Linux, Windows, at scale. ARM template, Cloud Shell, or Docker." />
+  <meta name="theme-color" content="#0078D4" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0F172A" media="(prefers-color-scheme: dark)" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="CloudLens Ansible for Azure" />
+  <meta property="og:description" content="Deploy CloudLens sensors to any Azure VM in under 60 seconds. Linux, Windows, at scale." />
+  <meta property="og:url" content="https://keysight-tech.github.io/cloudlens-ansible-azure/" />
+  <meta property="og:image" content="https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/docs/assets/architecture-diagram.svg" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230078D4'/%3E%3Cpath d='M8 20 L16 8 L24 20 Z' fill='%23D4AF37'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header" role="banner">
+    <div class="container nav">
+      <a href="#top" class="brand" aria-label="CloudLens Ansible for Azure home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="28" height="28" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#0078D4"/><path d="M8 20 L16 8 L24 20 Z" fill="#D4AF37"/></svg>
+        </span>
+        <span class="brand-text">
+          <strong>CloudLens</strong>
+          <span class="brand-sub">Ansible for Azure</span>
+        </span>
+      </a>
+      <nav class="primary-nav" aria-label="Primary">
+        <a href="#why">Why</a>
+        <a href="#wizard">Wizard</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#scaling">Scaling</a>
+        <a href="#docs">Docs</a>
+      </nav>
+      <div class="nav-actions">
+        <button id="theme-toggle" class="icon-btn" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
+          <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+          <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+        <a class="ghost-btn" href="https://github.com/Keysight-Tech/cloudlens-ansible-azure" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2c-3.2.7-3.87-1.37-3.87-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.09-.12-.29-.52-1.47.11-3.06 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.78 0c2.2-1.49 3.18-1.18 3.18-1.18.63 1.59.23 2.77.12 3.06.74.8 1.19 1.83 1.19 3.09 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.06.78 2.13v3.15c0 .31.21.66.79.55C20.21 21.38 23.5 17.07 23.5 12 23.5 5.65 18.35.5 12 .5z"/></svg>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- 1. HERO -->
+    <section id="top" class="hero">
+      <div class="hero-bg" aria-hidden="true"></div>
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <span class="eyebrow">
+            <span class="dot"></span>
+            Verified June 2026 on real Azure
+          </span>
+          <h1>CloudLens Ansible for Azure</h1>
+          <p class="lede">Deploy CloudLens sensors to any Azure VM in under 60 seconds. Linux, Windows, at scale.</p>
+          <div class="cta-row">
+            <a class="btn btn-primary tier" href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Farm-template.json" target="_blank" rel="noopener">
+              <span class="tier-num">1</span>
+              <span class="tier-label">
+                <strong>Deploy to Azure</strong>
+                <small>ARM template, browser only</small>
+              </span>
+            </a>
+            <a class="btn btn-secondary tier" href="https://shell.azure.com" target="_blank" rel="noopener">
+              <span class="tier-num">2</span>
+              <span class="tier-label">
+                <strong>Run in Cloud Shell</strong>
+                <small>One curl command</small>
+              </span>
+            </a>
+            <a class="btn btn-tertiary tier" href="https://github.com/Keysight-Tech/cloudlens-ansible-azure/pkgs/container/cloudlens-ansible-azure" target="_blank" rel="noopener">
+              <span class="tier-num">3</span>
+              <span class="tier-label">
+                <strong>Pull Docker Image</strong>
+                <small>Laptop or CI/CD</small>
+              </span>
+            </a>
+          </div>
+          <div class="badges" aria-label="Tested platforms">
+            <span class="badge ub">Ubuntu 20/22/24</span>
+            <span class="badge rh">RHEL 7/8/9</span>
+            <span class="badge win">Windows 2019/2022</span>
+            <span class="badge ok">3/3 verified</span>
+          </div>
+        </div>
+        <div class="hero-demo">
+          <div class="demo-frame">
+            <div class="demo-chrome">
+              <span></span><span></span><span></span>
+              <em>quickstart.sh</em>
+            </div>
+            <object data="assets/deploy-demo.svg" type="image/svg+xml" aria-label="Animated terminal showing CloudLens Ansible deployment"></object>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. WHY THIS EXISTS -->
+    <section id="why" class="section">
+      <div class="container">
+        <header class="section-head">
+          <h2>Why this exists</h2>
+          <p>Customers told us deploying CloudLens at scale on Azure felt manual. We made it boring.</p>
+        </header>
+        <div class="card-grid three">
+          <article class="card lift">
+            <div class="card-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9"/><polyline points="21 3 21 9 15 9"/></svg>
+            </div>
+            <h3>Automated end to end</h3>
+            <p>Discovery, bootstrap, install, register. One command, one playbook run, zero per VM steps.</p>
+          </article>
+          <article class="card lift">
+            <div class="card-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            </div>
+            <h3>Works for any VM</h3>
+            <p>Ubuntu, RHEL, Rocky, Alma, Windows Server. Public IP, jumpbox, Azure Bastion, or Cloud Shell.</p>
+          </article>
+          <article class="card lift">
+            <div class="card-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            </div>
+            <h3>Scales to 5,000+ VMs</h3>
+            <p>Auto tunes Ansible forks based on inventory size. Sharded execution past 2,000 VMs, AWX beyond 10,000.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. INTERACTIVE WIZARD -->
+    <section id="wizard" class="section alt">
+      <div class="container">
+        <header class="section-head">
+          <h2>Build your customer_input.yaml</h2>
+          <p>Fill in four fields. Download the file. Run quickstart. That is the whole flow.</p>
+        </header>
+        <div class="wizard-grid">
+          <form class="wizard" id="wizard-form" autocomplete="off">
+            <div class="step" data-step="1">
+              <div class="step-head"><span class="step-num">1</span><h3>CloudLens Manager</h3></div>
+              <label for="clms-ip">CLMS IP or FQDN</label>
+              <input id="clms-ip" name="clms_ip" type="text" placeholder="10.0.0.10 or clms.example.com" value="10.0.0.10" required />
+            </div>
+            <div class="step" data-step="2">
+              <div class="step-head"><span class="step-num">2</span><h3>Project key</h3></div>
+              <label for="project-key">CLMS project API key</label>
+              <div class="input-row">
+                <input id="project-key" name="project_key" type="password" placeholder="paste from CLMS UI" value="" required />
+                <button type="button" class="icon-btn small" id="toggle-key" aria-label="Show or hide key" title="Show or hide key">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="step" data-step="3">
+              <div class="step-head"><span class="step-num">3</span><h3>Custom tags</h3></div>
+              <label for="tags">Tags applied to sensors</label>
+              <input id="tags" name="tags" type="text" placeholder="Env=Azure,Region=eastus2" value="Env=Azure" />
+            </div>
+            <div class="step" data-step="4">
+              <div class="step-head"><span class="step-num">4</span><h3>Resource groups</h3></div>
+              <label for="rgs">Comma separated resource groups (leave blank for subscription wide)</label>
+              <input id="rgs" name="resource_groups" type="text" placeholder="rg-prod-eastus2, rg-prod-westus2" value="" />
+              <div class="connection-mode">
+                <label for="mode">Connection mode</label>
+                <select id="mode" name="mode">
+                  <option value="direct_public">direct_public</option>
+                  <option value="jumpbox">jumpbox</option>
+                  <option value="bastion">bastion</option>
+                </select>
+              </div>
+            </div>
+            <div class="wizard-actions">
+              <button type="button" class="btn btn-primary" id="download-yaml">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download customer_input.yaml
+              </button>
+              <button type="button" class="btn btn-secondary" id="copy-curl">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copy quickstart command
+              </button>
+            </div>
+            <p class="hint" id="copy-feedback" aria-live="polite"></p>
+          </form>
+          <aside class="preview" aria-label="Live YAML preview">
+            <div class="preview-head">
+              <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+              <em>customer_input.yaml</em>
+            </div>
+            <pre><code id="yaml-preview" class="lang-yaml"></code></pre>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. ARCHITECTURE -->
+    <section id="architecture" class="section">
+      <div class="container">
+        <header class="section-head">
+          <h2>Live architecture flow</h2>
+          <p>A single Ansible control point authenticates to Azure, discovers VMs by tag, and routes each host to the right OS lane. Every sensor self registers with CLMS on first start.</p>
+        </header>
+        <div class="diagram-frame">
+          <object data="assets/architecture-diagram.svg" type="image/svg+xml" aria-label="CloudLens Ansible Azure architecture diagram"></object>
+        </div>
+        <p class="caption">Hover any block above to highlight the path. The dotted line shows sensor registration traffic back to CLMS.</p>
+      </div>
+    </section>
+
+    <!-- 5. SCALING VISUALIZER -->
+    <section id="scaling" class="section alt">
+      <div class="container">
+        <header class="section-head">
+          <h2>How does it scale?</h2>
+          <p>Drag the slider to see the estimated deployment time for your fleet size.</p>
+        </header>
+        <div class="scaling">
+          <div class="scaling-controls">
+            <label for="vm-count">Number of VMs</label>
+            <input id="vm-count" type="range" min="1" max="15000" step="1" value="100" />
+            <div class="scale-readout">
+              <div class="readout">
+                <span class="readout-label">VMs</span>
+                <strong id="vm-readout">100</strong>
+              </div>
+              <div class="readout">
+                <span class="readout-label">Forks</span>
+                <strong id="forks-readout">50</strong>
+              </div>
+              <div class="readout">
+                <span class="readout-label">Sharded</span>
+                <strong id="sharded-readout">No</strong>
+              </div>
+              <div class="readout big">
+                <span class="readout-label">Estimated time</span>
+                <strong id="time-readout">15 to 30 min</strong>
+              </div>
+            </div>
+          </div>
+          <div class="scale-bars" role="list">
+            <div class="bar" role="listitem" data-band="1-50"><div class="fill"></div><span>1 to 50</span><em>5 to 10 min</em></div>
+            <div class="bar" role="listitem" data-band="50-500"><div class="fill"></div><span>50 to 500</span><em>15 to 30 min</em></div>
+            <div class="bar" role="listitem" data-band="500-2000"><div class="fill"></div><span>500 to 2,000</span><em>30 to 60 min</em></div>
+            <div class="bar" role="listitem" data-band="2000-10000"><div class="fill"></div><span>2,000 to 10,000</span><em>30 to 60 min (sharded)</em></div>
+            <div class="bar" role="listitem" data-band="10000+"><div class="fill"></div><span>10,000+</span><em>1 to 2 hr (AWX)</em></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. VERIFIED RESULTS -->
+    <section id="verified" class="section">
+      <div class="container">
+        <header class="section-head">
+          <h2>Verified against real Azure</h2>
+          <p>Numbers from the smoke test run on 2026 06 02, subscription CloudLensPublic, region eastus2.</p>
+        </header>
+        <div class="metrics-grid">
+          <div class="metric">
+            <strong>3 / 3</strong>
+            <span>VMs deployed</span>
+            <em>Ubuntu, Ubuntu, Windows 2022</em>
+          </div>
+          <div class="metric accent">
+            <strong>8 min</strong>
+            <span>End to end run time</span>
+            <em>Discovery, install, register</em>
+          </div>
+          <div class="metric">
+            <strong>100%</strong>
+            <span>Sensor registration rate</span>
+            <em>CLMS 6.14.141</em>
+          </div>
+          <div class="metric">
+            <strong>2026 06 02</strong>
+            <span>Last verified</span>
+            <em>CloudLensPublic / eastus2</em>
+          </div>
+        </div>
+
+        <div class="results-table" role="region" aria-label="Verified scenarios">
+          <table>
+            <thead><tr><th>Scenario</th><th>Result</th><th>Time</th></tr></thead>
+            <tbody>
+              <tr><td>Ubuntu 22.04 (private IP via jumpbox)</td><td><span class="pill ok">Sensor running</span></td><td>4 min</td></tr>
+              <tr><td>Ubuntu 22.04 (private IP via jumpbox)</td><td><span class="pill ok">Sensor running</span></td><td>4 min</td></tr>
+              <tr><td>Windows Server 2022 (WinRM direct)</td><td><span class="pill ok">Sensor running</span></td><td>6 min</td></tr>
+              <tr><td>CLMS 6.14.141 registration</td><td><span class="pill ok">3/3 registered</span></td><td>&lt;1 min</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7. QUICK DOCS -->
+    <section id="docs" class="section alt">
+      <div class="container">
+        <header class="section-head">
+          <h2>Docs and support</h2>
+          <p>Everything you need to deploy with confidence.</p>
+        </header>
+        <div class="card-grid four">
+          <a class="card link lift" href="https://github.com/Keysight-Tech/cloudlens-ansible-azure#readme" target="_blank" rel="noopener">
+            <div class="card-icon book">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            </div>
+            <h3>Full README</h3>
+            <p>Scenarios, architecture, scaling, and troubleshooting on GitHub.</p>
+          </a>
+          <a class="card link lift" href="https://github.com/Keysight-Tech/cloudlens-ansible-azure/blob/main/docs/CloudLens_Ansible_Azure_Customer_Runbook.pdf" target="_blank" rel="noopener">
+            <div class="card-icon pdf">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <h3>PDF runbook</h3>
+            <p>Printable customer ready guide with screenshots and checklists.</p>
+          </a>
+          <a class="card link lift" href="https://github.com/Keysight-Tech/cloudlens-ansible-azure/blob/main/docs/CUSTOMER_EMAIL.md" target="_blank" rel="noopener">
+            <div class="card-icon mail">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            </div>
+            <h3>Customer email template</h3>
+            <p>Copy paste handoff message for your account team.</p>
+          </a>
+          <a class="card link lift" href="https://github.com/Keysight-Tech/cloudlens-ansible-azure/issues" target="_blank" rel="noopener">
+            <div class="card-icon issues">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            </div>
+            <h3>GitHub Issues</h3>
+            <p>Bug reports and feature requests, handled by Keysight engineering.</p>
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-grid">
+      <div class="foot-brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#0078D4"/><path d="M8 20 L16 8 L24 20 Z" fill="#D4AF37"/></svg>
+        </span>
+        <div>
+          <strong>Keysight Technologies</strong>
+          <p>CloudLens network visibility for any cloud, any workload.</p>
+        </div>
+      </div>
+      <div class="foot-links">
+        <h4>Project</h4>
+        <a href="https://github.com/Keysight-Tech/cloudlens-ansible-azure" target="_blank" rel="noopener">GitHub repository</a>
+        <a href="https://github.com/Keysight-Tech/cloudlens-ansible-azure/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+        <a href="https://github.com/Keysight-Tech/cloudlens-ansible-azure/releases" target="_blank" rel="noopener">Releases</a>
+      </div>
+      <div class="foot-links">
+        <h4>Related</h4>
+        <a href="https://github.com/Keysight-Tech/cloudlens-vpb-azure-gwlb" target="_blank" rel="noopener">vPB on Azure GWLB</a>
+        <a href="https://www.keysight.com" target="_blank" rel="noopener">Keysight.com</a>
+      </div>
+      <div class="foot-meta">
+        <span>Version v1.0.0 (June 2026)</span>
+        <span>Tested on Azure eastus2</span>
+        <span>&copy; 2026 Keysight Technologies</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="script.js" defer></script>
+</body>
+</html>
