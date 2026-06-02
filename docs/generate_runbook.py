@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CloudLens Ansible — Azure Customer Runbook generator.
+CloudLens Ansible for Azure: Customer Runbook generator.
 
 Builds CloudLens_Ansible_Azure_Customer_Runbook.docx, mirroring the polished
 README in an executive/printable format. Matches the visual style of the
@@ -129,26 +129,57 @@ def _add_page_number(paragraph) -> None:
     run.font.color.rgb = TEXT_MUTED
 
 
-def _add_toc(paragraph) -> None:
-    run = paragraph.add_run()
-    fld_char1 = OxmlElement("w:fldChar")
-    fld_char1.set(qn("w:fldCharType"), "begin")
-    instr_text = OxmlElement("w:instrText")
-    instr_text.set(qn("xml:space"), "preserve")
-    instr_text.text = r'TOC \o "1-3" \h \z \u'
-    fld_char2 = OxmlElement("w:fldChar")
-    fld_char2.set(qn("w:fldCharType"), "separate")
-    fld_char3 = OxmlElement("w:t")
-    fld_char3.text = (
-        "Right-click and choose 'Update Field' to refresh the table of contents."
-    )
-    fld_char4 = OxmlElement("w:fldChar")
-    fld_char4.set(qn("w:fldCharType"), "end")
-    run._r.append(fld_char1)
-    run._r.append(instr_text)
-    run._r.append(fld_char2)
-    run._r.append(fld_char3)
-    run._r.append(fld_char4)
+# Section list used to render a static, pre-evaluated Table of Contents.
+# Each entry is (level, label). Level 1 = top-level section, Level 2 = sub-section.
+# Kept in sync with the build_* calls in main().
+TOC_ENTRIES: list[tuple[int, str]] = [
+    (1, "1. Executive Summary"),
+    (1, "2. Solution Overview"),
+    (1, "3. Choosing Your Deployment Path"),
+    (1, "4. Prerequisites Checklist"),
+    (1, "5. Deployment, Step by Step"),
+    (2, "5.1  Tier 1: One-Click from the Azure Portal"),
+    (2, "5.2  Tier 2: Azure Cloud Shell"),
+    (2, "5.3  Tier 3: Docker (laptop or CI/CD)"),
+    (1, "6. Supported VM Scenarios"),
+    (1, "7. Verification Checklist"),
+    (1, "8. Scaling Guide"),
+    (1, "9. Troubleshooting Reference"),
+    (1, "Appendix A: customer_input.yaml Schema"),
+    (1, "Appendix B: Bulk Tag Script"),
+    (1, "Appendix C: Quick Links"),
+]
+
+
+def _add_toc_entry(doc: Document, level: int, label: str) -> None:
+    """Add one TOC line: indented by level, leader-dot tab stop on the right."""
+    p = doc.add_paragraph()
+    pf = p.paragraph_format
+    pf.space_after = Pt(2)
+    pf.space_before = Pt(0)
+    # Indent sub-entries
+    if level >= 2:
+        pf.left_indent = Inches(0.35)
+
+    # Tab stop with dot leader at right margin (~6.3" for Letter w/ 1.1" margins)
+    tab_stops = pf.tab_stops
+    try:
+        from docx.enum.text import WD_TAB_ALIGNMENT, WD_TAB_LEADER
+        tab_stops.add_tab_stop(Inches(6.3), WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.DOTS)
+    except Exception:
+        # Fallback: still add a right tab stop without leader if enums unavailable
+        tab_stops.add_tab_stop(Inches(6.3))
+
+    label_run = p.add_run(label)
+    label_run.font.name = "Calibri"
+    label_run.font.size = Pt(12) if level == 1 else Pt(10.5)
+    label_run.bold = (level == 1)
+    label_run.font.color.rgb = AZURE_DARK if level == 1 else TEXT_DARK
+
+    # Trailing tab pushes leader dots to the right margin. Page numbers
+    # are intentionally omitted; LibreOffice's headless converter can't
+    # evaluate them without a Word render pass.
+    p.add_run("\t")
 
 
 # -----------------------------------------------------------------------------
@@ -165,7 +196,7 @@ def configure_styles(doc: Document) -> None:
     normal.paragraph_format.space_after = Pt(8)
     normal.paragraph_format.line_spacing = 1.25
 
-    # Heading 1 — Azure Blue
+    # Heading 1: Azure Blue
     h1 = styles["Heading 1"]
     h1.font.name = "Calibri"
     h1.font.size = Pt(22)
@@ -175,7 +206,7 @@ def configure_styles(doc: Document) -> None:
     h1.paragraph_format.space_after = Pt(6)
     h1.paragraph_format.keep_with_next = True
 
-    # Heading 2 — Azure Dark
+    # Heading 2: Azure Dark
     h2 = styles["Heading 2"]
     h2.font.name = "Calibri"
     h2.font.size = Pt(15)
@@ -185,7 +216,7 @@ def configure_styles(doc: Document) -> None:
     h2.paragraph_format.space_after = Pt(4)
     h2.paragraph_format.keep_with_next = True
 
-    # Heading 3 — Keysight Navy
+    # Heading 3: Keysight Navy
     h3 = styles["Heading 3"]
     h3.font.name = "Calibri"
     h3.font.size = Pt(12)
@@ -345,7 +376,7 @@ def add_image_or_placeholder(doc: Document, svg_name: str, caption: str,
     # Fallback
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p.add_run(f"[ Diagram: {svg_name} — see docs/assets/{svg_name} ]")
+    run = p.add_run(f"[ Diagram: {svg_name} (see docs/assets/{svg_name}) ]")
     run.italic = True
     run.font.color.rgb = TEXT_MUTED
     cap = doc.add_paragraph()
@@ -371,7 +402,7 @@ def configure_header_footer(doc: Document) -> None:
     header = section.header
     h_p = header.paragraphs[0]
     h_p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    h_run = h_p.add_run("CloudLens Ansible — Azure Customer Runbook")
+    h_run = h_p.add_run("CloudLens Ansible for Azure: Customer Runbook")
     h_run.font.name = "Calibri"
     h_run.font.size = Pt(9)
     h_run.font.color.rgb = AZURE_DARK
@@ -495,18 +526,21 @@ def build_cover_page(doc: Document) -> None:
 # Section builders
 # -----------------------------------------------------------------------------
 def build_toc(doc: Document) -> None:
-    doc.add_heading("Table of Contents", level=1)
-    tip = doc.add_paragraph()
-    tip_run = tip.add_run(
-        "In Microsoft Word: right-click the entry below and choose "
-        "'Update Field' to populate the full table of contents."
-    )
-    tip_run.italic = True
-    tip_run.font.size = Pt(9.5)
-    tip_run.font.color.rgb = TEXT_MUTED
+    """Render a static, pre-evaluated Table of Contents.
 
-    toc_p = doc.add_paragraph()
-    _add_toc(toc_p)
+    We deliberately avoid Word's TOC field here: LibreOffice's headless PDF
+    converter does not evaluate the field, so customers who only ever open
+    the PDF would see the placeholder text instead of the TOC. The entries
+    are kept in sync with the build_* calls in main() via TOC_ENTRIES.
+    """
+    heading = doc.add_heading("Table of Contents", level=1)
+    # Small spacer under the title
+    spacer = doc.add_paragraph()
+    spacer.paragraph_format.space_after = Pt(6)
+
+    for level, label in TOC_ENTRIES:
+        _add_toc_entry(doc, level, label)
+
     doc.add_page_break()
 
 
@@ -516,8 +550,8 @@ def build_executive_summary(doc: Document) -> None:
         doc,
         "CloudLens Ansible for Azure is a fully automated kit that deploys "
         "Keysight CloudLens sensors to every tagged virtual machine in an Azure "
-        "subscription — Linux and Windows, from a single VM to 5,000+ — without "
-        "any manual per-host steps.",
+        "subscription. It works on Linux and Windows, from a single VM to 5,000+, "
+        "without any manual per-host steps.",
     )
     add_paragraph(
         doc,
@@ -529,7 +563,7 @@ def build_executive_summary(doc: Document) -> None:
     doc.add_heading("Why it matters", level=2)
     bullets = [
         "Eliminates the per-VM SSH / RDP grind. Tag a VM with cloudlens=yes and the kit handles the rest.",
-        "Three entry points — Azure Portal one-click, Cloud Shell curl, or Docker — so customers run it wherever they already work.",
+        "Three entry points (Azure Portal one-click, Cloud Shell curl, or Docker), so customers run it wherever they already work.",
         "Production-tested against real Azure. End-to-end deployment of 3 mixed-OS sensors verified in 8 minutes.",
     ]
     for b in bullets:
@@ -564,7 +598,7 @@ def build_solution_overview(doc: Document, tmpdir: Path) -> None:
     doc.add_heading("2. Solution Overview", level=1)
     add_image_or_placeholder(
         doc, "architecture-diagram.svg",
-        caption="Figure 1 — End-to-end architecture: control point → Azure inventory → OS lanes → CLMS",
+        caption="Figure 1: End-to-end architecture (control point → Azure inventory → OS lanes → CLMS)",
         width_inches=6.5, tmpdir=tmpdir,
     )
     add_paragraph(
@@ -579,7 +613,7 @@ def build_solution_overview(doc: Document, tmpdir: Path) -> None:
         "Linux hosts run the CloudLens agent in a Docker container. Windows hosts "
         "run the CloudLens Windows sensor as a native service. Every sensor "
         "self-registers with CloudLens Manager (CLMS) on first start using the "
-        "project key supplied in customer_input.yaml — no per-VM UI steps, no "
+        "project key supplied in customer_input.yaml. No per-VM UI steps, no "
         "static inventory files to maintain.",
     )
     doc.add_page_break()
@@ -589,12 +623,12 @@ def build_choose_path(doc: Document, tmpdir: Path) -> None:
     doc.add_heading("3. Choosing Your Deployment Path", level=1)
     add_paragraph(
         doc,
-        "All three paths run the same Ansible engine — same playbooks, same "
+        "All three paths run the same Ansible engine. Same playbooks, same "
         "automation. Pick the entry point that matches how your team works.",
     )
     add_image_or_placeholder(
         doc, "decision-tree.svg",
-        caption="Figure 2 — Decision tree: pick the entry point that matches your environment",
+        caption="Figure 2: Decision tree (pick the entry point that matches your environment)",
         width_inches=6.0, tmpdir=tmpdir,
     )
 
@@ -625,11 +659,11 @@ def build_prerequisites(doc: Document) -> None:
     add_paragraph(
         doc,
         "Confirm every item below before kicking off a deployment. Tick each "
-        "box as you go — the kit will not magically fix a missing prerequisite.",
+        "box as you go. The kit will not magically fix a missing prerequisite.",
     )
     add_checkbox_list(doc, [
         "Azure subscription with at least Reader + Virtual Machine Contributor roles",
-        "Service Principal created (Tier 3 only — see scripts/setup_azure_sp.sh)",
+        "Service Principal created (Tier 3 only: see scripts/setup_azure_sp.sh)",
         "CLMS Manager deployed and reachable from the target VM subnets",
         "Project Key obtained from the CLMS UI (Projects → API Keys)",
         "Target VMs tagged with cloudlens=yes, os=ubuntu|rhel|windows, env=prod|dev|qa",
@@ -639,7 +673,7 @@ def build_prerequisites(doc: Document) -> None:
         doc,
         "Tip",
         "Tags are how the dynamic inventory discovers hosts. If a VM is not "
-        "tagged, the kit cannot see it — and that is the single most common "
+        "tagged, the kit cannot see it. That is the single most common "
         "support ticket. Use the bulk-tag script in Appendix B to tag an entire "
         "resource group in one shot.",
     )
@@ -647,7 +681,7 @@ def build_prerequisites(doc: Document) -> None:
 
 
 def build_deployment(doc: Document) -> None:
-    doc.add_heading("5. Deployment — Step by Step", level=1)
+    doc.add_heading("5. Deployment, Step by Step", level=1)
 
     # ---- Tier 1 ----
     doc.add_heading("5.1  Tier 1: One-Click from the Azure Portal", level=2)
@@ -662,7 +696,7 @@ def build_deployment(doc: Document) -> None:
         "Sign in to the Azure Portal when prompted; the ARM template opens in a 'Custom deployment' blade.",
         "Fill in the four parameters: CLMS IP/FQDN, Project Key, Tag Filter (default cloudlens=yes), and Resource Group for the runner.",
         "Review + Create. Azure provisions the runner VM (~2 minutes).",
-        "Watch the runner's boot diagnostics log — every tagged VM is sensored in parallel.",
+        "Watch the runner's boot diagnostics log. Every tagged VM is sensored in parallel.",
         "Runner self-destructs after 1 hour. Confirm sensors in CLMS → Sensors page.",
     ]
     for idx, step in enumerate(t1_steps, 1):
@@ -671,7 +705,7 @@ def build_deployment(doc: Document) -> None:
         run.font.name = "Calibri"
         run.font.size = Pt(11)
         run.font.color.rgb = TEXT_DARK
-    add_paragraph(doc, "[Screenshot placeholder — Azure Portal Deploy blade]",
+    add_paragraph(doc, "[Screenshot placeholder: Azure Portal Deploy blade]",
                   italic=True, size=10, color=TEXT_MUTED, align=WD_ALIGN_PARAGRAPH.CENTER)
     add_callout(
         doc, "Expected outcome",
@@ -708,7 +742,7 @@ def build_deployment(doc: Document) -> None:
         doc, "Expected outcome",
         "Wizard discovers tagged VMs, auto-tunes Ansible forks, deploys sensors, "
         "and prints a 3/3 success summary. All state lives in your Cloud Shell "
-        "home directory — nothing installed locally.",
+        "home directory, with nothing installed locally.",
     )
 
     # ---- Tier 3 ----
@@ -716,8 +750,8 @@ def build_deployment(doc: Document) -> None:
     add_paragraph(
         doc,
         "Best for repeatable runs from a developer laptop, a CI pipeline, or "
-        "any container host. The image is pinned and hermetic — same result on "
-        "macOS, Windows, Linux, GitHub Actions, GitLab CI, and Jenkins.",
+        "any container host. The image is pinned and hermetic, so you get the "
+        "same result on macOS, Windows, Linux, GitHub Actions, GitLab CI, and Jenkins.",
     )
     t3_steps = [
         "Create a Service Principal with `bash scripts/setup_azure_sp.sh` (one-time).",
@@ -753,7 +787,7 @@ def build_scenarios(doc: Document, tmpdir: Path) -> None:
     doc.add_heading("6. Supported VM Scenarios", level=1)
     add_image_or_placeholder(
         doc, "scenario-matrix.svg",
-        caption="Figure 3 — VM compatibility matrix (OS × topology × auth method)",
+        caption="Figure 3: VM compatibility matrix (OS × topology × auth method)",
         width_inches=6.5, tmpdir=tmpdir,
     )
     add_styled_table(
@@ -901,19 +935,19 @@ def build_troubleshooting(doc: Document) -> None:
 
 
 def build_appendix_a(doc: Document) -> None:
-    doc.add_heading("Appendix A — customer_input.yaml Schema", level=1)
+    doc.add_heading("Appendix A: customer_input.yaml Schema", level=1)
     add_paragraph(
         doc,
         "Full annotated example. Copy customer_input.yaml.example from the "
         "repository to customer_input.yaml and fill in values. Never commit "
-        "customer_input.yaml to git — credentials belong in env vars.",
+        "customer_input.yaml to git. Credentials belong in env vars.",
     )
     add_code_block(doc, """# === Azure Environment ===
 azure:
   subscription_id: "00000000-0000-0000-0000-000000000000"
   tenant_id:       "00000000-0000-0000-0000-000000000000"
 
-  # Tag selector — VMs are matched by these tags
+  # Tag selector: VMs are matched by these tags
   tag_filters:
     cloudlens: "yes"
     env:       "prod"
@@ -971,7 +1005,7 @@ deploy:
 
 
 def build_appendix_b(doc: Document) -> None:
-    doc.add_heading("Appendix B — Bulk Tag Script", level=1)
+    doc.add_heading("Appendix B: Bulk Tag Script", level=1)
     add_paragraph(
         doc,
         "Apply the three required tags to every VM in a resource group, "
@@ -1006,7 +1040,7 @@ done""")
 
 
 def build_appendix_c(doc: Document) -> None:
-    doc.add_heading("Appendix C — Quick Links", level=1)
+    doc.add_heading("Appendix C: Quick Links", level=1)
     add_styled_table(
         doc,
         headers=["Resource", "Location"],
@@ -1032,7 +1066,7 @@ def build_appendix_c(doc: Document) -> None:
     add_paragraph(
         doc,
         "Support email subject (for the Keysight account team): "
-        "'CloudLens Ansible Azure — <customer name> — <brief issue>'.",
+        "'CloudLens Ansible Azure: <customer name>, <brief issue>'.",
         italic=True, size=10, color=TEXT_MUTED,
     )
 
@@ -1042,7 +1076,7 @@ def build_appendix_c(doc: Document) -> None:
 # -----------------------------------------------------------------------------
 def main() -> int:
     if not HAS_CAIROSVG:
-        print("[warn] cairosvg unavailable — diagrams will be rendered as captions.")
+        print("[warn] cairosvg unavailable; diagrams will be rendered as captions.")
     print(f"[info] writing {OUTPUT_DOCX}")
 
     doc = Document()
