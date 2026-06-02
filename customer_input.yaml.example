@@ -1,9 +1,13 @@
 # =====================================================================
-# CloudLens Ansible — Azure Customer Input
+# CloudLens Ansible — Customer Input File
 # =====================================================================
-# Copy this file to customer_input.yaml and fill in the values.
-# Sensitive values (passwords) should be in environment variables —
-# never commit customer_input.yaml to git.
+# Copy to customer_input.yaml and fill in your values.
+# DO NOT commit customer_input.yaml to git — passwords go in env vars.
+#
+# Quick start:
+#   cp customer_input.yaml.example customer_input.yaml
+#   # edit it with your values
+#   bash quickstart.sh
 # =====================================================================
 
 # === Azure Environment ===
@@ -11,35 +15,28 @@ azure:
   subscription_id: "00000000-0000-0000-0000-000000000000"
   tenant_id: "00000000-0000-0000-0000-000000000000"
 
-  # Resource groups to scan for VMs (Ansible azure_rm dynamic inventory)
-  resource_groups:
-    - "customer-prod-rg"
-    # - "customer-prod-windows-rg"
-
-  # Optional location filter (if empty, all locations scanned)
-  locations:
-    - "eastus2"
-    # - "westeurope"
-
-  # Tag selector — only VMs with these tags will be deployed to.
-  # In Azure portal / CLI, tag your VMs with:
-  #   cloudlens=yes  os=ubuntu|rhel|windows  env=prod
+  # Tag selector — VMs are matched by these tags
+  # Customer must tag each VM:  cloudlens=yes  os=ubuntu|rhel|windows  env=prod
   tag_filters:
     cloudlens: "yes"
     env: "prod"
 
+  # OPTIONAL: limit discovery to specific RGs (leave empty for ALL)
+  resource_groups: []
+  locations: []
+
 # === CloudLens Configuration ===
 cloudlens:
-  # CloudLens Manager (CLMS) public IP or FQDN reachable from VMs
+  # CLMS Manager IP or FQDN — sensors will register here
   manager_ip_or_fqdn: "clms.customer.example.com"
 
   # Project key from CLMS → Projects → API Keys
   project_key: "REPLACE_WITH_PROJECT_KEY"
 
-  # Tags attached to every registered sensor (visible in CLMS UI)
+  # Custom tags shown in CLMS UI for these sensors
   custom_tags: "Env=Azure Region=eastus2 Customer=Acme"
 
-  # "insecure" for self-signed CLMS; "secure" if you have a signed CA bundle
+  # "insecure" = self-signed cert OK; "secure" = use signed CA bundle
   registry_type: "insecure"
   ssl_verify: "no"
   auto_update: "yes"
@@ -48,34 +45,49 @@ cloudlens:
   local_ca_path: "files/cloudlenscerts.crt"
   ca_cert_dir: "/etc/ssl/certs"
 
-  # Container settings
   agent_container_name: "cloudlens-agent"
   log_max_size: "50m"
   log_max_file: "5"
 
-# === Linux SSH Connection ===
+# === Connection Mode ===
+# How your control machine reaches the target VMs:
+#   direct_public  — VMs have public IPs reachable from your laptop
+#   jumpbox        — VMs private-only, reached via a Linux jumpbox in the VNet
+#   bastion        — Azure Bastion service
+#   cloud_shell    — Auto-detected when running in Azure Cloud Shell
+connection:
+  mode: "jumpbox"
+
+  # Used when mode=jumpbox
+  jumpbox_host: "1.2.3.4"
+  jumpbox_user: "azureuser"
+  jumpbox_ssh_key: "~/.ssh/id_rsa"
+
+  # Used when mode=bastion
+  bastion_resource_id: ""
+
+# === Linux SSH Connection (target VMs) ===
 linux:
   ansible_user: "azureuser"
   ssh_key_file: "~/.ssh/id_rsa"
-  # Set to true if you use Azure Bastion (additional config in docs/)
-  use_bastion: false
 
-# === Windows WinRM Connection ===
+# === Windows WinRM Connection (target VMs) ===
+# Password MUST be set via env var: export ANSIBLE_WINRM_PASSWORD='...'
 windows:
   ansible_user: "azureuser"
-  # IMPORTANT: do NOT put password here. Export instead:
-  #   export ANSIBLE_WINRM_PASSWORD='your-password'
-  ansible_password: "{{ lookup('env', 'ANSIBLE_WINRM_PASSWORD') }}"
   ansible_connection: "winrm"
-  ansible_winrm_transport: "ntlm"
+  ansible_winrm_transport: "basic"
   ansible_winrm_server_cert_validation: "ignore"
+  ansible_port: 5985
 
-  # Local path to CloudLens Windows installer (download separately)
-  installer_path: "files/cloudlens-win-sensor-6.12.0.316.exe"
-  installer_filename: "cloudlens-win-sensor-6.12.0.316.exe"
+  # Place the Windows installer in files/ — get it from CLMS UI
+  installer_path: "files/cloudlens-win-sensor-6.13.0.359.exe"
+  installer_filename: "cloudlens-win-sensor-6.13.0.359.exe"
 
 # === Deployment Behavior ===
+# Most values auto-tuned. Override only if you know what you're doing.
 deploy:
-  forks: 20                  # parallel VMs (Ansible workers)
-  timeout_seconds: 60        # per-task SSH/WinRM timeout
+  forks: 0                   # 0 = auto-tune based on VM count
+  timeout_seconds: 60
   reinstall_if_unhealthy: true
+  shard_size: 500            # for >2000 VMs: VMs per shard

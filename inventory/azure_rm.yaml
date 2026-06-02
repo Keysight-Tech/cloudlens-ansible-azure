@@ -1,62 +1,26 @@
-# =====================================================================
-# Azure Dynamic Inventory — discovers CloudLens target VMs
-# =====================================================================
-# How it works:
-#   1. Scans the specified resource groups for VMs
-#   2. Filters by tags (cloudlens=yes by default)
-#   3. Auto-groups by OS using the "os" tag
-#   4. Auto-groups by environment using the "env" tag
-#
-# Required Azure tags on each target VM:
-#   cloudlens=yes
-#   os=ubuntu | rhel | windows
-#   env=prod | dev | qa
-#
-# Auth: reads from environment variables or ~/.azure/credentials
-#   AZURE_SUBSCRIPTION_ID, AZURE_TENANT, AZURE_CLIENT_ID, AZURE_SECRET
-# =====================================================================
-
 plugin: azure.azcollection.azure_rm
-
-# Configure these via env vars (recommended) OR uncomment to hardcode
-# auth_source: env
-# subscription_id: "00000000-0000-0000-0000-000000000000"
-
-# Resource groups to scan — override via -e "include_vm_resource_groups=['rg1','rg2']"
-# include_vm_resource_groups:
-#   - "customer-prod-rg"
-
-# Hostname resolution — use public IPs by default; switch to private if using Bastion
-hostnames:
-  - public_ipv4_addresses
-  # - private_ipv4_addresses
-
-# Only include VMs tagged for CloudLens deployment
+plain_host_names: yes
+include_extended_facts: yes
 exclude_host_filters:
-  - "tags.cloudlens is not defined or tags.cloudlens != 'yes'"
-
-# Auto-group by tag values: creates groups like os_ubuntu, os_windows, env_prod
+  - tags['cloudlens'] is not defined or tags['cloudlens'] != 'yes'
 keyed_groups:
   - prefix: os
-    key: "tags.os | default('untagged')"
+    key: tags['os'] | default('untagged')
   - prefix: env
-    key: "tags.env | default('untagged')"
+    key: tags['env'] | default('untagged')
   - prefix: location
-    key: "location | default('untagged')"
-
-# Conditional groups — these names match existing playbook target_group values
+    key: location | default('untagged')
 conditional_groups:
-  ubuntu_prod_vms: "tags.os is defined and tags.os == 'ubuntu' and tags.env is defined and tags.env == 'prod'"
-  redhat_prod_vms: "tags.os is defined and tags.os == 'rhel' and tags.env is defined and tags.env == 'prod'"
-  windows_prod_vms: "tags.os is defined and tags.os == 'windows' and tags.env is defined and tags.env == 'prod'"
-  ubuntu_dev_vms: "tags.os is defined and tags.os == 'ubuntu' and tags.env is defined and tags.env == 'dev'"
-  redhat_dev_vms: "tags.os is defined and tags.os == 'rhel' and tags.env is defined and tags.env == 'dev'"
-  windows_dev_vms: "tags.os is defined and tags.os == 'windows' and tags.env is defined and tags.env == 'dev'"
-
-# Inject useful host vars from Azure VM metadata
-compose:
-  ansible_host: public_ipv4_addresses[0] | default(private_ipv4_addresses[0])
+  ubuntu_prod_vms: "tags['os'] | default('') == 'ubuntu' and tags['env'] | default('') == 'prod'"
+  redhat_prod_vms: "tags['os'] | default('') == 'rhel' and tags['env'] | default('') == 'prod'"
+  windows_prod_vms: "tags['os'] | default('') == 'windows' and tags['env'] | default('') == 'prod'"
+  ubuntu_dev_vms: "tags['os'] | default('') == 'ubuntu' and tags['env'] | default('') == 'dev'"
+  redhat_dev_vms: "tags['os'] | default('') == 'rhel' and tags['env'] | default('') == 'dev'"
+  windows_dev_vms: "tags['os'] | default('') == 'windows' and tags['env'] | default('') == 'dev'"
+hostvar_expressions:
+  # Windows VMs → use public IP (WinRM directly, no jumpbox)
+  # Linux VMs   → use private IP (jumpbox/Bastion required)
+  ansible_host: (public_ipv4_address | default([], true) | first) if (tags['os'] | default('') == 'windows' and (public_ipv4_address | default([], true) | length) > 0) else private_ipv4_addresses[0]
   azure_resource_group: resource_group
-  azure_location: location
-  azure_vm_size: vm_size
-  azure_os_type: os_type
+  azure_private_ip: private_ipv4_addresses[0]
+  azure_public_ip: (public_ipv4_address | default([], true) | first) if (public_ipv4_address | default([], true) | length) > 0 else ''

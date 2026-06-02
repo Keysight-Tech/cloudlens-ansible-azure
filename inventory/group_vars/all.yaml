@@ -1,21 +1,22 @@
-# =====================================================================
-# Global vars — applied to ALL hosts
-# Loaded from customer_input.yaml at runtime via deploy.sh
-# =====================================================================
-
-# CloudLens Manager
+# Global vars — loaded from customer_input.yaml at runtime
 cloudlens_manager_ip_or_FQDN: "{{ cloudlens.manager_ip_or_fqdn }}"
 project_key: "{{ cloudlens.project_key }}"
 custom_tags: "{{ cloudlens.custom_tags }}"
 cloudlens_agent_container_name: "{{ cloudlens.agent_container_name | default('cloudlens-agent') }}"
-
-# Registry & TLS
 registry_type: "{{ cloudlens.registry_type | default('insecure') }}"
 local_ca_path: "{{ cloudlens.local_ca_path | default('files/cloudlenscerts.crt') }}"
 ca_cert_dir: "{{ cloudlens.ca_cert_dir | default('/etc/ssl/certs') }}"
 ssl_verify: "{{ cloudlens.ssl_verify | default('no') }}"
 auto_update: "{{ cloudlens.auto_update | default('yes') }}"
-
-# Log rotation
 log_max_size: "{{ cloudlens.log_max_size | default('50m') }}"
 log_max_file: "{{ cloudlens.log_max_file | default('5') }}"
+
+# SSH ProxyJump when connection.mode=jumpbox
+ansible_ssh_common_args: >-
+  {% if connection.mode | default('direct_public') == 'jumpbox' %}
+  -o ProxyJump={{ connection.jumpbox_user | default('azureuser') }}@{{ connection.jumpbox_host | default('') }}
+  -o StrictHostKeyChecking=no
+  -o UserKnownHostsFile=/dev/null
+  {% else %}
+  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+  {% endif %}

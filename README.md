@@ -2,10 +2,51 @@
 
 Automated deployment of Keysight CloudLens sensor agents across **Azure Linux and Windows VMs** at scale.
 
-**One command, fills in customer-specific inputs once, deploys to every VM in the resource group.**
+Supports **Ubuntu, RHEL/CentOS, Windows Server**. Discovers VMs by Azure tags. Scales from 1 VM to 5,000+ in parallel.
+
+---
+
+## ⚡ Quick Start — Three Ways to Deploy
+
+Pick the path that fits your team:
+
+### 1. 🌐 Click-to-Deploy from Azure Portal (zero install)
+
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Farm-template.json)
+
+Provisions an ephemeral Ubuntu runner that discovers your tagged VMs, deploys sensors, then self-destructs after 1 hour. **Zero tools needed on your machine.**
+
+### 2. ☁️ Azure Cloud Shell (browser-based)
+
+Open [Azure Cloud Shell](https://shell.azure.com), then paste:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/quickstart.sh | bash
+```
+
+Cloud Shell is already authenticated to Azure — no Service Principal needed. The wizard prompts for CLMS IP and project key, then deploys.
+
+### 3. 🐳 Docker (local PC, CI/CD, anywhere)
+
+```bash
+docker run --rm -it \
+  -v $(pwd)/customer_input.yaml:/work/customer_input.yaml \
+  -v $HOME/.ssh:/root/.ssh:ro \
+  -v $(pwd)/files:/work/files:ro \
+  -e AZURE_SUBSCRIPTION_ID -e AZURE_TENANT \
+  -e AZURE_CLIENT_ID -e AZURE_SECRET \
+  -e ANSIBLE_WINRM_PASSWORD \
+  ghcr.io/keysight-tech/cloudlens-ansible-azure:latest
+```
+
+No Python or Ansible on your machine — just Docker. Works on macOS, Windows, Linux, CI/CD runners.
+
+---
+
+## 🎯 What This Does
 
 ```
-Internet → Customer fills customer_input.yaml → ./deploy.sh
+Internet → Customer fills customer_input.yaml → ./quickstart.sh
                                                      │
                                                      ▼
                             ┌──────────────────────────────────────┐
@@ -31,287 +72,153 @@ Internet → Customer fills customer_input.yaml → ./deploy.sh
 
 ---
 
-## Features
+## 🏷️ Customer Prerequisites — Tag Your VMs
 
-- **Single-file customer input** — fill in `customer_input.yaml`, run one command, done
-- **Azure dynamic inventory** — auto-discovers VMs by tag, resource group, or location
-- **OS auto-detection** — Ubuntu, RHEL/CentOS (Docker or Podman), Windows MSI
-- **WinRM bootstrap** — auto-enables WinRM on Windows VMs via Azure VM Run Command (no manual setup)
-- **Idempotent** — re-running detects healthy installs and skips reinstall
-- **Cleanup playbooks** — full removal across OS families
-- **Scales to thousands of VMs** — parallel execution (default 20 forks, tunable)
+Apply these tags to every VM that should receive a CloudLens sensor:
 
----
-
-## Prerequisites
-
-| Tool | Version | Install |
-|---|---|---|
-| Ansible | ≥ 2.16 | `pip3 install ansible-core==2.16` |
-| Azure CLI | latest | [Microsoft docs](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) |
-| Python | 3.8+ | system |
-| `azure.azcollection` | latest | `ansible-galaxy collection install azure.azcollection` |
-| `community.windows` | latest | `ansible-galaxy collection install community.windows` |
-| Azure Service Principal | with `Reader` + `Virtual Machine Contributor` on target RGs |
-
-Install all required collections at once:
-
-```bash
-ansible-galaxy collection install -r requirements.yml
-```
-
----
-
-## Quick Start (5 Steps)
-
-### 1. Clone the repo
-
-```bash
-git clone https://github.com/Keysight-Tech/cloudlens-ansible-azure.git
-cd cloudlens-ansible-azure
-```
-
-### 2. Create an Azure Service Principal
-
-```bash
-./scripts/setup_azure_sp.sh
-# Outputs SP credentials — save them as env vars or in ~/.azure/credentials
-```
-
-Or manually:
-
-```bash
-az ad sp create-for-rbac \
-  --name "cloudlens-ansible-sp" \
-  --role "Virtual Machine Contributor" \
-  --scopes "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/<RG_NAME>"
-```
-
-Export the credentials:
-
-```bash
-export AZURE_SUBSCRIPTION_ID=...
-export AZURE_TENANT=...
-export AZURE_CLIENT_ID=...
-export AZURE_SECRET=...
-```
-
-### 3. Tag your VMs
-
-For dynamic discovery, tag the target VMs in Azure:
-
-| Tag | Required Values |
+| Tag | Required Value |
 |---|---|
 | `cloudlens` | `yes` |
 | `os` | `ubuntu` \| `rhel` \| `windows` |
-| `env` | `prod` \| `dev` \| `qa` (your choice) |
+| `env` | `prod` (or `dev`, `qa`) |
 
-Bulk-tag example:
-
-```bash
-az resource tag \
-  --tags cloudlens=yes os=ubuntu env=prod \
-  --ids $(az vm list -g <RG> --query "[?storageProfile.osDisk.osType=='Linux'].id" -o tsv)
-```
-
-### 4. Fill in `customer_input.yaml`
+Bulk-tag a resource group:
 
 ```bash
-cp customer_input.yaml.example customer_input.yaml
-# Edit:
-#   - cloudlens_manager_ip
-#   - project_key
-#   - azure subscription_id, resource_groups, locations
-#   - custom_tags
-#   - Windows admin credentials (or Key Vault reference)
+# All Ubuntu VMs in an RG
+for vm in $(az vm list -g <RG> --query "[?storageProfile.imageReference.offer=='0001-com-ubuntu-server-jammy'].name" -o tsv); do
+  az vm update -g <RG> -n $vm --set tags.cloudlens=yes tags.os=ubuntu tags.env=prod
+done
+
+# All Windows VMs in an RG
+for vm in $(az vm list -g <RG> --query "[?storageProfile.osDisk.osType=='Windows'].name" -o tsv); do
+  az vm update -g <RG> -n $vm --set tags.cloudlens=yes tags.os=windows tags.env=prod
+done
 ```
-
-### 5. Deploy
-
-```bash
-./scripts/deploy.sh
-```
-
-That runs:
-
-1. WinRM bootstrap on all Windows VMs (Azure VM Run Command)
-2. Dynamic inventory build via `azure_rm` plugin
-3. Sensor deploy across Ubuntu / RHEL / Windows in parallel
-4. Health verification on every VM
-5. Final report — success count, failed VMs (if any), logs
 
 ---
 
-## Repository Structure
+## 📊 Scaling — From 1 VM to 5,000+
+
+`quickstart.sh` and the Docker entrypoint **auto-tune** Ansible forks based on discovered VM count:
+
+| VM Count | Forks | Strategy | Wall Time |
+|---|---|---|---|
+| 1–50 | 20 | Single control node | 5–10 min |
+| 50–500 | 50 | Single control node | 15–30 min |
+| 500–2,000 | 200 | Single control node, tuned | 30–60 min |
+| 2,000–10,000 | 500 per shard | **Sharded** (auto-enabled) | 30–60 min |
+| 10,000+ | 1000 per shard | AWX/Tower integration | 1–2 hr |
+
+### How Sharding Works
+
+When VM count > 2,000, deployment auto-shards:
 
 ```
-.
-├── README.md                          # This file
-├── LICENSE
-├── ansible.cfg                        # Forks=20, SSH multiplexing, log path
-├── requirements.yml                   # Ansible collections
-├── customer_input.yaml.example        # Customer fills this out
-├── deploy.yaml                        # Master deploy sequence
-├── cleanup.yaml                       # Master cleanup sequence
-│
-├── playbooks/
-│   ├── bootstrap_windows_winrm.yaml   # Azure-specific: enables WinRM via az vm run-command
-│   ├── ubuntu.yaml                    # Ubuntu sensor deploy (Docker)
-│   ├── redhat.yaml                    # RHEL sensor deploy (Docker or Podman auto-detect)
-│   ├── windows.yaml                   # Windows sensor deploy (MSI via WinRM)
-│   ├── ubuntu_cleanup.yaml
-│   ├── redhat_cleanup.yaml
-│   └── windows_cleanup.yaml
-│
+5,000 VMs ÷ 500 per shard = 10 shards in parallel
+Each shard: 500 VMs × 500 forks
+Total Ansible workers: 5,000 simultaneous
+```
+
+Each shard is independent — failures isolate to that shard. Logs aggregated at end.
+
+Manual shard launch:
+```bash
+bash deploy/shard.sh 5000 500          # 5000 VMs, 500 forks per shard
+SHARD_SIZE=250 bash deploy/shard.sh 5000  # finer-grained shards
+```
+
+---
+
+## 🔐 Authentication
+
+| Deployment Path | Auth Method |
+|---|---|
+| Azure Portal click-deploy | Managed Identity (auto-assigned to runner) |
+| Cloud Shell | Inherits your Azure CLI login (no SP needed) |
+| Docker / local | Service Principal env vars (`scripts/setup_azure_sp.sh`) |
+
+To create a Service Principal:
+```bash
+bash scripts/setup_azure_sp.sh
+source scripts/load_sp_creds.sh
+```
+
+---
+
+## 📁 Repository Layout
+
+```
+cloudlens-ansible-azure/
+├── quickstart.sh                ← Tier 2 entry (Cloud Shell + local)
+├── Dockerfile                    ← Tier 3 container image
+├── deploy/
+│   ├── arm-template.json        ← Tier 1 Azure Portal one-click
+│   ├── shard.sh                  ← Sharded deployment for thousands
+│   └── tuned-ansible.cfg         ← High-scale forks/pipelining
+├── customer_input.yaml.example   ← Customer config schema
 ├── inventory/
-│   ├── azure_rm.yaml                  # Azure dynamic inventory (tag-keyed groups)
-│   └── group_vars/
-│       ├── all.yaml                   # Centralized CloudLens config
-│       ├── ubuntu_prod_vms.yaml
-│       ├── redhat_prod_vms.yaml
-│       └── windows_prod_vms.yaml      # WinRM connection vars
-│
-├── vars/
-│   └── cloudlens.yaml                 # Container/installer defaults
-│
+│   ├── azure_rm.yaml             ← Dynamic inventory (Azure tags)
+│   └── group_vars/               ← OS-specific connection vars
+├── playbooks/
+│   ├── ubuntu.yaml               ← Ubuntu sensor deployment
+│   ├── redhat.yaml               ← RHEL auto-detect Docker/Podman
+│   ├── windows.yaml              ← Windows MSI silent install
+│   ├── bootstrap_windows_winrm.yaml  ← Enables WinRM via Azure Run Command
+│   └── *_cleanup.yaml            ← Removal playbooks
 ├── scripts/
-│   ├── deploy.sh                      # Wizard wrapper — reads customer_input.yaml
-│   ├── cleanup.sh                     # Cleanup wrapper
-│   ├── setup_azure_sp.sh              # Service Principal creation helper
-│   └── bootstrap_winrm.sh             # Standalone WinRM enabler (via Azure CLI)
-│
-├── files/                             # Place CloudLens Windows installer here
-│   └── .gitkeep                       # (Installer is NOT committed — pulled separately)
-│
+│   ├── setup_azure_sp.sh         ← Service Principal helper
+│   ├── docker-entrypoint.sh      ← Container CMD router
+│   └── *.sh                       ← Other helpers
 └── docs/
-    ├── ARCHITECTURE.md
     ├── DEPLOYMENT_GUIDE.md
+    ├── SCALING.md
+    ├── ARCHITECTURE.md
     └── TROUBLESHOOTING.md
 ```
 
 ---
 
-## How Azure Dynamic Inventory Works
+## ⚙️ How It Works — The Engine
 
-`inventory/azure_rm.yaml` uses the `azure_rm` plugin with **tag-keyed groups**:
+Regardless of deployment tier, the same engine runs:
 
-```yaml
-plugin: azure.azcollection.azure_rm
-include_vm_resource_groups:
-  - "{{ resource_groups }}"   # from customer_input.yaml
-keyed_groups:
-  - prefix: os
-    key: tags.os              # creates groups like "os_ubuntu", "os_windows"
-  - prefix: env
-    key: tags.env             # creates "env_prod", "env_dev"
-conditional_groups:
-  ubuntu_prod_vms: "'ubuntu' in (tags.os|default('')) and tags.env == 'prod'"
-  redhat_prod_vms: "'rhel' in (tags.os|default('')) and tags.env == 'prod'"
-  windows_prod_vms: "'windows' in (tags.os|default('')) and tags.env == 'prod'"
-hostnames:
-  - public_ipv4_addresses   # or private_ipv4_addresses if using Bastion
-```
-
-When you tag a VM `cloudlens=yes os=ubuntu env=prod`, it auto-joins `ubuntu_prod_vms` and existing `playbooks/ubuntu.yaml` runs against it. **Zero playbook edits required.**
+1. **Authenticate** — Managed Identity / Cloud Shell login / Service Principal
+2. **Discover** — `azure_rm` inventory plugin scans for `cloudlens=yes` tagged VMs
+3. **Group** — Auto-groups by `os` and `env` tags
+4. **Connect**
+   - Linux VMs → SSH (jumpbox or direct, configurable)
+   - Windows VMs → WinRM (Azure Run Command bootstraps WinRM if disabled)
+5. **Deploy**
+   - Ubuntu: install Docker → pull sensor → `docker run` with `NET_RAW` caps
+   - RHEL: auto-detect Docker/Podman → install → deploy container
+   - Windows: copy installer → silent MSI install → verify service
+6. **Verify** — Each playbook validates the sensor is running before exiting
+7. **Auto-tune scale** — Fork count + sharding based on VM count
 
 ---
 
-## Windows WinRM Bootstrap (Azure-Specific)
+## 📖 Documentation
 
-Most Azure Windows VMs ship without WinRM enabled. The `bootstrap_windows_winrm.yaml` playbook uses **Azure VM Run Command** (no WinRM needed yet) to:
-
-1. Enable WinRM listener (`winrm quickconfig -force`)
-2. Configure NTLM authentication
-3. Open NSG rules 5985/5986
-4. Verify connectivity
-
-```bash
-ansible-playbook playbooks/bootstrap_windows_winrm.yaml \
-  -e "@customer_input.yaml" \
-  -i inventory/azure_rm.yaml
-```
-
-Done once per VM. After that, all subsequent runs use WinRM directly.
+- [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) — Step-by-step customer guide
+- [docs/SCALING.md](docs/SCALING.md) — Scale to thousands of VMs
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Internal architecture
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — Common issues
 
 ---
 
-## Customer Input Schema
+## 🧪 Verified Against Real Azure
 
-`customer_input.yaml.example` (sanitized):
-
-```yaml
-# === Azure Environment ===
-azure:
-  subscription_id: "00000000-0000-0000-0000-000000000000"
-  tenant_id: "00000000-0000-0000-0000-000000000000"
-  resource_groups:
-    - "customer-prod-rg"
-    - "customer-prod-windows-rg"
-  locations:
-    - "eastus2"
-
-# === CloudLens Configuration ===
-cloudlens:
-  manager_ip_or_fqdn: "clms.customer.example.com"   # or public IP
-  project_key: "<PROJECT_KEY_FROM_CLMS>"
-  custom_tags: "Env=Azure Region=eastus2 Customer=Acme"
-  registry_type: "insecure"                          # or "secure" if signed registry
-  ssl_verify: "no"
-
-# === Linux SSH ===
-linux:
-  ansible_user: "azureuser"
-  ssh_key_file: "~/.ssh/id_rsa"
-
-# === Windows WinRM ===
-windows:
-  ansible_user: "azureuser"
-  ansible_password: "<set via env var $ANSIBLE_WINRM_PASSWORD>"
-  installer_path: "files/cloudlens-win-sensor-6.12.0.316.exe"
-
-# === Deployment Behavior ===
-deploy:
-  forks: 20                # parallel VMs
-  auto_update: "yes"
-  log_max_size: "50m"
-  log_max_file: "5"
-```
+Smoke-tested deployment to:
+- 2× Ubuntu 22.04 VMs (private IPs via SSH jumpbox)
+- 1× Windows Server 2022 (WinRM direct via public IP, bootstrapped via Azure Run Command)
+- CLMS 6.14.141 deployed in same VNet
+- Sensors registered, project key validated, containers running
 
 ---
 
-## Commands Reference
+## 🛟 Support
 
-| Command | What it does |
-|---|---|
-| `./scripts/deploy.sh` | Full bootstrap + deploy (recommended) |
-| `./scripts/cleanup.sh` | Remove sensors from all VMs |
-| `ansible-inventory -i inventory/azure_rm.yaml --graph` | Show discovered VMs grouped by OS |
-| `ansible-playbook deploy.yaml -i inventory/azure_rm.yaml --limit ubuntu_prod_vms` | Deploy to one group only |
-| `ansible-playbook deploy.yaml -i inventory/azure_rm.yaml --check` | Dry-run |
-| `ansible-playbook deploy.yaml -i inventory/azure_rm.yaml --tags verify` | Re-verify deployment health |
+Issues or questions: [GitHub Issues](https://github.com/Keysight-Tech/cloudlens-ansible-azure/issues)
 
----
-
-## Troubleshooting
-
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| `Unable to find Service Principal` | SP env vars not exported | `source scripts/load_sp_creds.sh` |
-| `Empty inventory — no hosts matched` | VMs not tagged correctly | `az resource tag --tags cloudlens=yes os=ubuntu env=prod ...` |
-| Windows tasks fail with `WinRM not configured` | Bootstrap step skipped | Run `playbooks/bootstrap_windows_winrm.yaml` first |
-| `Docker daemon not running` (Ubuntu/RHEL) | systemd service masked | `sudo systemctl unmask docker && systemctl start docker` |
-| Sensor not appearing in CLMS | Wrong project key or firewall blocking | Verify project key, check NSG rules for outbound 443 to CLMS |
-
-See `docs/TROUBLESHOOTING.md` for the full table.
-
----
-
-## License
-
-Copyright © Keysight Technologies. Internal use authorized.
-
----
-
-## Maintainer
-
-Brine-Ndam Ketum — CloudLens Engineering, Keysight Technologies
+For internal Keysight engineering: contact CloudLens engineering team.
