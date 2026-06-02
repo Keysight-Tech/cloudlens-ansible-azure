@@ -282,14 +282,16 @@ If you do not have CloudLens Manager or a Virtual Packet Broker running yet, dep
 
 | Component | Version | Marketplace |
 |---|---|---|
-| CLMS (CloudLens Manager) | 6.13.076 | keysight-technologies-cloudlens/keysight-cloudlens-manager |
+| CLMS (CloudLens Manager) | 6.13.076 | keysight-technologies-cloudlens/keysight-cloudlens-manager-preview |
 | vPB (Virtual Packet Broker) | 3.15.01 | keysight-technologies-cloudlens/keysight-cloudlens-virtual-packet-broker |
+
+> **Note about the marketplace name:** When accepting terms via the Azure Portal, the CLMS offer appears as **"CloudLens Manager (Preview)"** and the vPB offer appears as **"CloudLens Virtual Packet Broker"**. The Deploy buttons above point to the correct offer IDs automatically.
 
 After CLMS deploys (about 15 minutes for initialization), open the UI, create a project, copy the project key, then run the sensor deployment using one of the three paths below.
 
 > First-time use of these images requires accepting Marketplace terms. Either click through the Marketplace acceptance dialog when deploying from the portal, or run:
 > ```bash
-> az vm image terms accept --publisher keysight-technologies-cloudlens --offer keysight-cloudlens-manager --plan clms-6-13-0_76
+> az vm image terms accept --publisher keysight-technologies-cloudlens --offer keysight-cloudlens-manager-preview --plan clms-6-13-0_76
 > az vm image terms accept --publisher keysight-technologies-cloudlens --offer keysight-cloudlens-virtual-packet-broker --plan cloudlens-virtual-packet-broker-3-15-0_1
 > ```
 
