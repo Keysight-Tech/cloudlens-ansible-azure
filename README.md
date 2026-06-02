@@ -21,6 +21,28 @@
 
 ## Which path?
 
+### Interactive Diagram
+
+```mermaid
+flowchart TD
+    Start([Where will you run the deploy?]) --> Browser{Azure Portal<br/>browser?}
+    Browser -->|Yes| Tier1[🌐 Tier 1<br/>Click-to-Deploy<br/>ARM Template]
+    Browser -->|No: laptop or CI| Docker{Have Docker?}
+    Docker -->|Yes| Tier3[🐳 Tier 3<br/>Docker Container]
+    Docker -->|No| Tier2[☁️ Tier 2<br/>Cloud Shell<br/>or quickstart.sh]
+
+    Tier1 --> Engine{{Same Ansible engine<br/>same playbooks<br/>same automation}}
+    Tier2 --> Engine
+    Tier3 --> Engine
+
+    style Tier1 fill:#22C55E,stroke:#16A34A,color:#fff
+    style Tier2 fill:#F59E0B,stroke:#D97706,color:#fff
+    style Tier3 fill:#2496ED,stroke:#1D7AC7,color:#fff
+    style Engine fill:#fef3c7,stroke:#D4AF37,color:#1B2A4A
+```
+
+### Detailed Diagram
+
 ![Decision Tree](docs/assets/decision-tree.svg)
 
 All three paths run the same Ansible engine. Same playbooks, same automation. Pick the entry point that matches how your team works.
@@ -40,7 +62,208 @@ All three paths run the same Ansible engine. Same playbooks, same automation. Pi
 
 ---
 
+## Choose Your Scenario
+
+Click the row that matches your environment to see the exact commands.
+
+<details>
+<summary>🐧 Ubuntu VMs with public IPs</summary>
+
+**1. Tag your VMs:**
+```bash
+az vm update -g <RG> -n <VM> --set tags.cloudlens=yes tags.os=ubuntu tags.env=prod
+```
+
+**2. Set connection mode in customer_input.yaml:**
+```yaml
+connection:
+  mode: "direct_public"
+clms:
+  ip: "10.0.0.10"
+  project_key: "<your-project-key>"
+```
+
+**3. Deploy:**
+```bash
+bash quickstart.sh
+```
+
+Expected: Each VM gets `cloudlens-agent` container running, registered to CLMS within 60 seconds of deploy completion.
+</details>
+
+<details>
+<summary>🐧 Ubuntu VMs in private subnet (jumpbox required)</summary>
+
+**1. Tag your VMs and jumpbox:**
+```bash
+az vm update -g <RG> -n <VM> --set tags.cloudlens=yes tags.os=ubuntu tags.env=prod
+az vm update -g <RG> -n <JUMPBOX> --set tags.cloudlens_role=jumpbox
+```
+
+**2. Set connection mode in customer_input.yaml:**
+```yaml
+connection:
+  mode: "jumpbox"
+  jumpbox_host: "jumpbox.example.com"
+  jumpbox_user: "azureuser"
+clms:
+  ip: "10.0.0.10"
+  project_key: "<your-project-key>"
+```
+
+**3. Deploy:**
+```bash
+bash quickstart.sh
+```
+
+Expected: SSH ProxyJump through jumpbox to each private VM, Docker engine installed, sensor container running and registered to CLMS.
+</details>
+
+<details>
+<summary>🎩 RHEL/Rocky VMs with Podman</summary>
+
+**1. Tag your VMs:**
+```bash
+az vm update -g <RG> -n <VM> --set tags.cloudlens=yes tags.os=rhel tags.env=prod
+```
+
+**2. Set connection mode in customer_input.yaml:**
+```yaml
+connection:
+  mode: "direct_public"
+container:
+  runtime: "auto"
+clms:
+  ip: "10.0.0.10"
+  project_key: "<your-project-key>"
+```
+
+**3. Deploy:**
+```bash
+bash quickstart.sh
+```
+
+Expected: Playbook auto-detects Podman on RHEL 8/9 (or Docker if installed), launches sensor with the correct runtime, registers to CLMS.
+</details>
+
+<details>
+<summary>🪟 Windows Server VMs (WinRM)</summary>
+
+**1. Tag your VMs:**
+```bash
+az vm update -g <RG> -n <VM> --set tags.cloudlens=yes tags.os=windows tags.env=prod
+```
+
+**2. Enable WinRM on each target (one-shot bootstrap if not already enabled):**
+```bash
+ansible-playbook playbooks/bootstrap_windows_winrm.yaml
+```
+
+**3. Set connection mode in customer_input.yaml:**
+```yaml
+connection:
+  mode: "direct_public"
+  winrm_user: "azureuser"
+  winrm_password: "<secret>"
+clms:
+  ip: "10.0.0.10"
+  project_key: "<your-project-key>"
+```
+
+**4. Deploy:**
+```bash
+bash quickstart.sh
+```
+
+Expected: Silent MSI install of CloudLens Windows sensor, service started, registered to CLMS within 60 seconds. Verified end-to-end on Windows Server 2022.
+</details>
+
+<details>
+<summary>🌐 Mixed environment: Linux + Windows in same RG</summary>
+
+**1. Tag every VM with its correct OS:**
+```bash
+# Ubuntu hosts
+az vm update -g <RG> -n <UBUNTU_VM> --set tags.cloudlens=yes tags.os=ubuntu tags.env=prod
+# RHEL hosts
+az vm update -g <RG> -n <RHEL_VM> --set tags.cloudlens=yes tags.os=rhel tags.env=prod
+# Windows hosts
+az vm update -g <RG> -n <WIN_VM> --set tags.cloudlens=yes tags.os=windows tags.env=prod
+```
+
+**2. Set connection mode in customer_input.yaml:**
+```yaml
+connection:
+  mode: "direct_public"
+  winrm_user: "azureuser"
+  winrm_password: "<secret>"
+clms:
+  ip: "10.0.0.10"
+  project_key: "<your-project-key>"
+```
+
+**3. Deploy:**
+```bash
+bash quickstart.sh
+```
+
+Expected: Single run fans out to all three OS lanes in parallel, each VM gets the correct sensor (container for Linux, MSI for Windows), all register to the same CLMS project.
+</details>
+
+<details>
+<summary>🛡 Behind Azure Bastion (no public IPs allowed)</summary>
+
+**1. Tag your VMs:**
+```bash
+az vm update -g <RG> -n <VM> --set tags.cloudlens=yes tags.os=ubuntu tags.env=prod
+```
+
+**2. Set connection mode in customer_input.yaml:**
+```yaml
+connection:
+  mode: "bastion"
+  bastion_name: "<bastion-resource-name>"
+  bastion_rg: "<bastion-resource-group>"
+clms:
+  ip: "10.0.0.10"
+  project_key: "<your-project-key>"
+```
+
+**3. Deploy from Cloud Shell (recommended for Bastion-only orgs):**
+```bash
+curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/quickstart.sh | bash
+```
+
+Expected: Ansible tunnels through Azure Bastion to each private VM, deploys sensor, registers to CLMS. No public IP ever exposed on the target VMs.
+</details>
+
+---
+
 ## Architecture
+
+### Interactive Diagram
+
+```mermaid
+graph LR
+    Customer[💻 Customer<br/>laptop / Cloud Shell] --> Auth{Service Principal<br/>or Managed Identity}
+    Auth --> Inventory[Azure Dynamic Inventory<br/>azure_rm plugin]
+    Inventory -->|tag: cloudlens=yes| Discover[Tagged VMs]
+    Discover --> Ubuntu[🐧 Ubuntu<br/>Docker engine<br/>Sensor container]
+    Discover --> RHEL[🎩 RHEL / Rocky / Alma<br/>Docker or Podman<br/>Auto-detect]
+    Discover --> Windows[🪟 Windows Server<br/>WinRM + MSI<br/>Silent install]
+    Ubuntu --> CLMS[(CloudLens Manager<br/>sensors auto-register)]
+    RHEL --> CLMS
+    Windows --> CLMS
+
+    classDef azure fill:#0078D4,stroke:#005A9E,color:#fff
+    classDef customer fill:#fef3c7,stroke:#D4AF37,color:#1B2A4A
+    classDef clms fill:#1B2A4A,stroke:#D4AF37,color:#D4AF37
+    class Auth,Inventory,Discover azure
+    class Customer customer
+    class CLMS clms
+```
+
+### Detailed Diagram
 
 ![Architecture](docs/assets/architecture-diagram.svg)
 
