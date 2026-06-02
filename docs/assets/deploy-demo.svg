@@ -18,7 +18,7 @@
     </linearGradient>
     <!-- Clip path for typewriter effect on curl command -->
     <clipPath id="curl-clip">
-      <rect x="166" y="50" width="0" height="20">
+      <rect x="166" y="50" width="760" height="20">
         <animate attributeName="width" values="0;760;760;760;0" keyTimes="0;0.10;0.95;0.97;1" dur="30s" repeatCount="indefinite"/>
       </rect>
     </clipPath>
@@ -61,7 +61,7 @@
       </g>
 
       <!-- Banner (fades in at 3.5s) -->
-      <g opacity="0">
+      <g opacity="1">
         <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.11;0.13;0.95;1" dur="30s" repeatCount="indefinite"/>
         <g fill="#60A5FA">
           <text x="20" y="86">╔═══════════════════════════════════════════════════════════════════════════╗</text>
@@ -76,7 +76,7 @@
       </g>
 
       <!-- Detection: Cloud Shell detected (4.0s) -->
-      <g opacity="0">
+      <g opacity="1">
         <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.133;0.15;0.95;1" dur="30s" repeatCount="indefinite"/>
         <text x="20" y="160" fill="#22C55E">✓</text>
         <text x="36" y="160" fill="#E5E7EB">Detected environment: </text>
@@ -84,21 +84,21 @@
       </g>
 
       <!-- Authenticated (4.5s) -->
-      <g opacity="0">
+      <g opacity="1">
         <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.15;0.167;0.95;1" dur="30s" repeatCount="indefinite"/>
         <text x="20" y="178" fill="#22C55E">✓</text>
         <text x="36" y="178" fill="#E5E7EB">Authenticated via managed identity</text>
       </g>
 
       <!-- Ansible installed (5.0s) -->
-      <g opacity="0">
+      <g opacity="1">
         <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.167;0.183;0.95;1" dur="30s" repeatCount="indefinite"/>
         <text x="20" y="196" fill="#22C55E">✓</text>
         <text x="36" y="196" fill="#E5E7EB">Ansible 2.16 + azure.azcollection 2.4 installed</text>
       </g>
 
       <!-- Discovered 3 VMs (5.5s) -->
-      <g opacity="0">
+      <g opacity="1">
         <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.183;0.20;0.95;1" dur="30s" repeatCount="indefinite"/>
         <text x="20" y="214" fill="#22C55E">✓</text>
         <text x="36" y="214" fill="#E5E7EB">Discovered </text>
@@ -108,38 +108,38 @@
       </g>
 
       <!-- VM list line 1 (6.0s) -->
-      <g opacity="0">
+      <g opacity="1">
         <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.20;0.217;0.95;1" dur="30s" repeatCount="indefinite"/>
         <text x="36" y="232" fill="#9CA3AF">  → WebServerLB1   (ubuntu_22.04)</text>
       </g>
 
       <!-- VM list line 2 (6.3s) -->
-      <g opacity="0">
+      <g opacity="1">
         <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.21;0.227;0.95;1" dur="30s" repeatCount="indefinite"/>
         <text x="36" y="250" fill="#9CA3AF">  → WebServerLB2   (ubuntu_22.04)</text>
       </g>
 
       <!-- VM list line 3 (6.6s) -->
-      <g opacity="0">
+      <g opacity="1">
         <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.22;0.237;0.95;1" dur="30s" repeatCount="indefinite"/>
         <text x="36" y="268" fill="#9CA3AF">  → brine-winvm    (windows_server_2022)</text>
       </g>
 
       <!-- Section divider: Deploying sensors (7.0s) -->
-      <g opacity="0">
+      <g opacity="1">
         <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.233;0.25;0.95;1" dur="30s" repeatCount="indefinite"/>
         <text x="20" y="294" fill="#60A5FA">━━━ Deploying CloudLens sensors ━━━</text>
       </g>
 
       <!-- PLAY RECAP heading (7.5s) -->
-      <g opacity="0">
+      <g opacity="1">
         <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.25;0.267;0.95;1" dur="30s" repeatCount="indefinite"/>
         <text x="20" y="322" fill="#FCD34D" font-weight="600">PLAY RECAP </text>
         <text x="98" y="322" fill="#60A5FA">─────────────────────────────────────────────────────────────────</text>
       </g>
 
       <!-- Recap line 1 (8.0s) -->
-      <g opacity="0">
+      <g opacity="1">
         <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.267;0.283;0.95;1" dur="30s" repeatCount="indefinite"/>
         <text x="20" y="344" fill="#E5E7EB">WebServerLB1</text>
         <text x="160" y="344" fill="#9CA3AF">: </text>
@@ -152,7 +152,7 @@
       </g>
 
       <!-- Recap line 2 (8.5s) -->
-      <g opacity="0">
+      <g opacity="1">
         <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.283;0.30;0.95;1" dur="30s" repeatCount="indefinite"/>
         <text x="20" y="362" fill="#E5E7EB">WebServerLB2</text>
         <text x="160" y="362" fill="#9CA3AF">: </text>
@@ -163,7 +163,7 @@
       </g>
 
       <!-- Recap line 3 (9.0s) -->
-      <g opacity="0">
+      <g opacity="1">
         <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.30;0.317;0.95;1" dur="30s" repeatCount="indefinite"/>
         <text x="20" y="380" fill="#E5E7EB">brine-winvm</text>
         <text x="160" y="380" fill="#9CA3AF">: </text>
@@ -174,7 +174,7 @@
       </g>
 
       <!-- Final result (10.0s) -->
-      <g opacity="0">
+      <g opacity="1">
         <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.333;0.35;0.95;1" dur="30s" repeatCount="indefinite"/>
         <text x="20" y="416" fill="#22C55E" font-weight="600">✓ Done</text>
         <text x="68" y="416" fill="#E5E7EB"> — </text>
@@ -184,14 +184,14 @@
       </g>
 
       <!-- View sensors link (10.5s) -->
-      <g opacity="0">
+      <g opacity="1">
         <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.35;0.367;0.95;1" dur="30s" repeatCount="indefinite"/>
         <text x="20" y="438" fill="#9CA3AF">View sensors:  </text>
         <text x="118" y="438" fill="#7DD3FC" text-decoration="underline">https://20.84.115.190/sensors</text>
       </g>
 
       <!-- Final prompt with blinking cursor (11.0s) -->
-      <g opacity="0">
+      <g opacity="1">
         <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.367;0.383;0.95;1" dur="30s" repeatCount="indefinite"/>
         <text x="20" y="462" fill="#22C55E">brine@cloudshell</text>
         <text x="135" y="462" fill="#7DD3FC">:</text>

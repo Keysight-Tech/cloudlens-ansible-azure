@@ -7,14 +7,14 @@
       .node:hover { transform: scale(1.03); filter: brightness(1.07); }
       .tier-card { transition: transform 0.25s ease, filter 0.25s ease; transform-box: fill-box; transform-origin: center; cursor: pointer; }
       .tier-card:hover { transform: scale(1.04); filter: brightness(1.08) drop-shadow(0 6px 12px rgba(0,0,0,0.12)); }
-      .fadein { opacity: 0; animation: fade 0.6s ease forwards; }
+      .fadein { opacity: 1; animation: fade 0.6s ease both; }
       .d1 { animation-delay: 0.05s; }
       .d2 { animation-delay: 0.25s; }
       .d3 { animation-delay: 0.45s; }
       .d4 { animation-delay: 0.65s; }
       .d5 { animation-delay: 0.85s; }
       .d6 { animation-delay: 1.05s; }
-      @keyframes fade { to { opacity: 1; } }
+      @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
       .pulse { animation: pulse 2.4s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
       @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
     </style>

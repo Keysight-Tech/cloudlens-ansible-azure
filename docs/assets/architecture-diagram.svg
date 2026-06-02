@@ -7,14 +7,14 @@
       .tier-box:hover { transform: scale(1.025); filter: brightness(1.06); }
       .lane { transition: transform 0.25s ease, filter 0.25s ease; transform-box: fill-box; transform-origin: center; cursor: pointer; }
       .lane:hover { transform: scale(1.03); filter: brightness(1.08); }
-      .fadein { opacity: 0; animation: fade 0.7s ease forwards; }
+      .fadein { opacity: 1; animation: fade 0.7s ease both; }
       .fadein-1 { animation-delay: 0.05s; }
       .fadein-2 { animation-delay: 0.25s; }
       .fadein-3 { animation-delay: 0.45s; }
       .fadein-4 { animation-delay: 0.65s; }
       .fadein-5 { animation-delay: 0.85s; }
       .fadein-6 { animation-delay: 1.05s; }
-      @keyframes fade { to { opacity: 1; } }
+      @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
       .arrow-flow { stroke-dasharray: 4 4; animation: dashflow 1.4s linear infinite; }
       @keyframes dashflow { to { stroke-dashoffset: -16; } }
     </style>
