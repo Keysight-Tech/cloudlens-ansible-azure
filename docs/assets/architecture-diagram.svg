@@ -1,5 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" role="img" aria-labelledby="arch-title arch-desc">
+  <title id="arch-title">CloudLens Ansible Azure Deployment Architecture</title>
+  <desc id="arch-desc">Diagram showing the flow from a customer machine through Azure Service Principal authentication, dynamic inventory discovery, and per-OS deployment lanes (Ubuntu, RHEL, Windows) converging on the Keysight CloudLens Manager for sensor registration.</desc>
   <defs>
+    <style>
+      .tier-box { transition: transform 0.25s ease, filter 0.25s ease; transform-box: fill-box; transform-origin: center; cursor: pointer; }
+      .tier-box:hover { transform: scale(1.025); filter: brightness(1.06); }
+      .lane { transition: transform 0.25s ease, filter 0.25s ease; transform-box: fill-box; transform-origin: center; cursor: pointer; }
+      .lane:hover { transform: scale(1.03); filter: brightness(1.08); }
+      .fadein { opacity: 0; animation: fade 0.7s ease forwards; }
+      .fadein-1 { animation-delay: 0.05s; }
+      .fadein-2 { animation-delay: 0.25s; }
+      .fadein-3 { animation-delay: 0.45s; }
+      .fadein-4 { animation-delay: 0.65s; }
+      .fadein-5 { animation-delay: 0.85s; }
+      .fadein-6 { animation-delay: 1.05s; }
+      @keyframes fade { to { opacity: 1; } }
+      .arrow-flow { stroke-dasharray: 4 4; animation: dashflow 1.4s linear infinite; }
+      @keyframes dashflow { to { stroke-dashoffset: -16; } }
+    </style>
     <filter id="drop-shadow" x="-10%" y="-10%" width="120%" height="120%">
       <feDropShadow stdDeviation="2" dx="0" dy="2" flood-opacity="0.1"/>
     </filter>
@@ -33,7 +51,8 @@
   <text x="600" y="60" text-anchor="middle" font-size="13" fill="#5B6478">From customer machine to registered sensors on CLMS</text>
 
   <!-- ========== LEFT: Customer ========== -->
-  <g filter="url(#soft-shadow)">
+  <g class="tier-box fadein fadein-1" filter="url(#soft-shadow)">
+    <title>Customer environment - your laptop, CI runner, or Azure Cloud Shell</title>
     <rect x="40" y="170" width="180" height="260" rx="12" fill="#FFFFFF" stroke="#E5E7EB"/>
     <text x="130" y="195" text-anchor="middle" font-size="13" font-weight="600" fill="#1B2A4A">CUSTOMER</text>
     <line x1="60" y1="208" x2="200" y2="208" stroke="#E5E7EB"/>
@@ -56,14 +75,16 @@
   </g>
 
   <!-- ========== MIDDLE: Azure Subscription ========== -->
-  <g filter="url(#soft-shadow)">
+  <g class="fadein fadein-2" filter="url(#soft-shadow)">
+    <title>Azure subscription - tenant, subscription, resource group scope</title>
     <rect x="270" y="100" width="620" height="430" rx="14" fill="url(#azure-grad)" stroke="#0078D4" stroke-width="1.5"/>
     <text x="295" y="128" font-size="14" font-weight="600" fill="#005A9E">AZURE SUBSCRIPTION</text>
     <text x="295" y="145" font-size="11" fill="#0078D4">tenant • subscription • resource group</text>
   </g>
 
   <!-- Service Principal -->
-  <g filter="url(#drop-shadow)">
+  <g class="tier-box fadein fadein-3" filter="url(#drop-shadow)">
+    <title>Service Principal authentication via OAuth 2.0</title>
     <rect x="300" y="165" width="560" height="56" rx="8" fill="#FFFFFF" stroke="#E5E7EB"/>
     <circle cx="328" cy="193" r="14" fill="#005A9E"/>
     <text x="328" y="198" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">SP</text>
@@ -73,7 +94,8 @@
   </g>
 
   <!-- Dynamic Inventory -->
-  <g filter="url(#drop-shadow)">
+  <g class="tier-box fadein fadein-4" filter="url(#drop-shadow)">
+    <title>Dynamic inventory - azure_rm plugin discovers VMs by tag</title>
     <rect x="300" y="240" width="560" height="60" rx="8" fill="#FFFFFF" stroke="#E5E7EB"/>
     <g transform="translate(312,254)">
       <rect width="30" height="30" rx="6" fill="#D4AF37"/>
@@ -87,7 +109,8 @@
   <!-- 3 OS Lanes -->
   <g>
     <!-- Ubuntu lane -->
-    <g filter="url(#drop-shadow)">
+    <g class="lane fadein fadein-5" filter="url(#drop-shadow)">
+      <title>Ubuntu deployment lane - SSH to VMs, install Docker container sensor</title>
       <rect x="300" y="325" width="175" height="180" rx="10" fill="#FFFFFF" stroke="#E5E7EB"/>
       <rect x="300" y="325" width="175" height="34" rx="10" fill="#E95420"/>
       <rect x="300" y="349" width="175" height="10" fill="#E95420"/>
@@ -113,7 +136,8 @@
     </g>
 
     <!-- RHEL lane -->
-    <g filter="url(#drop-shadow)">
+    <g class="lane fadein fadein-5" filter="url(#drop-shadow)">
+      <title>RHEL / Rocky deployment lane - SSH to VMs, install Podman or Docker sensor</title>
       <rect x="492" y="325" width="175" height="180" rx="10" fill="#FFFFFF" stroke="#E5E7EB"/>
       <rect x="492" y="325" width="175" height="34" rx="10" fill="#EE0000"/>
       <rect x="492" y="349" width="175" height="10" fill="#EE0000"/>
@@ -135,7 +159,8 @@
     </g>
 
     <!-- Windows lane -->
-    <g filter="url(#drop-shadow)">
+    <g class="lane fadein fadein-5" filter="url(#drop-shadow)">
+      <title>Windows Server deployment lane - WinRM to VMs, install native MSI sensor service</title>
       <rect x="684" y="325" width="175" height="180" rx="10" fill="#FFFFFF" stroke="#E5E7EB"/>
       <rect x="684" y="325" width="175" height="34" rx="10" fill="#0078D4"/>
       <rect x="684" y="349" width="175" height="10" fill="#0078D4"/>
@@ -161,7 +186,8 @@
   </g>
 
   <!-- ========== RIGHT: CLMS ========== -->
-  <g filter="url(#soft-shadow)">
+  <g class="tier-box fadein fadein-6" filter="url(#soft-shadow)">
+    <title>Keysight CloudLens Manager - target where sensors register</title>
     <rect x="940" y="170" width="220" height="260" rx="12" fill="url(#clms-grad)" stroke="#D4AF37" stroke-width="1.5"/>
     <text x="1050" y="198" text-anchor="middle" font-size="13" font-weight="700" fill="#1B2A4A">KEYSIGHT CLMS</text>
     <text x="1050" y="215" text-anchor="middle" font-size="11" fill="#8B6F1C">CloudLens Manager</text>
@@ -196,7 +222,7 @@
   <!-- ========== ARROWS ========== -->
   <!-- Customer -> Azure -->
   <g>
-    <path d="M220 250 Q245 250 270 200" fill="none" stroke="#0078D4" stroke-width="2" marker-end="url(#arrow-blue)"/>
+    <path class="arrow-flow" d="M220 250 Q245 250 270 200" fill="none" stroke="#0078D4" stroke-width="2" marker-end="url(#arrow-blue)"/>
     <text x="245" y="232" font-size="10" font-weight="600" fill="#0078D4">Service Principal auth</text>
   </g>
 
@@ -213,9 +239,9 @@
 
   <!-- 3 lanes converge to CLMS -->
   <g stroke="#22C55E" stroke-width="1.8" fill="none">
-    <path d="M475 415 Q905 415 940 300" marker-end="url(#arrow-blue)" stroke="#0078D4"/>
-    <path d="M667 415 Q830 415 940 320" marker-end="url(#arrow-blue)" stroke="#0078D4"/>
-    <path d="M859 415 Q900 415 940 340" marker-end="url(#arrow-blue)" stroke="#0078D4"/>
+    <path class="arrow-flow" d="M475 415 Q905 415 940 300" marker-end="url(#arrow-blue)" stroke="#0078D4"/>
+    <path class="arrow-flow" d="M667 415 Q830 415 940 320" marker-end="url(#arrow-blue)" stroke="#0078D4"/>
+    <path class="arrow-flow" d="M859 415 Q900 415 940 340" marker-end="url(#arrow-blue)" stroke="#0078D4"/>
   </g>
   <text x="900" y="445" text-anchor="middle" font-size="10" font-weight="600" fill="#0078D4">Sensor registration → CLMS</text>
 
