@@ -30,7 +30,7 @@ The vPB needs ~5 to 10 minutes after VM creation before SSH access works.
 | `vm_name` | `vpb` | VM name and resource prefix |
 | `admin_username` | `azureuser` | OS admin user |
 | `admin_password` | (required) | OS admin password, 12+ chars, complex |
-| `vm_size` | `Standard_D4s_v3` | VM size (D4/D8/D16 s_v3 allowed) |
+| `vm_size` | `Standard_D8s_v3` | VM size (D8/D16 s_v3; D4s_v3 only supports 2 NICs so it is excluded) |
 | `existing_vnet_name` | `""` | Existing VNet (blank creates new) |
 | `existing_vnet_resource_group` | `""` | RG of existing VNet |
 | `existing_mgmt_subnet_name` | `""` | Existing management subnet |

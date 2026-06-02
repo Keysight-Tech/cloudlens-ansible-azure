@@ -27,13 +27,12 @@
     },
     "vmSize": {
       "type": "string",
-      "defaultValue": "Standard_D4s_v3",
+      "defaultValue": "Standard_D8s_v3",
       "allowedValues": [
-        "Standard_D4s_v3",
         "Standard_D8s_v3",
         "Standard_D16s_v3"
       ],
-      "metadata": { "description": "VM size. D-series s_v3 SKUs support accelerated networking required for high-rate vPB data planes." }
+      "metadata": { "description": "VM size. D-series s_v3 SKUs with 8+ vCPUs support both accelerated networking and the 3 NICs (management, ingress, egress) required by vPB. Standard_D4s_v3 is excluded because it only supports 2 NICs." }
     },
     "vnetName": {
       "type": "string",

@@ -31,9 +31,10 @@ vm_name = "vpb"
 admin_username = "azureuser"
 admin_password = "REPLACE-WITH-A-STRONG-PASSWORD"
 
-# OPTIONAL: VM size. Must support accelerated networking on the data plane NICs.
-# Allowed: Standard_D4s_v3, Standard_D8s_v3, Standard_D16s_v3.
-vm_size = "Standard_D4s_v3"
+# OPTIONAL: VM size. Must support accelerated networking AND 3 NICs.
+# Allowed: Standard_D8s_v3, Standard_D16s_v3.
+# (Standard_D4s_v3 is excluded; it only supports 2 NICs and vPB needs 3.)
+vm_size = "Standard_D8s_v3"
 
 # OPTIONAL: Bring your own VNet. Leave existing_vnet_name = "" to create a new
 # VNet with three subnets (mgmt, ingress, egress) using the prefixes below.

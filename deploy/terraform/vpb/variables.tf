@@ -46,17 +46,16 @@ variable "admin_password" {
 }
 
 variable "vm_size" {
-  description = "VM size for the vPB VM. Must support accelerated networking on the data NICs."
+  description = "VM size for the vPB VM. Must support accelerated networking AND 3+ NICs (management, ingress, egress). Standard_D4s_v3 is excluded because it only supports 2 NICs."
   type        = string
-  default     = "Standard_D4s_v3"
+  default     = "Standard_D8s_v3"
 
   validation {
     condition = contains([
-      "Standard_D4s_v3",
       "Standard_D8s_v3",
       "Standard_D16s_v3"
     ], var.vm_size)
-    error_message = "vm_size must be one of Standard_D4s_v3, Standard_D8s_v3, or Standard_D16s_v3. These sizes support accelerated networking required by the vPB data plane."
+    error_message = "vm_size must be Standard_D8s_v3 or Standard_D16s_v3. These sizes support both accelerated networking and the 3 NICs required by vPB."
   }
 }
 
