@@ -1,6 +1,6 @@
-# CloudLens Ansible — Azure Deployment
+# CloudLens Ansible for Azure
 
-**Deploy CloudLens sensors to any Azure VM in under 60 seconds — Linux, Windows, and at scale.**
+**Deploy CloudLens sensors to any Azure VM in under 60 seconds. Works on Linux, Windows, and at scale.**
 
 ![Tested on Azure](https://img.shields.io/badge/Tested%20on-Azure-0078D4?logo=microsoft-azure)
 ![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04-E95420?logo=ubuntu)
@@ -23,7 +23,7 @@
 
 ![Decision Tree](docs/assets/decision-tree.svg)
 
-All three paths run the same Ansible engine — same playbooks, same automation. Pick the entry point that matches where you work.
+All three paths run the same Ansible engine. Same playbooks, same automation. Pick the entry point that matches how your team works.
 
 ---
 
@@ -52,7 +52,7 @@ A single Ansible control point authenticates to Azure, discovers VMs by tag, and
 
 ### 🌐 Tier 1: One-Click from Azure Portal
 
-> Deploy directly from the Azure Portal — no local tools, no CLI, no SSH keys.
+> Deploy directly from the Azure Portal. No local tools, no CLI, no SSH keys.
 
 <p>
   <a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Farm-template.json"><img src="https://img.shields.io/badge/▶_Deploy_to_Azure-0078D4?style=for-the-badge&logo=microsoft-azure&logoColor=white" alt="Deploy to Azure"/></a>
@@ -64,13 +64,13 @@ A single Ansible control point authenticates to Azure, discovers VMs by tag, and
 - Provisions an ephemeral Ubuntu runner VM in your subscription
 - Runner authenticates via Managed Identity (no Service Principal to create)
 - Auto-discovers tagged VMs, deploys sensors, self-destructs after 1 hour
-- Zero local tools required — runs entirely from your browser
+- Zero local tools required: runs entirely from your browser
 
 </details>
 
 ### ☁️ Tier 2: Azure Cloud Shell
 
-> Already logged into Azure in your browser — run a single curl command.
+> If you are already logged into Azure in your browser, run a single curl command.
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/quickstart.sh | bash
@@ -79,7 +79,7 @@ curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azur
 <details>
 <summary>How it works</summary>
 
-- Cloud Shell is pre-authenticated to Azure — no Service Principal needed
+- Cloud Shell is pre-authenticated to Azure, so no Service Principal is needed
 - Wizard prompts for CLMS IP and project key
 - Auto-tunes Ansible forks based on discovered VM count
 - All state lives in your Cloud Shell home directory; nothing installed locally
@@ -111,7 +111,7 @@ docker run --rm -it \
 
 ---
 
-## Prerequisites — Tag Your VMs
+## Prerequisites: Tag Your VMs
 
 The dynamic inventory discovers VMs by Azure tag. Apply these three tags to every target VM:
 
@@ -142,7 +142,7 @@ done
 
 ---
 
-## Scaling — From 1 VM to 5,000+
+## Scaling: From 1 VM to 5,000+
 
 | VM Count | Auto Forks | Sharded? | Approx Time |
 |---|---|---|---|
@@ -186,19 +186,19 @@ Full reference: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
 ## Documentation
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — Internal architecture and traffic flow
-- [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) — Step-by-step customer guide
-- [docs/SCALING.md](docs/SCALING.md) — Scale to thousands of VMs
-- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — Common issues and fixes
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): internal architecture and traffic flow
+- [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md): step-by-step customer guide
+- [docs/SCALING.md](docs/SCALING.md): scale to thousands of VMs
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md): common issues and fixes
 
 ## Related Repositories
 
-- [cloudlens-vpb-azure-gwlb](https://github.com/Keysight-Tech/cloudlens-vpb-azure-gwlb) — Virtual Packet Broker HA behind Azure Gateway Load Balancer
+- [cloudlens-vpb-azure-gwlb](https://github.com/Keysight-Tech/cloudlens-vpb-azure-gwlb): Virtual Packet Broker HA behind Azure Gateway Load Balancer
 
 ## Getting Help
 
-- [GitHub Issues](https://github.com/Keysight-Tech/cloudlens-ansible-azure/issues) — bug reports and feature requests
-- Keysight CloudLens engineering — contact your account team
+- [GitHub Issues](https://github.com/Keysight-Tech/cloudlens-ansible-azure/issues) for bug reports and feature requests
+- Keysight CloudLens engineering: contact your account team
 
 ## License
 
@@ -206,4 +206,4 @@ Keysight Technologies. See [LICENSE](LICENSE).
 
 ---
 
-**Version:** v1.0.0 — June 2026
+**Version:** v1.0.0 (June 2026)

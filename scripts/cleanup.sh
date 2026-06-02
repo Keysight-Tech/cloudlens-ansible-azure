@@ -16,7 +16,7 @@ if [[ ! -f "$INPUT_FILE" ]]; then
 fi
 
 echo "═══════════════════════════════════════════════════════════════"
-echo "CloudLens Ansible — Azure CLEANUP"
+echo "CloudLens Ansible for Azure: CLEANUP"
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
 echo "This will REMOVE CloudLens sensors from all matching VMs."

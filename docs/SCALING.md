@@ -62,7 +62,7 @@ Single control node handling 2,000 VMs at 200 forks:
 | **CPU** | 4-8 vCPU |
 | **RAM** | 16-32 GB |
 | **Network** | Standard egress |
-| **VM Size** | Standard_D4s_v5 — Standard_D8s_v5 |
+| **VM Size** | Standard_D4s_v5 to Standard_D8s_v5 |
 | **OS** | Ubuntu 22.04 (best Python compatibility) |
 
 For 5,000+ VMs in shards:
@@ -88,11 +88,11 @@ The Tier 1 ARM template auto-creates a runner *inside* the customer subscription
 
 In `deploy/tuned-ansible.cfg` (use this for high-scale):
 
-1. **SSH multiplexing** — 1 TCP connection reused per host
-2. **Pipelining** — eliminates intermediate SSH/SCP steps (30-40% faster)
-3. **Strategy `free`** — fast hosts don't wait for slow ones
-4. **Fact caching** — VM facts cached for 1 hour
-5. **Connection retries** — 3 retries per task before failing
+1. **SSH multiplexing**: one TCP connection reused per host
+2. **Pipelining**: eliminates intermediate SSH/SCP steps (30-40% faster)
+3. **Strategy `free`**: fast hosts don't wait for slow ones
+4. **Fact caching**: VM facts cached for 1 hour
+5. **Connection retries**: 3 retries per task before failing
 
 To use:
 

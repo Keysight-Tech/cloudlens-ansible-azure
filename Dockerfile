@@ -1,7 +1,7 @@
 # =====================================================================
-# CloudLens Ansible — Azure Deployment Image
+# CloudLens Ansible for Azure: Deployment Image
 # =====================================================================
-# Zero-install deployment for any team — works from any machine with Docker
+# Zero-install deployment for any team. Works from any machine with Docker.
 #
 # Build:
 #   docker build -t cloudlens-ansible-azure .
@@ -49,7 +49,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Azure CLI (official install)
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
-# Python deps — Ansible + Azure SDKs + WinRM
+# Python deps: Ansible, Azure SDKs, WinRM
 RUN pip install --no-cache-dir \
     "ansible-core>=2.16,<2.18" \
     pywinrm \

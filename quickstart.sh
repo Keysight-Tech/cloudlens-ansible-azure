@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =====================================================================
-# CloudLens Ansible — Azure One-Command Quickstart
+# CloudLens Ansible for Azure: One-Command Quickstart
 # =====================================================================
 # Works in: Azure Cloud Shell, Linux laptop, macOS, WSL
 # Deploys CloudLens sensors to ALL Azure VMs tagged cloudlens=yes
@@ -28,7 +28,7 @@ step()   { echo -e "${C_BLUE}━━━ $1 ━━━${C_RESET}"; }
 # =====================================================================
 # Step 1: Detect environment
 # =====================================================================
-banner "CloudLens Ansible — Azure Deployment Quickstart"
+banner "CloudLens Ansible for Azure: Deployment Quickstart"
 echo
 
 IN_CLOUD_SHELL=false
@@ -122,7 +122,7 @@ step "Gathering deployment configuration"
 if [[ -f customer_input.yaml ]]; then
   ok "Using existing customer_input.yaml"
 else
-  echo "No customer_input.yaml found — interactive setup:"
+  echo "No customer_input.yaml found. Starting interactive setup:"
   cp customer_input.yaml.example customer_input.yaml
   read -rp "CLMS IP or FQDN: " clms_ip
   read -rp "Project key: " proj_key
@@ -188,10 +188,10 @@ fi
 # =====================================================================
 # Step 9: Verify + report
 # =====================================================================
-step "Deployment complete — verifying"
+step "Deployment complete: verifying"
 
 CLMS_IP=$(grep -E "^\s*manager_ip_or_fqdn:" customer_input.yaml | awk '{print $2}' | tr -d '"')
-banner "Done — log into CLMS to verify sensors"
+banner "Done. Log into CLMS to verify sensors"
 echo
 echo "  CLMS UI:    https://$CLMS_IP"
 echo "  Sensors:    $VM_COUNT registered (expected)"

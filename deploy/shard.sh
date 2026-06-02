@@ -55,7 +55,7 @@ for i in $(seq -f "%03g" 0 $((SHARDS - 1))); do
       -e "@customer_input.yaml" --forks "$FORKS_PER_SHARD" \
       > "$LOG_DIR/shard_${i}.log" 2>&1 \
       && echo "[shard $i] ✓ complete" \
-      || echo "[shard $i] ✗ failed — see $LOG_DIR/shard_${i}.log"
+      || echo "[shard $i] ✗ failed; see $LOG_DIR/shard_${i}.log"
   ) &
   pids+=($!)
 done
@@ -66,7 +66,7 @@ echo
 # Progress monitor
 while ps -p ${pids[@]} 2>/dev/null | tail -n +2 | grep -q .; do
   running=$(ps -p ${pids[@]} 2>/dev/null | tail -n +2 | wc -l | tr -d ' ')
-  echo "  $(date +%H:%M:%S) — $running of $SHARDS shards still running"
+  echo "  $(date +%H:%M:%S): $running of $SHARDS shards still running"
   sleep 30
 done
 

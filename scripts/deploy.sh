@@ -22,7 +22,7 @@ fi
 
 # --- Pre-flight checks ---
 echo "═══════════════════════════════════════════════════════════════"
-echo "CloudLens Ansible — Azure Deployment"
+echo "CloudLens Ansible for Azure: Deployment"
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
 
@@ -52,12 +52,12 @@ done
 WIN_INSTALLER=$(grep -E "^\s*installer_path:" "$INPUT_FILE" | head -1 | awk '{print $2}' | tr -d '"')
 if [[ -n "$WIN_INSTALLER" ]] && [[ ! -f "$WIN_INSTALLER" ]]; then
   echo "⚠ Windows installer not found: $WIN_INSTALLER"
-  echo "  Place it in files/ — Windows VMs will be skipped if missing."
+  echo "  Place it in files/. Windows VMs will be skipped if missing."
 fi
 
 # Verify WinRM password env var
 if [[ -z "${ANSIBLE_WINRM_PASSWORD:-}" ]]; then
-  echo "⚠ ANSIBLE_WINRM_PASSWORD env var not set — Windows tasks will fail."
+  echo "⚠ ANSIBLE_WINRM_PASSWORD env var not set; Windows tasks will fail."
   echo "  Set it with: export ANSIBLE_WINRM_PASSWORD='your-password'"
 fi
 
@@ -79,7 +79,7 @@ echo ""
 echo "─── Step 2: Bootstrapping WinRM on Windows VMs ───"
 ansible-playbook playbooks/bootstrap_windows_winrm.yaml \
   -e "@$INPUT_FILE" \
-  -i inventory/azure_rm.yaml || echo "⚠ WinRM bootstrap had errors — check ansible.log"
+  -i inventory/azure_rm.yaml || echo "⚠ WinRM bootstrap had errors; check ansible.log"
 
 # --- Step 3: Deploy sensors across all OS families ---
 echo ""

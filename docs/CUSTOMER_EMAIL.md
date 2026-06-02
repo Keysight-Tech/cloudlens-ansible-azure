@@ -1,4 +1,4 @@
-# Customer Email Template — CloudLens Ansible for Azure
+# Customer Email Template: CloudLens Ansible for Azure
 
 > Pre-written email Sales Engineers send to a customer's DevOps / network team
 > after a discovery call. Replace `{{ placeholders }}` and send. No edits
@@ -8,7 +8,7 @@
 
 **To:** `{{ customer_team_email }}`
 **Cc:** `{{ se_email }}`, `{{ account_executive_email }}`
-**Subject:** CloudLens sensor deployment — automated kit for your Azure environment
+**Subject:** CloudLens sensor deployment: automated kit for your Azure environment
 
 ---
 
@@ -16,13 +16,13 @@ Hi {{ customer_team_name }},
 
 Following our conversation about deploying CloudLens sensors to your Azure VMs, here is the fully automated kit. It is production-tested against real Azure (Linux and Windows) and scales from a single VM to 5,000+ without changing how you invoke it.
 
-Everything you need is in one GitHub repo. The runbook PDF attached to this email mirrors the README in a printable, executive-friendly format — same content, same commands, just easier to share internally.
+Everything you need is in one GitHub repo. The runbook PDF attached to this email mirrors the README in a printable, executive-friendly format. Same content, same commands, easier to share internally.
 
 **There are 3 ways to deploy. Pick whichever fits how your team works:**
 
-- **Tier 1 — One-click from the Azure Portal.** Click "Deploy to Azure" in the README. No local tools, no Service Principal, no SSH keys. An ephemeral runner spins up in your subscription, deploys sensors to every tagged VM, and self-destructs after one hour.
-- **Tier 2 — Azure Cloud Shell.** If you are already logged into Azure in your browser, run one `curl` command. Cloud Shell is pre-authenticated, so there is nothing to install.
-- **Tier 3 — Docker (your laptop or CI/CD).** A pinned container image with Ansible and the Azure collections baked in. Mount your `customer_input.yaml`, pass a Service Principal via env vars, and run. Works identically on macOS, Windows, Linux, GitHub Actions, GitLab CI, and Jenkins.
+- **Tier 1: one-click from the Azure Portal.** Click "Deploy to Azure" in the README. No local tools, no Service Principal, no SSH keys. An ephemeral runner spins up in your subscription, deploys sensors to every tagged VM, and self-destructs after one hour.
+- **Tier 2: Azure Cloud Shell.** If you are already logged into Azure in your browser, run one `curl` command. Cloud Shell is pre-authenticated, so there is nothing to install.
+- **Tier 3: Docker (your laptop or CI/CD).** A pinned container image with Ansible and the Azure collections baked in. Mount your `customer_input.yaml`, pass a Service Principal via env vars, and run. Works identically on macOS, Windows, Linux, GitHub Actions, GitLab CI, and Jenkins.
 
 **Prerequisites**
 
@@ -30,7 +30,7 @@ The dynamic inventory discovers VMs by Azure tag, so before you run the kit, tag
 
 **What to expect**
 
-A small environment (under 50 VMs) deploys end-to-end in roughly 8 minutes. A few thousand VMs takes 30–60 minutes — the playbook auto-tunes Ansible forks based on inventory size and auto-shards above 2,000 VMs. Every sensor self-registers with CLMS on first start; no manual UI steps.
+A small environment (under 50 VMs) deploys end-to-end in roughly 8 minutes. A few thousand VMs takes 30–60 minutes, because the playbook auto-tunes Ansible forks based on inventory size and auto-shards above 2,000 VMs. Every sensor self-registers with CLMS on first start, so there are no manual UI steps.
 
 **Documentation**
 

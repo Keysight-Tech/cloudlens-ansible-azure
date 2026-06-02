@@ -4,10 +4,10 @@
 
 CloudLens Ansible Azure deploys the **CloudLens sensor agent** to Azure VMs at scale, using:
 
-- **Azure dynamic inventory** (`azure_rm` plugin) — discovers VMs by tag
-- **OS-specific playbooks** — Ubuntu, RHEL/CentOS, Windows
-- **WinRM bootstrap** — uses Azure VM Run Command (no manual setup)
-- **Idempotent installs** — re-runs detect healthy sensors and skip
+- **Azure dynamic inventory** (`azure_rm` plugin) to discover VMs by tag
+- **OS-specific playbooks** for Ubuntu, RHEL/CentOS, and Windows
+- **WinRM bootstrap** via Azure VM Run Command (no manual setup)
+- **Idempotent installs**, so re-runs detect healthy sensors and skip
 
 ## Deployment Flow
 
@@ -89,16 +89,16 @@ All four must pass → skip reinstall. Any failure → uninstall + reinstall.
 | **WinRM disabled by default** | Bootstrap via Azure VM Run Command (works without WinRM) |
 | **Public vs private IPs** | Default uses public IPs. For Bastion: set `hostnames: private_ipv4_addresses` in `azure_rm.yaml` |
 | **NSG rules** | Bootstrap auto-opens 5985 (WinRM). For Linux, SSH (22) is assumed open. |
-| **Accelerated Networking** | No special handling required for sensor agents — only relevant for vPB (separate repo) |
+| **Accelerated Networking** | No special handling required for sensor agents (only relevant for vPB, in a separate repo) |
 | **Multi-region** | Add multiple `locations` to `customer_input.yaml`. Each VM is targeted regardless of region. |
 | **Managed Identity** | Currently uses Service Principal. Managed Identity support: set `auth_source: msi` in `azure_rm.yaml` and run from an Azure VM. |
 
 ## Security Boundaries
 
 - **Service Principal** scoped to specific resource groups (least privilege)
-- **WinRM passwords** read from env vars only — never committed
+- **WinRM passwords** are read from env vars only, never committed
 - **Customer input file** git-ignored
-- **Sensor talks to CLMS over HTTPS** (port 443) — outbound only, no inbound exposure
+- **Sensor talks to CLMS over HTTPS** (port 443), outbound only, with no inbound exposure
 
 ## Scaling
 

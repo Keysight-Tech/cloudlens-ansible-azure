@@ -2,7 +2,7 @@
 
 ## Inventory / Discovery Issues
 
-### `Empty inventory — no hosts matched`
+### `Empty inventory, no hosts matched`
 
 **Cause:** VMs aren't tagged correctly, or SP doesn't have read access.
 
@@ -204,7 +204,7 @@ The playbook detects healthy installs and skips reinstall. To force a clean rede
 
 ### Cleanup leaves Docker installed
 
-By default, cleanup only removes the sensor — not Docker. To remove Docker too:
+By default, cleanup only removes the sensor, not Docker. To remove Docker too:
 
 ```bash
 ansible-playbook cleanup.yaml \

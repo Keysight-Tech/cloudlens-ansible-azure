@@ -2,7 +2,7 @@
 
 End-to-end customer deployment in 6 steps.
 
-## Step 1 — Prerequisites
+## Step 1: Prerequisites
 
 On your Ansible control machine (laptop or jumpbox):
 
@@ -19,7 +19,7 @@ pip3 install ansible-core==2.16
 ansible-galaxy collection install -r requirements.yml
 ```
 
-## Step 2 — Clone repo & create Service Principal
+## Step 2: Clone the repo and create a Service Principal
 
 ```bash
 git clone https://github.com/Keysight-Tech/cloudlens-ansible-azure.git
@@ -39,7 +39,7 @@ Verify credentials work:
 az vm list --query "[].{name:name, rg:resourceGroup, location:location, os:storageProfile.osDisk.osType}" -o table
 ```
 
-## Step 3 — Tag your VMs in Azure
+## Step 3: Tag your VMs in Azure
 
 Tag the VMs that should receive CloudLens sensors:
 
@@ -47,7 +47,7 @@ Tag the VMs that should receive CloudLens sensors:
 |---|---|
 | `cloudlens` | `yes` |
 | `os` | `ubuntu` \| `rhel` \| `windows` |
-| `env` | `prod` (or `dev`/`qa` — must match conditional_groups in `inventory/azure_rm.yaml`) |
+| `env` | `prod` (or `dev`/`qa`, must match conditional_groups in `inventory/azure_rm.yaml`) |
 
 Bulk-tag all Linux VMs in a resource group:
 
@@ -65,7 +65,7 @@ for vm in $(az vm list -g $RG --query "[?storageProfile.osDisk.osType=='Windows'
 done
 ```
 
-## Step 4 — Configure `customer_input.yaml`
+## Step 4: Configure `customer_input.yaml`
 
 ```bash
 cp customer_input.yaml.example customer_input.yaml
@@ -107,7 +107,7 @@ Place the Windows installer in `files/`:
 cp /path/to/cloudlens-win-sensor-6.12.0.316.exe files/
 ```
 
-## Step 5 — Dry run
+## Step 5: Dry run
 
 Preview what will happen without making changes:
 
@@ -122,7 +122,7 @@ ansible-playbook deploy.yaml \
   --check
 ```
 
-## Step 6 — Deploy
+## Step 6: Deploy
 
 ```bash
 ./scripts/deploy.sh
@@ -158,10 +158,10 @@ ok: [20.85.y.y] => "CloudLens Deployment
 
 ## Post-Deployment Verification
 
-1. **Log into CLMS UI** — sensors should appear within ~60s
-2. **Filter by your `custom_tags`** — confirm all VMs are listed
-3. **Send test traffic** from a tagged VM
-4. **Verify traffic appears in your defined tool/probe**
+1. **Log into the CLMS UI.** Sensors should appear within ~60s.
+2. **Filter by your `custom_tags`** to confirm all VMs are listed.
+3. **Send test traffic** from a tagged VM.
+4. **Verify traffic appears in your defined tool or probe.**
 
 ## Troubleshooting
 
