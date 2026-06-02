@@ -1,0 +1,57 @@
+###############################################################################
+# vPB Terraform variables - example file
+#
+# WHAT YOU MUST CHANGE:
+#   - subscription_id : your Azure subscription GUID
+#   - admin_password  : strong password, 12+ chars, mixed case, digit, symbol
+#
+# Everything else has a sensible default. Copy this file to terraform.tfvars
+# and edit only what you need.
+###############################################################################
+
+# REQUIRED: Azure subscription where vPB will be deployed.
+subscription_id = "00000000-0000-0000-0000-000000000000"
+
+# OPTIONAL: Azure tenant ID. Leave blank to use the default tenant from your
+# Azure CLI login or AZURE_TENANT_ID environment variable.
+tenant_id = ""
+
+# OPTIONAL: Azure region for the deployment.
+location = "eastus2"
+
+# OPTIONAL: Resource group name. Created by default; set use_existing_rg = true
+# to deploy into an existing group with this name.
+resource_group_name = "rg-cloudlens"
+use_existing_rg     = false
+
+# OPTIONAL: VM name. Also used as a prefix for NICs, NSG, public IP, and VNet.
+vm_name = "vpb"
+
+# REQUIRED: Admin credentials for OS-level access on the vPB VM.
+admin_username = "azureuser"
+admin_password = "REPLACE-WITH-A-STRONG-PASSWORD"
+
+# OPTIONAL: VM size. Must support accelerated networking on the data plane NICs.
+# Allowed: Standard_D4s_v3, Standard_D8s_v3, Standard_D16s_v3.
+vm_size = "Standard_D4s_v3"
+
+# OPTIONAL: Bring your own VNet. Leave existing_vnet_name = "" to create a new
+# VNet with three subnets (mgmt, ingress, egress) using the prefixes below.
+# If you supply an existing VNet, the three existing subnet names are required.
+existing_vnet_name           = ""
+existing_vnet_resource_group = ""
+existing_mgmt_subnet_name    = ""
+existing_ingress_subnet_name = ""
+existing_egress_subnet_name  = ""
+
+# OPTIONAL: Network ranges used only when creating a new VNet.
+address_space         = ["10.50.0.0/16"]
+mgmt_subnet_prefix    = ["10.50.2.0/24"]
+ingress_subnet_prefix = ["10.50.3.0/24"]
+egress_subnet_prefix  = ["10.50.4.0/24"]
+
+# OPTIONAL: Tags applied to every created resource.
+tags = {
+  project = "cloudlens"
+  owner   = "network-visibility"
+}

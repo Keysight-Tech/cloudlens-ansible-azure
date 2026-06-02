@@ -141,6 +141,14 @@
 
         <p class="callout">After CLMS finishes initializing (about 15 minutes), open the UI, create a project, copy the project key, then return here to run the sensor deployment.</p>
         <p class="prereq-note">First-time use of these images requires accepting Marketplace terms. The Portal will prompt you on first deploy, or run <code>az vm image terms accept --publisher keysight-technologies-cloudlens --offer &lt;offer&gt; --plan &lt;plan&gt;</code>.</p>
+
+        <details class="terraform-note">
+          <summary>Prefer Terraform?</summary>
+          <p>Both CLMS and vPB are also available as Terraform modules in <code>deploy/terraform/</code>. Same marketplace images, IaC-friendly for pipelines and repeatable deployments.</p>
+          <pre><code>cd deploy/terraform/clms
+cp terraform.tfvars.example terraform.tfvars
+terraform init &amp;&amp; terraform apply</code></pre>
+        </details>
       </div>
     </section>
 

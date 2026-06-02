@@ -847,6 +847,53 @@ html[data-theme="dark"] .prereq-section {
 @media (max-width: 720px) {
   .prereq-cards { grid-template-columns: 1fr; }
 }
+.terraform-note {
+  margin-top: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+.terraform-note summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text);
+  list-style: none;
+}
+.terraform-note summary::-webkit-details-marker { display: none; }
+.terraform-note summary::before {
+  content: "\25B8";
+  display: inline-block;
+  margin-right: 8px;
+  transition: transform .15s ease;
+  color: var(--azure-blue);
+}
+.terraform-note[open] summary::before { transform: rotate(90deg); }
+.terraform-note p {
+  margin: 10px 0 8px;
+  line-height: 1.55;
+}
+.terraform-note pre {
+  margin: 0;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-size: 12.5px;
+}
+.terraform-note code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text);
+}
+.terraform-note p code {
+  background: var(--bg-alt);
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 12px;
+}
 
 /* RESPONSIVE */
 @media (max-width: 960px) {

@@ -293,6 +293,19 @@ After CLMS deploys (about 15 minutes for initialization), open the UI, create a 
 > az vm image terms accept --publisher keysight-technologies-cloudlens --offer keysight-cloudlens-virtual-packet-broker --plan cloudlens-virtual-packet-broker-3-15-0_1
 > ```
 
+### Prefer Terraform?
+
+Engineers managing infrastructure as code can use Terraform modules instead:
+
+```bash
+cd deploy/terraform/clms
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars with your values
+terraform init && terraform apply
+```
+
+Same marketplace images, same outputs. See [deploy/terraform/](deploy/terraform/) for details.
+
 ---
 
 ## The 3 Deployment Paths
