@@ -1,5 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" role="img" aria-labelledby="sm-title sm-desc">
+  <title id="sm-title">Supported VM Scenarios Matrix</title>
+  <desc id="sm-desc">Matrix of supported operating systems (Ubuntu, RHEL/Rocky/Alma, CentOS, Windows Server) against network topologies (Public IP, Private with Jumpbox, Azure Bastion, Cloud Shell). All Linux distributions are verified across every topology. Windows Server is verified on Public IP and Cloud Shell, with Jumpbox and Bastion paths planned.</desc>
   <defs>
+    <style>
+      .cell { transition: transform 0.2s ease, filter 0.2s ease; transform-box: fill-box; transform-origin: center; cursor: pointer; }
+      .cell:hover { transform: scale(1.18); filter: brightness(1.12); }
+      .row { transition: filter 0.25s ease; cursor: pointer; }
+      .row:hover { filter: brightness(1.04); }
+      .fadein { opacity: 0; animation: fade 0.6s ease forwards; }
+      .r1 { animation-delay: 0.10s; }
+      .r2 { animation-delay: 0.25s; }
+      .r3 { animation-delay: 0.40s; }
+      .r4 { animation-delay: 0.55s; }
+      .r5 { animation-delay: 0.70s; }
+      .r6 { animation-delay: 0.85s; }
+      @keyframes fade { to { opacity: 1; } }
+    </style>
     <filter id="drop-shadow" x="-10%" y="-10%" width="120%" height="120%">
       <feDropShadow stdDeviation="2" dx="0" dy="2" flood-opacity="0.10"/>
     </filter>
@@ -16,7 +32,7 @@
   <text x="450" y="64" text-anchor="middle" font-size="13" fill="#5B6478">Operating system × network topology — verified deployment paths</text>
 
   <!-- Matrix container -->
-  <g filter="url(#card-shadow)" transform="translate(40,100)">
+  <g class="fadein r1" filter="url(#card-shadow)" transform="translate(40,100)">
     <rect width="820" height="412" rx="12" fill="#FFFFFF" stroke="#E5E7EB"/>
 
     <!-- Header row (background) -->
@@ -53,7 +69,8 @@
     </g>
 
     <!-- ROW 1: Ubuntu -->
-    <g>
+    <g class="row fadein r2">
+      <title>Ubuntu 20.04 / 22.04 / 24.04 - supported on all four topologies</title>
       <line x1="0" y1="150" x2="820" y2="150" stroke="#E5E7EB"/>
       <!-- Ubuntu logo dot -->
       <circle cx="32" cy="106" r="14" fill="#E95420"/>
@@ -62,78 +79,81 @@
       <text x="58" y="118" font-size="11" fill="#5B6478">20.04 · 22.04 · 24.04</text>
 
       <!-- Cells -->
-      <g transform="translate(330,106)">
+      <g class="cell" transform="translate(330,106)">
         <circle r="14" fill="#0078D4"/>
         <text y="5" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">✓</text>
       </g>
-      <g transform="translate(470,106)">
+      <g class="cell" transform="translate(470,106)">
         <circle r="14" fill="#0078D4"/>
         <text y="5" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">✓</text>
       </g>
-      <g transform="translate(610,106)">
+      <g class="cell" transform="translate(610,106)">
         <circle r="14" fill="#0078D4"/>
         <text y="5" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">✓</text>
       </g>
-      <g transform="translate(750,106)">
+      <g class="cell" transform="translate(750,106)">
         <circle r="14" fill="#0078D4"/>
         <text y="5" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">✓</text>
       </g>
     </g>
 
     <!-- ROW 2: RHEL / Rocky / Alma -->
-    <g>
+    <g class="row fadein r3">
+      <title>RHEL, Rocky, Alma 7 / 8 / 9 - supported on all four topologies</title>
       <line x1="0" y1="238" x2="820" y2="238" stroke="#E5E7EB"/>
       <circle cx="32" cy="194" r="14" fill="#EE0000"/>
       <text x="32" y="199" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">R</text>
       <text x="58" y="188" font-size="13" font-weight="600" fill="#1B2A4A">RHEL · Rocky · Alma</text>
       <text x="58" y="206" font-size="11" fill="#5B6478">7 · 8 · 9</text>
 
-      <g transform="translate(330,194)">
+      <g class="cell" transform="translate(330,194)">
         <circle r="14" fill="#0078D4"/>
         <text y="5" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">✓</text>
       </g>
-      <g transform="translate(470,194)">
+      <g class="cell" transform="translate(470,194)">
         <circle r="14" fill="#0078D4"/>
         <text y="5" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">✓</text>
       </g>
-      <g transform="translate(610,194)">
+      <g class="cell" transform="translate(610,194)">
         <circle r="14" fill="#0078D4"/>
         <text y="5" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">✓</text>
       </g>
-      <g transform="translate(750,194)">
+      <g class="cell" transform="translate(750,194)">
         <circle r="14" fill="#0078D4"/>
         <text y="5" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">✓</text>
       </g>
     </g>
 
     <!-- ROW 3: CentOS 7/8 -->
-    <g>
+    <g class="row fadein r4">
+      <title>CentOS 7 / 8 - supported on all four topologies</title>
       <line x1="0" y1="326" x2="820" y2="326" stroke="#E5E7EB"/>
       <circle cx="32" cy="282" r="14" fill="#262577"/>
       <text x="32" y="287" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">C</text>
       <text x="58" y="276" font-size="13" font-weight="600" fill="#1B2A4A">CentOS</text>
       <text x="58" y="294" font-size="11" fill="#5B6478">7 · 8</text>
 
-      <g transform="translate(330,282)">
+      <g class="cell" transform="translate(330,282)">
         <circle r="14" fill="#0078D4"/>
         <text y="5" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">✓</text>
       </g>
-      <g transform="translate(470,282)">
+      <g class="cell" transform="translate(470,282)">
         <circle r="14" fill="#0078D4"/>
         <text y="5" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">✓</text>
       </g>
-      <g transform="translate(610,282)">
+      <g class="cell" transform="translate(610,282)">
         <circle r="14" fill="#0078D4"/>
         <text y="5" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">✓</text>
       </g>
-      <g transform="translate(750,282)">
+      <g class="cell" transform="translate(750,282)">
         <circle r="14" fill="#0078D4"/>
         <text y="5" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">✓</text>
       </g>
     </g>
 
     <!-- ROW 4: Windows -->
-    <g>
+    <g class="row fadein r5">
+      <title>Windows Server 2019 / 2022 - supported on Public IP and Cloud Shell; Jumpbox and Bastion paths planned</title>
       <!-- Windows logo -->
       <g transform="translate(20,360)">
         <rect x="0" y="0" width="11" height="11" fill="#0078D4"/>
@@ -145,22 +165,22 @@
       <text x="58" y="382" font-size="11" fill="#5B6478">2019 · 2022</text>
 
       <!-- Public IP: supported -->
-      <g transform="translate(330,370)">
+      <g class="cell" transform="translate(330,370)">
         <circle r="14" fill="#0078D4"/>
         <text y="5" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">✓</text>
       </g>
       <!-- Private+Jumpbox: planned -->
-      <g transform="translate(470,370)">
+      <g class="cell" transform="translate(470,370)">
         <rect x="-38" y="-12" width="76" height="24" rx="12" fill="#F4F5F8" stroke="#D1D5DB"/>
         <text y="4" text-anchor="middle" font-size="10" font-weight="600" fill="#6B7280">planned</text>
       </g>
       <!-- Bastion: planned -->
-      <g transform="translate(610,370)">
+      <g class="cell" transform="translate(610,370)">
         <rect x="-38" y="-12" width="76" height="24" rx="12" fill="#F4F5F8" stroke="#D1D5DB"/>
         <text y="4" text-anchor="middle" font-size="10" font-weight="600" fill="#6B7280">planned</text>
       </g>
       <!-- Cloud Shell: supported -->
-      <g transform="translate(750,370)">
+      <g class="cell" transform="translate(750,370)">
         <circle r="14" fill="#0078D4"/>
         <text y="5" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">✓</text>
       </g>
@@ -168,7 +188,7 @@
   </g>
 
   <!-- Legend -->
-  <g transform="translate(40,532)">
+  <g class="fadein r6" transform="translate(40,532)">
     <rect width="820" height="48" rx="10" fill="#FFFFFF" stroke="#E5E7EB"/>
 
     <!-- Supported -->
