@@ -1,0 +1,331 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "title": "Keysight CloudLens Virtual Packet Broker (vPB) from Azure Marketplace",
+    "description": "One-click deploy of a Virtual Packet Broker VM from Azure Marketplace with three NICs (management, ingress, egress) and accelerated networking on the data-plane NICs. Customer must accept Marketplace terms before deployment."
+  },
+  "parameters": {
+    "vmName": {
+      "type": "string",
+      "defaultValue": "vpb",
+      "metadata": { "description": "Name of the vPB VM" }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": { "description": "Azure region for deployment" }
+    },
+    "adminUsername": {
+      "type": "string",
+      "defaultValue": "azureuser",
+      "metadata": { "description": "Admin username for OS-level access on the vPB VM" }
+    },
+    "adminPassword": {
+      "type": "securestring",
+      "metadata": { "description": "Admin password for the vPB VM (12+ chars, mixed case, digit, symbol)" }
+    },
+    "vmSize": {
+      "type": "string",
+      "defaultValue": "Standard_D4s_v3",
+      "allowedValues": [
+        "Standard_D4s_v3",
+        "Standard_D8s_v3",
+        "Standard_D16s_v3"
+      ],
+      "metadata": { "description": "VM size. D-series s_v3 SKUs support accelerated networking required for high-rate vPB data planes." }
+    },
+    "vnetName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": { "description": "Existing VNet name. Leave blank to create a new VNet with three subnets." }
+    },
+    "existingVnetResourceGroup": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": { "description": "Resource group of the existing VNet. Leave blank to use the current resource group." }
+    },
+    "addressSpace": {
+      "type": "string",
+      "defaultValue": "10.50.0.0/16",
+      "metadata": { "description": "VNet address space (only used when creating a new VNet)" }
+    },
+    "mgmtSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.50.2.0/24",
+      "metadata": { "description": "Management subnet prefix (only used when creating a new VNet)" }
+    },
+    "ingressSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.50.3.0/24",
+      "metadata": { "description": "Ingress (mirror traffic in) subnet prefix" }
+    },
+    "egressSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "10.50.4.0/24",
+      "metadata": { "description": "Egress (mirror traffic out) subnet prefix" }
+    }
+  },
+  "variables": {
+    "createNewVnet": "[empty(parameters('vnetName'))]",
+    "vnetResourceGroup": "[if(empty(parameters('existingVnetResourceGroup')), resourceGroup().name, parameters('existingVnetResourceGroup'))]",
+    "effectiveVnetName": "[if(variables('createNewVnet'), concat(parameters('vmName'), '-vnet'), parameters('vnetName'))]",
+    "mgmtSubnetName": "vpb-mgmt",
+    "ingressSubnetName": "vpb-ingress",
+    "egressSubnetName": "vpb-egress",
+    "mgmtSubnetId": "[if(variables('createNewVnet'), resourceId('Microsoft.Network/virtualNetworks/subnets', variables('effectiveVnetName'), variables('mgmtSubnetName')), resourceId(variables('vnetResourceGroup'), 'Microsoft.Network/virtualNetworks/subnets', variables('effectiveVnetName'), variables('mgmtSubnetName')))]",
+    "ingressSubnetId": "[if(variables('createNewVnet'), resourceId('Microsoft.Network/virtualNetworks/subnets', variables('effectiveVnetName'), variables('ingressSubnetName')), resourceId(variables('vnetResourceGroup'), 'Microsoft.Network/virtualNetworks/subnets', variables('effectiveVnetName'), variables('ingressSubnetName')))]",
+    "egressSubnetId": "[if(variables('createNewVnet'), resourceId('Microsoft.Network/virtualNetworks/subnets', variables('effectiveVnetName'), variables('egressSubnetName')), resourceId(variables('vnetResourceGroup'), 'Microsoft.Network/virtualNetworks/subnets', variables('effectiveVnetName'), variables('egressSubnetName')))]",
+    "pipName": "[concat(parameters('vmName'), '-mgmt-pip')]",
+    "nsgName": "[concat(parameters('vmName'), '-mgmt-nsg')]",
+    "mgmtNicName": "[concat(parameters('vmName'), '-mgmt-nic')]",
+    "ingressNicName": "[concat(parameters('vmName'), '-ingress-nic')]",
+    "egressNicName": "[concat(parameters('vmName'), '-egress-nic')]",
+    "imagePublisher": "keysight-technologies-cloudlens",
+    "imageOffer": "keysight-cloudlens-virtual-packet-broker",
+    "imageSku": "cloudlens-virtual-packet-broker-3-15-0_1"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/publicIPAddresses",
+      "apiVersion": "2024-05-01",
+      "name": "[variables('pipName')]",
+      "location": "[parameters('location')]",
+      "sku": { "name": "Standard" },
+      "properties": {
+        "publicIPAllocationMethod": "Static",
+        "dnsSettings": {
+          "domainNameLabel": "[concat(parameters('vmName'), '-', uniqueString(resourceGroup().id))]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2024-05-01",
+      "name": "[variables('nsgName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "AllowSSH",
+            "properties": {
+              "priority": 100,
+              "protocol": "Tcp",
+              "access": "Allow",
+              "direction": "Inbound",
+              "sourceAddressPrefix": "*",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "22"
+            }
+          },
+          {
+            "name": "AllowHTTPS",
+            "properties": {
+              "priority": 110,
+              "protocol": "Tcp",
+              "access": "Allow",
+              "direction": "Inbound",
+              "sourceAddressPrefix": "*",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "443"
+            }
+          },
+          {
+            "name": "AllowVxlanStandard",
+            "properties": {
+              "priority": 200,
+              "protocol": "Udp",
+              "access": "Allow",
+              "direction": "Inbound",
+              "sourceAddressPrefix": "*",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "4789"
+            }
+          },
+          {
+            "name": "AllowVxlanKeysight",
+            "properties": {
+              "priority": 210,
+              "protocol": "Udp",
+              "access": "Allow",
+              "direction": "Inbound",
+              "sourceAddressPrefix": "*",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "10800-10801"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "condition": "[variables('createNewVnet')]",
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2024-05-01",
+      "name": "[variables('effectiveVnetName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "addressSpace": { "addressPrefixes": ["[parameters('addressSpace')]"] },
+        "subnets": [
+          {
+            "name": "[variables('mgmtSubnetName')]",
+            "properties": { "addressPrefix": "[parameters('mgmtSubnetPrefix')]" }
+          },
+          {
+            "name": "[variables('ingressSubnetName')]",
+            "properties": { "addressPrefix": "[parameters('ingressSubnetPrefix')]" }
+          },
+          {
+            "name": "[variables('egressSubnetName')]",
+            "properties": { "addressPrefix": "[parameters('egressSubnetPrefix')]" }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2024-05-01",
+      "name": "[variables('mgmtNicName')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('effectiveVnetName'))]"
+      ],
+      "properties": {
+        "enableAcceleratedNetworking": false,
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "subnet": { "id": "[variables('mgmtSubnetId')]" },
+              "publicIPAddress": { "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]" },
+              "privateIPAllocationMethod": "Dynamic"
+            }
+          }
+        ],
+        "networkSecurityGroup": { "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]" }
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2024-05-01",
+      "name": "[variables('ingressNicName')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('effectiveVnetName'))]"
+      ],
+      "properties": {
+        "enableAcceleratedNetworking": true,
+        "enableIPForwarding": true,
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "subnet": { "id": "[variables('ingressSubnetId')]" },
+              "privateIPAllocationMethod": "Dynamic"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2024-05-01",
+      "name": "[variables('egressNicName')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('effectiveVnetName'))]"
+      ],
+      "properties": {
+        "enableAcceleratedNetworking": true,
+        "enableIPForwarding": true,
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "subnet": { "id": "[variables('egressSubnetId')]" },
+              "privateIPAllocationMethod": "Dynamic"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2024-11-01",
+      "name": "[parameters('vmName')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('mgmtNicName'))]",
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('ingressNicName'))]",
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('egressNicName'))]"
+      ],
+      "plan": {
+        "name": "cloudlens-virtual-packet-broker-3-15-0_1",
+        "publisher": "keysight-technologies-cloudlens",
+        "product": "keysight-cloudlens-virtual-packet-broker"
+      },
+      "properties": {
+        "hardwareProfile": { "vmSize": "[parameters('vmSize')]" },
+        "osProfile": {
+          "computerName": "[parameters('vmName')]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "adminPassword": "[parameters('adminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('imagePublisher')]",
+            "offer": "[variables('imageOffer')]",
+            "sku": "[variables('imageSku')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "createOption": "FromImage",
+            "managedDisk": { "storageAccountType": "Premium_LRS" }
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('mgmtNicName'))]",
+              "properties": { "primary": true }
+            },
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('ingressNicName'))]",
+              "properties": { "primary": false }
+            },
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('egressNicName'))]",
+              "properties": { "primary": false }
+            }
+          ]
+        },
+        "diagnosticsProfile": {
+          "bootDiagnostics": { "enabled": true }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "vpbPublicIp": {
+      "type": "string",
+      "value": "[reference(variables('pipName')).ipAddress]"
+    },
+    "vpbSshCommand": {
+      "type": "string",
+      "value": "[concat('ssh ', parameters('adminUsername'), '@', reference(variables('pipName')).ipAddress)]"
+    },
+    "vpbCliAccess": {
+      "type": "string",
+      "value": "[concat('Two-hop SSH: ssh ', parameters('adminUsername'), '@', reference(variables('pipName')).ipAddress, ', then: ssh admin@localhost -p 2222 (password: ixia)')]"
+    },
+    "nextStep": {
+      "type": "string",
+      "value": "Use the vPB CLI to configure ingress filters and match rules. See the Keysight CloudLens vPB documentation."
+    }
+  }
+}

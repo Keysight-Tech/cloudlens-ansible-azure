@@ -34,6 +34,7 @@
         </span>
       </a>
       <nav class="primary-nav" aria-label="Primary">
+        <a href="#prereq-deploys">Deploy CLMS</a>
         <a href="#start-here">Get Started</a>
         <a href="#why">Why</a>
         <a href="#wizard">Wizard</a>
@@ -109,6 +110,40 @@
       </div>
     </section>
 
+    <!-- 1.25 PREREQUISITE DEPLOYS: CLMS + vPB MARKETPLACE -->
+    <section id="prereq-deploys" class="prereq-section">
+      <div class="container">
+        <h2>Don't have CLMS or vPB yet?</h2>
+        <p class="lede">Deploy them from Azure Marketplace in one click before running sensor deployments.</p>
+
+        <div class="prereq-cards">
+          <div class="prereq-card">
+            <h3>CloudLens Manager (CLMS)</h3>
+            <p>Central management for sensors. Required for any sensor deployment.</p>
+            <ul>
+              <li>Version 6.13.076 from Azure Marketplace</li>
+              <li>One VM, public IP, ready in 15 minutes</li>
+              <li>Default UI: admin / Cl0udLens@dm!n</li>
+            </ul>
+            <a class="btn btn-primary" href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fclms-marketplace.json" target="_blank" rel="noopener">&#9654; Deploy CLMS</a>
+          </div>
+          <div class="prereq-card">
+            <h3>Virtual Packet Broker (vPB)</h3>
+            <p>Optional. For inline traffic processing and VXLAN aggregation.</p>
+            <ul>
+              <li>Version 3.15.01 from Azure Marketplace</li>
+              <li>Three-NIC layout with accelerated networking</li>
+              <li>CLI access via two-hop SSH</li>
+            </ul>
+            <a class="btn btn-secondary" href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fvpb-marketplace.json" target="_blank" rel="noopener">&#9654; Deploy vPB</a>
+          </div>
+        </div>
+
+        <p class="callout">After CLMS finishes initializing (about 15 minutes), open the UI, create a project, copy the project key, then return here to run the sensor deployment.</p>
+        <p class="prereq-note">First-time use of these images requires accepting Marketplace terms. The Portal will prompt you on first deploy, or run <code>az vm image terms accept --publisher keysight-technologies-cloudlens --offer &lt;offer&gt; --plan &lt;plan&gt;</code>.</p>
+      </div>
+    </section>
+
     <!-- 1.5 GET STARTED IN 5 STEPS -->
     <section id="start-here" class="steps-section">
       <div class="container">
@@ -134,7 +169,7 @@
                   <li>A project key from CLMS (Settings, Projects, API Keys)</li>
                   <li>SSH key (for Linux targets) or admin password (for Windows targets)</li>
                 </ul>
-                <p class="callout">If you do not have CLMS deployed yet, see the README for the Terraform deployment of CLMS.</p>
+                <p class="callout">If you do not have CLMS deployed yet, use the <a href="#prereq-deploys">Deploy CLMS button above</a>.</p>
               </div>
             </details>
           </li>
@@ -465,6 +500,13 @@ done</code></pre>
         </header>
 
         <div class="faq-grid">
+          <details class="faq-item">
+            <summary>I don't have CLMS yet. Where do I start?</summary>
+            <div class="faq-body">
+              <p>Use the <a href="#prereq-deploys">Deploy CLMS button</a> at the top of this page. CLMS comes from Azure Marketplace, deploys in 15 minutes, and is ready before you start tagging your VMs.</p>
+            </div>
+          </details>
+
           <details class="faq-item">
             <summary>Inventory finds 0 VMs</summary>
             <div class="faq-body">

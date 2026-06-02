@@ -271,6 +271,30 @@ A single Ansible control point authenticates to Azure, discovers VMs by tag, and
 
 ---
 
+## Need CLMS or vPB first?
+
+If you do not have CloudLens Manager or a Virtual Packet Broker running yet, deploy them from Azure Marketplace in one click.
+
+<p align="center">
+  <a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fclms-marketplace.json"><img src="https://img.shields.io/badge/▶_Deploy_CLMS-0078D4?style=for-the-badge&logo=microsoft-azure&logoColor=white" alt="Deploy CLMS"/></a>
+  <a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fvpb-marketplace.json"><img src="https://img.shields.io/badge/▶_Deploy_vPB-005A9E?style=for-the-badge&logo=microsoft-azure&logoColor=white" alt="Deploy vPB"/></a>
+</p>
+
+| Component | Version | Marketplace |
+|---|---|---|
+| CLMS (CloudLens Manager) | 6.13.076 | keysight-technologies-cloudlens/keysight-cloudlens-manager |
+| vPB (Virtual Packet Broker) | 3.15.01 | keysight-technologies-cloudlens/keysight-cloudlens-virtual-packet-broker |
+
+After CLMS deploys (about 15 minutes for initialization), open the UI, create a project, copy the project key, then run the sensor deployment using one of the three paths below.
+
+> First-time use of these images requires accepting Marketplace terms. Either click through the Marketplace acceptance dialog when deploying from the portal, or run:
+> ```bash
+> az vm image terms accept --publisher keysight-technologies-cloudlens --offer keysight-cloudlens-manager --plan clms-6-13-0_76
+> az vm image terms accept --publisher keysight-technologies-cloudlens --offer keysight-cloudlens-virtual-packet-broker --plan cloudlens-virtual-packet-broker-3-15-0_1
+> ```
+
+---
+
 ## The 3 Deployment Paths
 
 ### 🌐 Tier 1: One-Click from Azure Portal

@@ -760,6 +760,94 @@ html[data-theme="dark"] .next-steps { background: linear-gradient(135deg, rgba(0
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* PREREQ DEPLOYS (CLMS + vPB) */
+.prereq-section {
+  padding: 64px 0;
+  background: linear-gradient(180deg, rgba(0, 120, 212, 0.06), rgba(212, 175, 55, 0.05));
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+html[data-theme="dark"] .prereq-section {
+  background: linear-gradient(180deg, rgba(0, 120, 212, 0.12), rgba(212, 175, 55, 0.06));
+}
+.prereq-section h2 {
+  font-size: clamp(26px, 3.2vw, 34px);
+  margin: 0 0 8px;
+  letter-spacing: -0.02em;
+  font-weight: 800;
+}
+.prereq-section .lede { margin-bottom: 24px; }
+.prereq-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+.prereq-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px 26px;
+  box-shadow: var(--shadow-sm);
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.prereq-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-strong);
+}
+.prereq-card h3 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.prereq-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+.prereq-card ul {
+  margin: 4px 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+.prereq-card .btn {
+  align-self: flex-start;
+  margin-top: 6px;
+}
+.prereq-section .callout {
+  background: var(--surface);
+  border-left: 3px solid var(--azure-blue);
+  padding: 12px 16px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 14px;
+  margin: 12px 0 8px;
+}
+.prereq-note {
+  font-size: 13px;
+  color: var(--text-soft);
+  margin: 8px 0 0;
+}
+.prereq-note code {
+  background: var(--bg-alt);
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--text);
+}
+@media (max-width: 720px) {
+  .prereq-cards { grid-template-columns: 1fr; }
+}
+
 /* RESPONSIVE */
 @media (max-width: 960px) {
   .hero { padding: 48px 0 40px; }
