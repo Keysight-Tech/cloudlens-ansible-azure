@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="color-scheme" content="light dark" />
   <title>CloudLens Ansible for Azure | Keysight Technologies</title>
-  <meta name="description" content="Deploy CloudLens sensors to any Azure VM in under 60 seconds. Linux, Windows, at scale. ARM template, Cloud Shell, or Docker." />
+  <meta name="description" content="Deploy CloudLens sensors to your Azure VMs in 5 to 10 minutes. Linux, Windows, fully automated. ARM template, Cloud Shell, or Docker." />
   <meta name="theme-color" content="#0078D4" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#0F172A" media="(prefers-color-scheme: dark)" />
 
   <meta property="og:type" content="website" />
   <meta property="og:title" content="CloudLens Ansible for Azure" />
-  <meta property="og:description" content="Deploy CloudLens sensors to any Azure VM in under 60 seconds. Linux, Windows, at scale." />
+  <meta property="og:description" content="Deploy CloudLens sensors to your Azure VMs in 5 to 10 minutes. Linux, Windows, fully automated." />
   <meta property="og:url" content="https://keysight-tech.github.io/cloudlens-ansible-azure/" />
   <meta property="og:image" content="https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/docs/assets/architecture-diagram.svg" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -34,10 +34,12 @@
         </span>
       </a>
       <nav class="primary-nav" aria-label="Primary">
+        <a href="#start-here">Get Started</a>
         <a href="#why">Why</a>
         <a href="#wizard">Wizard</a>
         <a href="#architecture">Architecture</a>
         <a href="#scaling">Scaling</a>
+        <a href="#faq">Common issues</a>
         <a href="#docs">Docs</a>
       </nav>
       <div class="nav-actions">
@@ -64,7 +66,7 @@
             Verified June 2026 on real Azure
           </span>
           <h1>CloudLens Ansible for Azure</h1>
-          <p class="lede">Deploy CloudLens sensors to any Azure VM in under 60 seconds. Linux, Windows, at scale.</p>
+          <p class="lede">Deploy CloudLens sensors to your Azure VMs in 5 to 10 minutes (small deployments) or 30 to 60 minutes (thousands of VMs). Linux, Windows, fully automated.</p>
           <div class="cta-row">
             <a class="btn btn-primary tier" href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Farm-template.json" target="_blank" rel="noopener">
               <span class="tier-num">1</span>
@@ -104,6 +106,132 @@
             <object data="assets/deploy-demo.svg" type="image/svg+xml" aria-label="Animated terminal showing CloudLens Ansible deployment"></object>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- 1.5 GET STARTED IN 5 STEPS -->
+    <section id="start-here" class="steps-section">
+      <div class="container">
+        <header class="section-head">
+          <h2>Get started in 5 steps</h2>
+          <p class="lede">Most deployments under 50 VMs complete in 5 to 10 minutes.</p>
+        </header>
+
+        <ol class="steps">
+          <li class="step-card">
+            <span class="step-num-big" aria-hidden="true">1</span>
+            <details>
+              <summary>
+                <span class="step-icon" aria-hidden="true">&#9745;</span>
+                <span class="step-title">Check prerequisites</span>
+                <span class="step-time">2 minutes</span>
+              </summary>
+              <div class="step-body">
+                <p>You need these in place before deploying:</p>
+                <ul>
+                  <li>Azure subscription with Reader and Virtual Machine Contributor roles</li>
+                  <li>CloudLens Manager (CLMS) deployed and reachable from your target VMs</li>
+                  <li>A project key from CLMS (Settings, Projects, API Keys)</li>
+                  <li>SSH key (for Linux targets) or admin password (for Windows targets)</li>
+                </ul>
+                <p class="callout">If you do not have CLMS deployed yet, see the README for the Terraform deployment of CLMS.</p>
+              </div>
+            </details>
+          </li>
+
+          <li class="step-card">
+            <span class="step-num-big" aria-hidden="true">2</span>
+            <details>
+              <summary>
+                <span class="step-icon" aria-hidden="true">&#127991;</span>
+                <span class="step-title">Tag your Azure VMs</span>
+                <span class="step-time">5 minutes</span>
+              </summary>
+              <div class="step-body">
+                <p>The deployment discovers VMs by tag. Apply these to every target VM:</p>
+                <table class="step-table">
+                  <thead><tr><th>Tag</th><th>Value</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>cloudlens</code></td><td><code>yes</code></td></tr>
+                    <tr><td><code>os</code></td><td><code>ubuntu</code> or <code>rhel</code> or <code>windows</code></td></tr>
+                    <tr><td><code>env</code></td><td><code>prod</code> (or <code>dev</code>, <code>qa</code>)</td></tr>
+                  </tbody>
+                </table>
+                <p>Bulk tag a resource group:</p>
+<pre><code>for vm in $(az vm list -g &lt;RG&gt; --query "[?storageProfile.osDisk.osType=='Linux'].name" -o tsv); do
+  az vm update -g &lt;RG&gt; -n $vm --set tags.cloudlens=yes tags.os=ubuntu tags.env=prod
+done</code></pre>
+              </div>
+            </details>
+          </li>
+
+          <li class="step-card">
+            <span class="step-num-big" aria-hidden="true">3</span>
+            <details>
+              <summary>
+                <span class="step-icon" aria-hidden="true">&#9881;</span>
+                <span class="step-title">Build your config file</span>
+                <span class="step-time">1 minute</span>
+              </summary>
+              <div class="step-body">
+                <p>Use the wizard below to fill four fields and download <code>customer_input.yaml</code>.</p>
+                <p><a class="btn btn-primary inline-btn" href="#wizard">Jump to wizard &darr;</a></p>
+                <p class="callout">Tip: the wizard shows the YAML rendering live as you type. Each field has inline help so you know exactly what to enter.</p>
+              </div>
+            </details>
+          </li>
+
+          <li class="step-card">
+            <span class="step-num-big" aria-hidden="true">4</span>
+            <details>
+              <summary>
+                <span class="step-icon" aria-hidden="true">&#128640;</span>
+                <span class="step-title">Deploy</span>
+                <span class="step-time">5 to 60 minutes</span>
+              </summary>
+              <div class="step-body">
+                <p>Place your downloaded <code>customer_input.yaml</code> in your working directory, then pick one of the three deploy paths.</p>
+                <div class="step-paths">
+                  <div class="path-card">
+                    <h4><span class="path-emoji" aria-hidden="true">&#127760;</span> Tier 1: Azure Portal</h4>
+                    <p>One click. No local tools. Best for: trying it for the first time.</p>
+                    <a class="btn btn-primary inline-btn" href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Farm-template.json" target="_blank" rel="noopener">Deploy from Portal</a>
+                  </div>
+                  <div class="path-card">
+                    <h4><span class="path-emoji" aria-hidden="true">&#9729;</span> Tier 2: Cloud Shell</h4>
+                    <p>Already authenticated. One curl command. Best for: most customers.</p>
+<pre><code>curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/quickstart.sh | bash</code></pre>
+                  </div>
+                  <div class="path-card">
+                    <h4><span class="path-emoji" aria-hidden="true">&#128011;</span> Tier 3: Docker</h4>
+                    <p>Reproducible. Pinned versions. Best for: CI or repeat deployments.</p>
+<pre><code>docker run --rm -it -v $(pwd)/customer_input.yaml:/work/customer_input.yaml ghcr.io/keysight-tech/cloudlens-ansible-azure:latest</code></pre>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </li>
+
+          <li class="step-card">
+            <span class="step-num-big" aria-hidden="true">5</span>
+            <details>
+              <summary>
+                <span class="step-icon" aria-hidden="true">&#9989;</span>
+                <span class="step-title">Verify in CLMS</span>
+                <span class="step-time">2 minutes</span>
+              </summary>
+              <div class="step-body">
+                <p>Open your CLMS web UI and confirm:</p>
+                <ul>
+                  <li>Each tagged VM appears as a registered sensor (under Sensors)</li>
+                  <li>Custom tags from your config match what you see in CLMS</li>
+                  <li>Sensors show as connected and reporting</li>
+                </ul>
+                <p class="callout">Stuck? See the troubleshooting section below or the full <a href="https://github.com/Keysight-Tech/cloudlens-ansible-azure/blob/main/docs/TROUBLESHOOTING.md">troubleshooting docs</a>.</p>
+              </div>
+            </details>
+          </li>
+        </ol>
       </div>
     </section>
 
@@ -153,6 +281,10 @@
               <div class="step-head"><span class="step-num">1</span><h3>CloudLens Manager</h3></div>
               <label for="clms-ip">CLMS IP or FQDN</label>
               <input id="clms-ip" name="clms_ip" type="text" placeholder="10.0.0.10 or clms.example.com" value="10.0.0.10" required />
+              <details class="field-help">
+                <summary>Where do I find this?</summary>
+                <p>The IP or hostname of your CloudLens Manager deployment. You can find it in your Azure Portal under the CLMS VM details, or in the output of your CLMS Terraform deployment.</p>
+              </details>
             </div>
             <div class="step" data-step="2">
               <div class="step-head"><span class="step-num">2</span><h3>Project key</h3></div>
@@ -163,16 +295,28 @@
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
                 </button>
               </div>
+              <details class="field-help">
+                <summary>Where do I find this?</summary>
+                <p>In CLMS web UI: Settings, Projects, API Keys, copy the key for the project you want sensors to register under.</p>
+              </details>
             </div>
             <div class="step" data-step="3">
               <div class="step-head"><span class="step-num">3</span><h3>Custom tags</h3></div>
               <label for="tags">Tags applied to sensors</label>
               <input id="tags" name="tags" type="text" placeholder="Env=Azure,Region=eastus2" value="Env=Azure" />
+              <details class="field-help">
+                <summary>What does this do?</summary>
+                <p>These tags are attached to each registered sensor and visible in CLMS. Use them to filter and group sensors (for example: Customer=Acme, Region=eastus2).</p>
+              </details>
             </div>
             <div class="step" data-step="4">
               <div class="step-head"><span class="step-num">4</span><h3>Resource groups</h3></div>
               <label for="rgs">Comma separated resource groups (leave blank for subscription wide)</label>
               <input id="rgs" name="resource_groups" type="text" placeholder="rg-prod-eastus2, rg-prod-westus2" value="" />
+              <details class="field-help">
+                <summary>What if I leave this blank?</summary>
+                <p>Blank means scan ALL resource groups in your subscription for tagged VMs. List specific RGs (comma-separated) to limit discovery.</p>
+              </details>
               <div class="connection-mode">
                 <label for="mode">Connection mode</label>
                 <select id="mode" name="mode">
@@ -193,6 +337,14 @@
               </button>
             </div>
             <p class="hint" id="copy-feedback" aria-live="polite"></p>
+            <aside class="next-steps" id="wizard-next-steps">
+              <h4>Once you have customer_input.yaml</h4>
+              <ol>
+                <li>Save the file to your working directory</li>
+                <li>Choose a deploy path above (Portal, Cloud Shell, or Docker)</li>
+                <li>The deploy command will pick up your customer_input.yaml automatically</li>
+              </ol>
+            </aside>
           </form>
           <aside class="preview" aria-label="Live YAML preview">
             <div class="preview-head">
@@ -300,6 +452,67 @@
               <tr><td>CLMS 6.14.141 registration</td><td><span class="pill ok">3/3 registered</span></td><td>&lt;1 min</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6.5 FAQ / COMMON ISSUES -->
+    <section id="faq" class="faq-section section">
+      <div class="container">
+        <header class="section-head">
+          <h2>Common issues</h2>
+          <p>If something does not work, check these first.</p>
+        </header>
+
+        <div class="faq-grid">
+          <details class="faq-item">
+            <summary>Inventory finds 0 VMs</summary>
+            <div class="faq-body">
+              <p><strong>Cause:</strong> tags missing or misspelled.</p>
+              <p><strong>Fix:</strong> verify with <code>az vm show -g RG -n VM --query tags</code>. The cloudlens, os, and env tags must all be present.</p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary>SSH Permission denied</summary>
+            <div class="faq-body">
+              <p><strong>Cause:</strong> your public key is not on the target VM.</p>
+              <p><strong>Fix:</strong> bootstrap with <code>az vm run-command invoke</code> to push your key, then re-run the deploy.</p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary>WinRM timeout on Windows VMs</summary>
+            <div class="faq-body">
+              <p><strong>Cause:</strong> WinRM disabled by default on Windows Server.</p>
+              <p><strong>Fix:</strong> run <code>playbooks/bootstrap_windows_winrm.yaml</code> first to enable WinRM via Azure Run Command.</p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary>Sensor does not appear in CLMS</summary>
+            <div class="faq-body">
+              <p><strong>Cause:</strong> wrong project key, or sensor cannot reach CLMS network.</p>
+              <p><strong>Fix:</strong> double-check the project key from CLMS UI. Verify the VM can reach CLMS on port 443.</p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary>How long should this take?</summary>
+            <div class="faq-body">
+              <p><strong>1 to 50 VMs:</strong> 5 to 10 minutes.</p>
+              <p><strong>50 to 500 VMs:</strong> 15 to 30 minutes.</p>
+              <p><strong>500 to 2000 VMs:</strong> 30 to 60 minutes.</p>
+              <p><strong>Thousands:</strong> sharded automatically, 30 to 60 minutes for up to 10K.</p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary>What if I need help?</summary>
+            <div class="faq-body">
+              <p>Open an issue on <a href="https://github.com/Keysight-Tech/cloudlens-ansible-azure/issues">GitHub</a>, or contact your Keysight account team for direct engineering support.</p>
+            </div>
+          </details>
         </div>
       </div>
     </section>
