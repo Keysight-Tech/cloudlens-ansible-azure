@@ -154,7 +154,7 @@ resource "azurerm_linux_virtual_machine" "clms" {
 
   source_image_reference {
     publisher = "keysight-technologies-cloudlens"
-    offer     = "keysight-cloudlens-manager"
+    offer     = "keysight-cloudlens-manager-preview"
     sku       = "clms-6-13-0_76"
     version   = "latest"
   }
@@ -162,7 +162,7 @@ resource "azurerm_linux_virtual_machine" "clms" {
   plan {
     name      = "clms-6-13-0_76"
     publisher = "keysight-technologies-cloudlens"
-    product   = "keysight-cloudlens-manager"
+    product   = "keysight-cloudlens-manager-preview"
   }
 
   boot_diagnostics {}

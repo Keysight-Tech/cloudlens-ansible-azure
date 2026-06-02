@@ -72,7 +72,7 @@
     "nsgName": "[concat(parameters('vmName'), '-nsg')]",
     "nicName": "[concat(parameters('vmName'), '-nic')]",
     "imagePublisher": "keysight-technologies-cloudlens",
-    "imageOffer": "keysight-cloudlens-manager",
+    "imageOffer": "keysight-cloudlens-manager-preview",
     "imageSku": "clms-6-13-0_76"
   },
   "resources": [
@@ -176,7 +176,7 @@
       "plan": {
         "name": "clms-6-13-0_76",
         "publisher": "keysight-technologies-cloudlens",
-        "product": "keysight-cloudlens-manager"
+        "product": "keysight-cloudlens-manager-preview"
       },
       "properties": {
         "hardwareProfile": { "vmSize": "[parameters('vmSize')]" },
