@@ -441,6 +441,8 @@ Date verified: 2026-06-02. Subscription: CloudLensPublic (eastus2).
 | WinRM timeout | WinRM disabled on Windows VM | Run `playbooks/bootstrap_windows_winrm.yaml` |
 | `apt_pkg.Error: Signed-By` | Stale Docker apt source | Playbook auto-cleans on next run |
 | Sensor not in CLMS UI | Wrong project key | Check CLMS → Projects → API Keys |
+| Just deployed vPB, SSH not ready | Internal CLI service still initializing | Wait 10 to 15 minutes after the Azure deploy finishes, then SSH |
+| Just deployed CLMS, UI not ready | System initialization still running | UI on port 443 ready in ~60s, full init takes ~15 minutes |
 
 Full reference: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 

@@ -520,6 +520,15 @@ done</code></pre>
           </details>
 
           <details class="faq-item">
+            <summary>vPB just deployed. Why can't I SSH yet?</summary>
+            <div class="faq-body">
+              <p><strong>Expected:</strong> vPB takes 10 to 15 minutes after the Azure deployment finishes before SSH on port 22 is reachable. The VM itself is up, but the internal CLI service and SSH daemon are still initializing.</p>
+              <p><strong>What to do:</strong> wait 15 minutes after deploy succeeds, then try <code>ssh azureuser@&lt;vpb-public-ip&gt;</code>. From there, two-hop into the CLI with <code>ssh admin@localhost -p 2222</code> (default password: <code>ixia</code>).</p>
+              <p><strong>Same applies to CLMS:</strong> the web UI on port 443 is usually ready within 60 seconds, but full system initialization (including the registry and project creation) takes around 15 minutes.</p>
+            </div>
+          </details>
+
+          <details class="faq-item">
             <summary>Inventory finds 0 VMs</summary>
             <div class="faq-body">
               <p><strong>Cause:</strong> tags missing or misspelled.</p>
