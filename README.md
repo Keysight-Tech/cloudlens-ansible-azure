@@ -19,6 +19,32 @@
 
 ---
 
+## Deploy the full stack with one command
+
+Three ways to deploy CLMS + vPB + sensors end to end. Same result, different workflows.
+
+### Bash (recommended)
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/deploy/deploy-stack.sh | bash
+```
+
+### Terraform stack module
+
+```bash
+cd deploy/terraform/stack
+cp terraform.tfvars.example terraform.tfvars
+terraform init && terraform apply
+```
+
+### Printable runbook
+
+[CloudLens_Stack_Deployment_Runbook.pdf](docs/CloudLens_Stack_Deployment_Runbook.pdf) is the executive-facing guide. Hand it to procurement or training teams.
+
+All three deploy the same Azure resources, accept Marketplace terms automatically, and chain through CLMS, vPB, and sensor deployment.
+
+---
+
 ## Which path?
 
 ### Interactive Diagram
