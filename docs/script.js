@@ -1,4 +1,4 @@
-/* CloudLens Ansible for Azure — landing site behaviors */
+/* CloudLens Ansible for Azure: landing site behaviors */
 (function () {
   'use strict';
 
@@ -157,6 +157,44 @@
       setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
       flash('Downloaded customer_input.yaml');
     });
+  }
+
+  // ----- COPY BUTTONS (data-copy="<id>" -> copies that element's text) -----
+  document.querySelectorAll('.copy-btn[data-copy]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var target = document.getElementById(btn.getAttribute('data-copy'));
+      if (!target) return;
+      var text = target.innerText || target.textContent || '';
+      var done = function () {
+        var original = btn.getAttribute('data-original') || btn.textContent;
+        if (!btn.getAttribute('data-original')) btn.setAttribute('data-original', original);
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(function () {
+          btn.textContent = original;
+          btn.classList.remove('copied');
+        }, 2000);
+      };
+      if (navigator.clipboard && window.isSecureContext !== false) {
+        navigator.clipboard.writeText(text).then(done, function () {
+          // fall through to legacy path on rejection
+          legacyCopy(text); done();
+        });
+      } else {
+        legacyCopy(text); done();
+      }
+    });
+  });
+
+  function legacyCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+    document.body.removeChild(ta);
   }
 
   // copy curl

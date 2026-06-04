@@ -34,6 +34,7 @@
         </span>
       </a>
       <nav class="primary-nav" aria-label="Primary">
+        <a href="#full-stack">Full Stack</a>
         <a href="#prereq-deploys">Deploy CLMS</a>
         <a href="#start-here">Get Started</a>
         <a href="#why">Why</a>
@@ -105,6 +106,40 @@
               <em>quickstart.sh</em>
             </div>
             <object data="assets/deploy-demo.svg" type="image/svg+xml" aria-label="Animated terminal showing CloudLens Ansible deployment"></object>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 1.1 FULL STACK ONE-COMMAND DEPLOY -->
+    <section id="full-stack" class="full-stack-section">
+      <div class="container">
+        <h2>One command, full stack</h2>
+        <p class="lede">CLMS, vPB, and sensors. End to end. From a single paste.</p>
+
+        <div class="full-stack-cmd-wrap">
+          <pre id="full-stack-cmd"><code>curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/deploy/deploy-stack.sh | bash</code></pre>
+          <button class="copy-btn" data-copy="full-stack-cmd" type="button" aria-label="Copy curl command">Copy</button>
+        </div>
+
+        <p class="full-stack-note">Prompts for resource group and region, accepts Marketplace terms, deploys CLMS, waits for initialization, optionally adds vPB, and chains to sensor deployment. Run from Azure Cloud Shell or any machine with Azure CLI.</p>
+
+        <div class="full-stack-paths">
+          <div class="path-card">
+            <h4><span class="path-icon" aria-hidden="true">&#128640;</span> Bash (recommended)</h4>
+            <p>One paste, end to end. Best for: trying it the first time, or onboarding a new customer.</p>
+          </div>
+          <div class="path-card">
+            <h4><span class="path-icon" aria-hidden="true">&#128230;</span> Terraform Stack Module</h4>
+            <p>Single tfvars, both CLMS and vPB. Best for: IaC pipelines and repeatable infra.</p>
+<pre><code>cd deploy/terraform/stack
+cp terraform.tfvars.example terraform.tfvars
+terraform init &amp;&amp; terraform apply</code></pre>
+          </div>
+          <div class="path-card">
+            <h4><span class="path-icon" aria-hidden="true">&#128214;</span> Printable Runbook</h4>
+            <p>Executive-friendly PDF guide. Best for: customer CTO, procurement, training.</p>
+            <a class="btn btn-primary" href="https://github.com/Keysight-Tech/cloudlens-ansible-azure/blob/main/docs/CloudLens_Stack_Deployment_Runbook.pdf" target="_blank" rel="noopener">Download Runbook</a>
           </div>
         </div>
       </div>
