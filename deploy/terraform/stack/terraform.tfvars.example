@@ -1,0 +1,38 @@
+###############################################################################
+# CloudLens Stack: minimal tfvars example
+#
+# Copy to terraform.tfvars and edit. The defaults below produce a shared
+# VNet (10.50.0.0/16) with four subnets, a CLMS VM, and a vPB VM in one
+# resource group. Set deploy_vpb = false for CLMS-only.
+###############################################################################
+
+# REQUIRED
+subscription_id = "00000000-0000-0000-0000-000000000000"
+admin_password  = "REPLACE-WITH-A-STRONG-PASSWORD"
+
+# OPTIONAL: region and resource group
+location            = "eastus2"
+resource_group_name = "cloudlens-rg"
+
+# OPTIONAL: VM names and sizes
+clms_vm_name = "clms"
+clms_vm_size = "Standard_D4s_v5"
+
+deploy_vpb   = true
+vpb_vm_name  = "vpb"
+vpb_vm_size  = "Standard_D8s_v3"
+
+# OPTIONAL: networking (shared VNet by default, 4 subnets total)
+shared_vnet               = true
+address_space             = ["10.50.0.0/16"]
+clms_subnet_prefix        = ["10.50.1.0/24"]
+vpb_mgmt_subnet_prefix    = ["10.50.2.0/24"]
+vpb_ingress_subnet_prefix = ["10.50.3.0/24"]
+vpb_egress_subnet_prefix  = ["10.50.4.0/24"]
+
+# OPTIONAL: tags for everything in the stack
+tags = {
+  project = "cloudlens"
+  stack   = "clms-plus-vpb"
+  owner   = "network-visibility"
+}
