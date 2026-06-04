@@ -9,9 +9,6 @@ terraform {
   }
 }
 
-provider "azurerm" {
-  features {}
-
-  subscription_id = var.subscription_id
-  tenant_id       = var.tenant_id != "" ? var.tenant_id : null
-}
+# NOTE: This module deliberately omits a provider "azurerm" block so it can be
+# wrapped by deploy/terraform/stack/ with count or for_each. For standalone use,
+# add a provider.tf in your working directory or copy provider.tf.example.
