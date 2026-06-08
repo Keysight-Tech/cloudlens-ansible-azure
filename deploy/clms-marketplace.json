@@ -3,27 +3,29 @@
   "contentVersion": "1.0.0.0",
   "metadata": {
     "title": "Keysight CloudLens Manager (CLMS) from Azure Marketplace",
-    "description": "One-click deploy of a single CloudLens Manager VM from Azure Marketplace. Includes VNet, Public IP, NSG, and NIC. Customer must accept Marketplace terms before deployment."
+    "description": "One-click deployment of CloudLens Manager v6.13.076 from Azure Marketplace. Provisions a single CLMS VM with a public IP, NSG (SSH + HTTPS), and a new VNet (or attaches to one you already own). Default UI credentials: admin / Cl0udLens@dm!n (change on first login). The web UI typically responds within 60 seconds, and full system initialization completes in about 15 minutes.",
+    "author": "Keysight Technologies"
   },
   "parameters": {
     "vmName": {
       "type": "string",
       "defaultValue": "clms",
-      "metadata": { "description": "Name of the CLMS VM" }
-    },
-    "location": {
-      "type": "string",
-      "defaultValue": "[resourceGroup().location]",
-      "metadata": { "description": "Azure region for deployment" }
+      "metadata": {
+        "description": "Name of the CloudLens Manager VM. Used as the computer name and as a prefix for the public IP, NSG, NIC, and (when creating one) the VNet. Lowercase letters, digits, and hyphens are recommended."
+      }
     },
     "adminUsername": {
       "type": "string",
       "defaultValue": "azureuser",
-      "metadata": { "description": "Admin username for OS-level access on the CLMS VM" }
+      "metadata": {
+        "description": "Linux admin username used for SSH access to the underlying VM. This is the OS-level account; the CLMS web UI uses its own separate admin account (admin / Cl0udLens@dm!n)."
+      }
     },
     "adminPassword": {
       "type": "securestring",
-      "metadata": { "description": "Admin password for the CLMS VM (12+ chars, mixed case, digit, symbol)" }
+      "metadata": {
+        "description": "Linux admin password for SSH access. Must be 12+ characters and include uppercase, lowercase, a digit, and a symbol. This is the OS-level password, not the CLMS web UI password."
+      }
     },
     "vmSize": {
       "type": "string",
@@ -34,32 +36,51 @@
         "Standard_D8s_v5",
         "Standard_D16s_v5"
       ],
-      "metadata": { "description": "VM size. D4s_v5 (4 vCPU, 16 GB) suits most deployments; scale up for larger fleets." }
+      "metadata": {
+        "description": "VM size for the CloudLens Manager. Standard_D4s_v5 (4 vCPU, 16 GB RAM) is recommended for most deployments. Scale up for environments managing thousands of sensors."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region for deployment. Defaults to the resource group location. Pick the region closest to your monitored workloads to minimize latency."
+      }
     },
     "vnetName": {
       "type": "string",
       "defaultValue": "",
-      "metadata": { "description": "Existing VNet name. Leave blank to create a new VNet." }
+      "metadata": {
+        "description": "Existing VNet name to deploy into. Leave blank to create a new VNet sized by Address space below. When set, you must also provide an existing Subnet name."
+      }
     },
     "existingVnetResourceGroup": {
       "type": "string",
       "defaultValue": "",
-      "metadata": { "description": "Resource group of the existing VNet. Leave blank to use the current resource group." }
+      "metadata": {
+        "description": "Resource group of the existing VNet (only used when VNet name is set). Leave blank to use the current resource group."
+      }
     },
     "subnetName": {
       "type": "string",
       "defaultValue": "",
-      "metadata": { "description": "Existing subnet name. Leave blank to create a new subnet." }
+      "metadata": {
+        "description": "Existing subnet name to attach the CLMS NIC to (required when deploying into an existing VNet). Leave blank to create a new subnet named clms-subnet."
+      }
     },
     "addressSpace": {
       "type": "string",
       "defaultValue": "10.50.0.0/16",
-      "metadata": { "description": "VNet address space (only used when creating a new VNet)" }
+      "metadata": {
+        "description": "VNet address space in CIDR notation. Only used when creating a new VNet. Must not overlap with VNets you plan to peer with."
+      }
     },
     "subnetPrefix": {
       "type": "string",
       "defaultValue": "10.50.1.0/24",
-      "metadata": { "description": "Subnet prefix (only used when creating a new VNet)" }
+      "metadata": {
+        "description": "Subnet prefix in CIDR notation, contained within the VNet address space. Only used when creating a new VNet."
+      }
     }
   },
   "variables": {
@@ -223,7 +244,7 @@
     },
     "nextStep": {
       "type": "string",
-      "value": "After CLMS initializes (about 15 minutes), open the UI, create a project, and copy the project key. Then return to the Ansible site to deploy sensors."
+      "value": "[concat('CLMS is initializing. The web UI will be reachable at https://', reference(variables('pipName')).ipAddress, ' within about 60 seconds; full system initialization takes around 15 minutes. Log in with admin / Cl0udLens@dm!n, create a Project, copy the project key, then return to https://keysight-tech.github.io/cloudlens-ansible-azure/ to deploy sensors.')]"
     }
   }
 }
