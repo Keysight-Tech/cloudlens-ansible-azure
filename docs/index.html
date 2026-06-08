@@ -1,8 +1,16 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <script>
+    // Apply saved theme BEFORE styles paint to prevent flash of incorrect theme.
+    // Defaults to light if no preference saved.
+    try {
+      var t = localStorage.getItem('cl-theme') || 'light';
+      document.documentElement.setAttribute('data-theme', t);
+    } catch (e) {}
+  </script>
   <meta name="color-scheme" content="light dark" />
   <title>CloudLens Ansible for Azure | Keysight Technologies</title>
   <meta name="description" content="Deploy CloudLens sensors to your Azure VMs in 5 to 10 minutes. Linux, Windows, fully automated. ARM template, Cloud Shell, or Docker." />

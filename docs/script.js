@@ -3,10 +3,13 @@
   'use strict';
 
   // ----- THEME -----
+  // Default to light mode on first visit. If the user explicitly toggles to
+  // dark, that preference is saved to localStorage and respected on return.
+  // We intentionally ignore the OS prefers-color-scheme on first paint so the
+  // landing experience is consistent for every customer.
   var root = document.documentElement;
   var stored = localStorage.getItem('cl-theme');
-  var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  var theme = stored || (prefersDark ? 'dark' : 'light');
+  var theme = stored || 'light';
   root.setAttribute('data-theme', theme);
 
   var toggle = document.getElementById('theme-toggle');
