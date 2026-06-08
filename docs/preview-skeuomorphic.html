@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CloudLens for Azure · iOS 26 Skeuomorphic Preview</title>
+<style>
+  :root{
+    /* Azure-tuned accent (0078D4-ish in OKLCH) */
+    --accent-h:235; --accent-c:0.19; --accent-l:56%;
+    --accent: oklch(var(--accent-l) var(--accent-c) var(--accent-h));
+    --accent-bright: oklch(calc(var(--accent-l) + 12%) calc(var(--accent-c) + 0.02) var(--accent-h));
+    --accent-deep: oklch(calc(var(--accent-l) - 16%) var(--accent-c) var(--accent-h));
+    --accent-glow: oklch(var(--accent-l) var(--accent-c) var(--accent-h) / .42);
+    /* Keysight gold as second accent */
+    --gold-h:75; --gold-c:0.15; --gold-l:72%;
+    --gold: oklch(var(--gold-l) var(--gold-c) var(--gold-h));
+    --gold-bright: oklch(calc(var(--gold-l) + 8%) var(--gold-c) var(--gold-h));
+    --gold-deep: oklch(calc(var(--gold-l) - 22%) var(--gold-c) var(--gold-h));
+    --gold-glow: oklch(var(--gold-l) var(--gold-c) var(--gold-h) / .42);
+
+    --radius:22px;
+    --depth:1;
+    --gloss:0.9;
+
+    --bg: oklch(96.5% 0.004 250);
+    --bg-2: oklch(93% 0.006 250);
+    --surface: oklch(97.5% 0.003 250);
+    --ink: oklch(24% 0.02 260);
+    --ink-soft: oklch(46% 0.015 260);
+    --hair: oklch(100% 0 0 / .55);
+
+    --top-gloss: oklch(100% 0 0 / calc(.85 * var(--gloss)));
+    --inner-dark: oklch(40% 0.03 260 / calc(.18 * var(--depth)));
+    --neu-dark: oklch(58% 0.02 260 / calc(.22 * var(--depth)));
+    --neu-light: oklch(100% 0 0 / calc(.9 * var(--depth)));
+    --glass-tint: oklch(100% 0 0 / .42);
+    --glass-edge: oklch(100% 0 0 / .7);
+
+    --spring: cubic-bezier(.32,.72,0,1);
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Söhne", system-ui, sans-serif;
+  }
+  [data-theme="dark"]{
+    --bg: oklch(22% 0.012 264);
+    --bg-2: oklch(17% 0.014 264);
+    --surface: oklch(27% 0.014 264);
+    --ink: oklch(95% 0.01 260);
+    --ink-soft: oklch(72% 0.012 260);
+    --hair: oklch(100% 0 0 / .12);
+    --top-gloss: oklch(100% 0 0 / calc(.22 * var(--gloss)));
+    --inner-dark: oklch(0% 0 0 / calc(.5 * var(--depth)));
+    --neu-dark: oklch(0% 0 0 / calc(.55 * var(--depth)));
+    --neu-light: oklch(100% 0 0 / calc(.07 * var(--depth)));
+    --glass-tint: oklch(70% 0.02 264 / .14);
+    --glass-edge: oklch(100% 0 0 / .22);
+  }
+
+  *{box-sizing:border-box; margin:0; padding:0}
+  html{-webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility}
+  body{
+    font-family:var(--font);
+    color:var(--ink);
+    background:
+      radial-gradient(120% 90% at 12% -8%, var(--accent-glow), transparent 46%),
+      radial-gradient(90% 80% at 100% 0%, var(--gold-glow), transparent 50%),
+      linear-gradient(180deg, var(--bg), var(--bg-2));
+    background-attachment: fixed;
+    min-height:100dvh;
+    padding: clamp(20px, 5vw, 72px);
+    transition: background .6s var(--spring), color .4s ease;
+    position:relative;
+    overflow-x:hidden;
+  }
+  body::before{
+    content:""; position:fixed; inset:0; z-index:60; pointer-events:none; opacity:.04; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .wrap{max-width:1180px; margin:0 auto; display:flex; flex-direction:column; gap:clamp(40px,5vw,68px)}
+
+  /* ---------- BRAND MARK ---------- */
+  .brand{
+    position:fixed; top:22px; left:22px; z-index:50;
+    display:inline-flex; align-items:center; gap:10px;
+    padding:8px 14px 8px 8px; border-radius:999px;
+    background:linear-gradient(180deg, color-mix(in oklab, var(--surface) 92%, white), var(--surface));
+    -webkit-backdrop-filter:blur(20px) saturate(1.7); backdrop-filter:blur(20px) saturate(1.7);
+    border:1px solid var(--hair);
+    box-shadow: inset 0 1px 0 oklch(100% 0 0 / .6), 0 12px 28px -14px oklch(0% 0 0 / .35);
+  }
+  .brand .bm{
+    width:32px; height:32px; border-radius:10px; display:grid; place-items:center; position:relative; overflow:hidden;
+    background:linear-gradient(180deg, var(--gold-bright), var(--gold), var(--gold-deep));
+    box-shadow:inset 0 1px 0 oklch(100% 0 0 / .55), 0 4px 10px var(--gold-glow);
+  }
+  .brand .bm::before{content:""; position:absolute; inset:0; background:linear-gradient(165deg, oklch(100% 0 0 / .55), transparent 55%)}
+  .brand .bm svg{width:18px; height:18px; color:oklch(20% 0.04 80); position:relative; z-index:1}
+  .brand .bt{font-size:13px; font-weight:700; letter-spacing:-.01em; color:var(--ink)}
+  .brand .bt small{display:block; font-size:10px; font-weight:500; color:var(--ink-soft); letter-spacing:.04em}
+
+  /* ---------- HERO ---------- */
+  .hero{display:flex; flex-direction:column; gap:18px; max-width:840px; padding-top:30px}
+  .eyebrow{
+    align-self:flex-start; display:inline-flex; align-items:center; gap:8px;
+    font-size:11px; font-weight:600; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--ink-soft); padding:7px 14px; border-radius:999px;
+    background:var(--surface);
+    box-shadow: inset 0 1px 0 var(--neu-light), 0 1px 2px var(--neu-dark), 0 6px 16px oklch(0% 0 0 / .06);
+  }
+  .eyebrow b{width:7px; height:7px; border-radius:50%;
+    background:linear-gradient(180deg, var(--gold-bright), var(--gold-deep));
+    box-shadow:0 0 10px var(--gold-glow), inset 0 1px 1px oklch(100% 0 0 / .6);
+    animation:pulse 1.8s var(--spring) infinite;
+  }
+  @keyframes pulse{
+    0%,100%{box-shadow:0 0 10px var(--gold-glow), inset 0 1px 1px oklch(100% 0 0 / .6)}
+    50%{box-shadow:0 0 18px var(--gold-glow), 0 0 32px var(--gold-glow), inset 0 1px 1px oklch(100% 0 0 / .6)}
+  }
+  h1{font-size:clamp(38px,6.5vw,68px); font-weight:700; letter-spacing:-.03em; line-height:1.02}
+  h1 .lg{
+    background:linear-gradient(180deg, var(--accent-bright), var(--accent-deep));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .sub{font-size:clamp(15px,1.6vw,18px); color:var(--ink-soft); line-height:1.55; max-width:62ch}
+
+  section{display:flex; flex-direction:column; gap:22px}
+  .shead{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap}
+  .shead h2{font-size:13px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--ink)}
+  .shead p{font-size:13px; color:var(--ink-soft)}
+
+  .panel{
+    border-radius:30px; padding:clamp(22px,3vw,38px);
+    background:var(--surface);
+    box-shadow:
+      inset 0 1px 0 var(--neu-light),
+      inset 0 -10px 30px var(--inner-dark),
+      0 1px 2px var(--neu-dark),
+      0 26px 60px -28px oklch(0% 0 0 / .4);
+  }
+
+  /* ---------- BUTTONS ---------- */
+  .btnrow{display:flex; flex-wrap:wrap; gap:14px; align-items:center}
+  .btn{
+    position:relative; isolation:isolate;
+    font-family:var(--font); font-size:15px; font-weight:600; letter-spacing:-.01em;
+    color:var(--ink); border:none; cursor:pointer;
+    padding:14px 24px; border-radius:var(--radius);
+    background:linear-gradient(180deg, oklch(100% 0 0 / .6), oklch(92% 0.005 250 / .2)), var(--surface);
+    box-shadow:
+      inset 0 1px 0 var(--neu-light),
+      inset 0 -2px 4px var(--inner-dark),
+      0 2px 3px var(--neu-dark),
+      0 14px 26px -14px oklch(0% 0 0 / .35);
+    transition: transform .35s var(--spring), box-shadow .35s var(--spring), filter .3s ease;
+    overflow:hidden; display:inline-flex; align-items:center; gap:8px;
+  }
+  .btn::before{
+    content:""; position:absolute; inset:1px 1px 50% 1px; border-radius:calc(var(--radius) - 1px);
+    background:linear-gradient(180deg, var(--top-gloss), transparent);
+    pointer-events:none; z-index:2; opacity:.9;
+  }
+  .btn:active{transform:translateY(2px) scale(.985);
+    box-shadow: inset 0 2px 6px var(--inner-dark), inset 0 1px 0 var(--neu-light), 0 1px 2px var(--neu-dark)}
+  .btn.primary{color:#fff;
+    background:linear-gradient(180deg, var(--accent-bright), var(--accent), var(--accent-deep));
+    box-shadow:
+      inset 0 1px 0 oklch(100% 0 0 / .55),
+      inset 0 -3px 6px oklch(0% 0 0 / .28),
+      0 3px 6px var(--accent-glow),
+      0 18px 34px -16px var(--accent-glow);
+  }
+  .btn.glass{
+    color:var(--ink); -webkit-backdrop-filter:blur(18px) saturate(1.7); backdrop-filter:blur(18px) saturate(1.7);
+    background:linear-gradient(180deg, var(--glass-edge), var(--glass-tint));
+    border:1px solid var(--glass-edge);
+    box-shadow: inset 0 1px 0 oklch(100% 0 0 / .8), inset 0 -8px 20px oklch(0% 0 0 / .08), 0 16px 34px -16px oklch(0% 0 0 / .4);
+  }
+  .btn.glass::after{
+    content:""; position:absolute; top:0; left:-60%; width:50%; height:100%; z-index:3; pointer-events:none;
+    background:linear-gradient(105deg, transparent, oklch(100% 0 0 / .55), transparent);
+    transform:skewX(-18deg); transition:left .8s var(--spring);
+  }
+  .btn.glass:hover::after{left:120%}
+  .btn.tinted{color:oklch(34% 0.06 80);
+    background:linear-gradient(180deg, oklch(var(--gold-l) var(--gold-c) var(--gold-h) / .36), oklch(var(--gold-l) var(--gold-c) var(--gold-h) / .16)), var(--surface)}
+  [data-theme="dark"] .btn.tinted{color:var(--gold-bright)}
+  .btn.tinted-accent{color:var(--accent-deep);
+    background:linear-gradient(180deg, oklch(var(--accent-l) var(--accent-c) var(--accent-h) / .18), oklch(var(--accent-l) var(--accent-c) var(--accent-h) / .08)), var(--surface)}
+  [data-theme="dark"] .btn.tinted-accent{color:var(--accent-bright)}
+  .btn.lg{padding:18px 30px; font-size:17px}
+  .btn.sm{padding:9px 16px; font-size:13px; border-radius:calc(var(--radius) - 6px)}
+  .btn .ic{width:18px; height:18px; flex:0 0 auto}
+  .btn.block{width:100%; justify-content:center}
+  .btn.loading{color:transparent !important; pointer-events:none}
+  .btn.loading .spin{position:absolute; inset:0; margin:auto; width:18px; height:18px; z-index:4;
+    border:2px solid oklch(100% 0 0 / .35); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite}
+  .btn.glass .spin, .btn.tinted .spin{border-color:var(--accent-glow); border-top-color:var(--accent)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---------- STAT TILES ---------- */
+  .stats{display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:18px; margin-top:14px}
+  .stile{
+    position:relative; border-radius:22px; padding:18px 20px; overflow:hidden;
+    background:var(--surface);
+    box-shadow: inset 0 1px 0 var(--neu-light), inset 0 -8px 22px var(--inner-dark), 0 1px 2px var(--neu-dark), 0 18px 40px -22px oklch(0% 0 0 / .38);
+  }
+  .stile::before{content:""; position:absolute; inset:1px 1px auto 1px; height:46%; border-radius:21px 21px 40% 40%; pointer-events:none;
+    background:linear-gradient(180deg, var(--top-gloss), transparent)}
+  .stile > *{position:relative; z-index:1}
+  .stile .k{font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-soft)}
+  .stile .v{font-size:26px; font-weight:800; letter-spacing:-.03em; margin-top:6px; font-variant-numeric:tabular-nums}
+  .stile .v em{font-style:normal;
+    background:linear-gradient(180deg, var(--accent-bright), var(--accent-deep));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+
+  /* ---------- CARDS ---------- */
+  .cardgrid{display:grid; grid-template-columns:repeat(auto-fit, minmax(270px,1fr)); gap:clamp(16px,2vw,22px)}
+  .card{position:relative; border-radius:24px; padding:22px; overflow:hidden;
+    background:linear-gradient(165deg, color-mix(in oklab, var(--surface) 94%, white), var(--surface));
+    -webkit-backdrop-filter:blur(22px) saturate(1.7); backdrop-filter:blur(22px) saturate(1.7);
+    border:1px solid var(--glass-edge);
+    box-shadow: inset 0 1px 0 oklch(100% 0 0 / .7), inset 0 -10px 26px oklch(0% 0 0 / .08), 0 18px 40px -18px oklch(0% 0 0 / .42);
+    transition:transform .4s var(--spring), box-shadow .4s var(--spring)}
+  .card::before{content:""; position:absolute; inset:1px 1px auto 1px; height:42%; border-radius:23px 23px 40% 40%; z-index:0; pointer-events:none;
+    background:linear-gradient(180deg, var(--top-gloss), transparent)}
+  .card::after{content:""; position:absolute; top:-40%; left:-25%; width:55%; height:190%; z-index:0; pointer-events:none; transform:rotate(18deg);
+    background:linear-gradient(90deg, transparent, oklch(100% 0 0 / .3), transparent); transition:left .9s var(--spring)}
+  .card:hover::after{left:120%}
+  .card > *{position:relative; z-index:1}
+  .card:hover{transform:translateY(-4px)}
+  .chip{width:46px; height:46px; border-radius:15px; display:grid; place-items:center; position:relative; overflow:hidden; margin-bottom:14px;
+    background:linear-gradient(180deg, var(--accent-bright), var(--accent-deep));
+    box-shadow:inset 0 1px 0 oklch(100% 0 0 / .55), 0 6px 14px -4px var(--accent-glow); color:#fff; font-size:22px}
+  .chip::before{content:""; position:absolute; inset:0; background:linear-gradient(160deg, oklch(100% 0 0 / .5), transparent 55%)}
+  .chip.gold{
+    background:linear-gradient(180deg, var(--gold-bright), var(--gold), var(--gold-deep));
+    box-shadow:inset 0 1px 0 oklch(100% 0 0 / .55), 0 6px 14px -4px var(--gold-glow); color:oklch(22% 0.04 80)}
+  .ck-title{font-size:18px; font-weight:700; letter-spacing:-.01em}
+  .ck-body{font-size:13.5px; color:var(--ink-soft); line-height:1.55; margin-top:6px; margin-bottom:14px}
+  .code{display:block; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px;
+    background:var(--bg-2); padding:11px 13px; border-radius:13px; margin:0 0 14px;
+    color:var(--ink); overflow-x:auto; white-space:nowrap;
+    box-shadow: inset 0 2px 5px var(--inner-dark), inset 0 -1px 0 var(--neu-light)}
+
+  /* ---------- QUICK ACTIONS ---------- */
+  .qa-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(140px,1fr)); gap:14px; margin-top:24px}
+  .qa-tile{border:none; cursor:pointer; border-radius:20px; padding:18px 14px; background:var(--surface); display:flex; flex-direction:column; align-items:center; gap:11px; color:var(--ink);
+    box-shadow: inset 0 1px 0 var(--neu-light), 0 1px 2px var(--neu-dark), 0 12px 26px -16px oklch(0% 0 0 / .3); transition:transform .3s var(--spring); position:relative; overflow:hidden;
+    font-family:var(--font)}
+  .qa-tile::before{content:""; position:absolute; inset:1px 1px auto 1px; height:46%; border-radius:19px 19px 40% 40%; pointer-events:none;
+    background:linear-gradient(180deg, var(--top-gloss), transparent)}
+  .qa-tile > *{position:relative; z-index:1}
+  .qa-tile:hover{transform:translateY(-3px)}
+  .qa-tile:active{transform:scale(.97)}
+  .qa-tile .chip{margin-bottom:0; width:46px; height:46px; font-size:20px}
+  .qa-tile span{font-size:13px; font-weight:600; letter-spacing:-.01em; text-align:center}
+
+  /* ---------- DIALOG (login) ---------- */
+  .modal-scrim{border-radius:30px; padding:clamp(20px,3vw,40px); display:grid; place-items:center; min-height:520px;
+    background:linear-gradient(160deg, oklch(60% 0.04 260 / .35), oklch(40% 0.04 260 / .55)); position:relative; overflow:hidden}
+  .modal-scrim::before{content:""; position:absolute; inset:0;
+    background:radial-gradient(80% 60% at 30% 0%, var(--accent-glow), transparent 60%),
+               radial-gradient(60% 50% at 90% 100%, var(--gold-glow), transparent 60%);
+    pointer-events:none}
+  .dialog{position:relative; z-index:1; width:min(440px,100%); border-radius:28px; padding:clamp(22px,3vw,32px);
+    background:linear-gradient(165deg, var(--glass-edge), var(--glass-tint));
+    -webkit-backdrop-filter:blur(24px) saturate(1.7); backdrop-filter:blur(24px) saturate(1.7);
+    border:1px solid var(--glass-edge);
+    box-shadow: inset 0 1px 0 oklch(100% 0 0 / .7), 0 24px 60px -20px oklch(0% 0 0 / .55)}
+  .dialog::before{content:""; position:absolute; inset:1px 1px auto 1px; height:38%; border-radius:27px 27px 40% 40%; pointer-events:none; z-index:0;
+    background:linear-gradient(180deg, var(--top-gloss), transparent)}
+  .dialog > *{position:relative; z-index:1}
+  .dialog .d-icon{width:62px; height:62px; border-radius:20px; margin:0 auto 16px; display:grid; place-items:center; color:#fff; font-size:28px;
+    background:linear-gradient(180deg, var(--accent-bright), var(--accent-deep)); box-shadow:inset 0 1px 0 oklch(100% 0 0 / .5), 0 8px 18px -4px var(--accent-glow); position:relative; overflow:hidden}
+  .dialog .d-icon::before{content:""; position:absolute; inset:0; background:linear-gradient(160deg, oklch(100% 0 0 / .55), transparent 55%)}
+  .dialog .d-eyebrow{font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--accent-deep); text-align:center; margin-bottom:6px}
+  [data-theme="dark"] .dialog .d-eyebrow{color:var(--accent-bright)}
+  .dialog h3{font-size:22px; font-weight:700; letter-spacing:-.02em; text-align:center}
+  .dialog .d-sub{font-size:13.5px; color:var(--ink-soft); text-align:center; margin:6px 0 22px; line-height:1.5}
+
+  /* ---------- SEGMENTED ---------- */
+  .segmented{display:inline-flex; padding:4px; border-radius:16px; gap:2px; width:100%; position:relative;
+    background:var(--bg-2);
+    box-shadow: inset 0 2px 5px var(--inner-dark), inset 0 -1px 0 var(--neu-light)}
+  .seg{position:relative; z-index:1; border:none; background:transparent; cursor:pointer; flex:1;
+    font-family:var(--font); font-size:13px; font-weight:600; color:var(--ink-soft);
+    padding:10px 14px; border-radius:12px; transition:color .3s var(--spring)}
+  .seg.on{color:var(--ink)}
+  .segglide{position:absolute; z-index:0; top:4px; height:calc(100% - 8px); border-radius:12px;
+    background:var(--surface);
+    box-shadow: inset 0 1px 0 var(--neu-light), 0 1px 2px var(--neu-dark), 0 4px 10px oklch(0% 0 0 / .14);
+    transition: transform .42s var(--spring), width .42s var(--spring)}
+
+  /* ---------- FORM FIELDS ---------- */
+  .field{display:flex; flex-direction:column; gap:7px; margin-bottom:14px}
+  .field label{font-size:12px; font-weight:600; color:var(--ink-soft); letter-spacing:-.01em}
+  .field .control{position:relative}
+  .field input{width:100%; font-family:var(--font); font-size:14.5px; font-weight:500; color:var(--ink);
+    padding:13px 15px; border:none; border-radius:14px; background:var(--bg-2); -webkit-appearance:none; appearance:none;
+    box-shadow: inset 0 2px 5px var(--inner-dark), inset 0 -1px 0 var(--neu-light); transition:box-shadow .3s var(--spring)}
+  .field input:focus{outline:none;
+    box-shadow: inset 0 2px 5px var(--inner-dark), 0 0 0 2px var(--accent)}
+  .field input::placeholder{color:var(--ink-soft); opacity:.6}
+
+  /* ---------- BANNER ---------- */
+  .banner{position:relative; display:flex; align-items:center; gap:14px; border-radius:18px; padding:14px 16px; overflow:hidden; margin-top:16px;
+    background:linear-gradient(180deg, oklch(var(--accent-l) var(--accent-c) var(--accent-h) / .14), oklch(var(--accent-l) var(--accent-c) var(--accent-h) / .06)), var(--surface);
+    box-shadow: inset 0 1px 0 var(--neu-light), 0 1px 2px var(--neu-dark), 0 14px 28px -16px oklch(0% 0 0 / .3);
+    max-height:0; opacity:0; padding-top:0; padding-bottom:0; margin-top:0; transition:max-height .4s var(--spring), opacity .3s ease, padding .3s ease, margin .3s ease}
+  .banner.show{max-height:120px; opacity:1; padding-top:14px; padding-bottom:14px; margin-top:16px}
+  .banner .b-icon{width:38px; height:38px; border-radius:12px; flex:0 0 auto; display:grid; place-items:center; color:#fff; position:relative; overflow:hidden;
+    background:linear-gradient(180deg, var(--accent-bright), var(--accent-deep));
+    box-shadow: inset 0 1px 0 oklch(100% 0 0 / .5), 0 4px 10px var(--accent-glow); font-size:18px}
+  .banner .b-text{flex:1}
+  .banner .b-text b{font-size:14px; font-weight:700; display:block; letter-spacing:-.01em}
+  .banner .b-text span{font-size:12.5px; color:var(--ink-soft); line-height:1.45}
+  .banner.success{background:linear-gradient(180deg, oklch(80% 0.12 150 / .22), oklch(80% 0.12 150 / .08)), var(--surface)}
+  .banner.success .b-icon{background:linear-gradient(180deg, oklch(76% 0.17 150), oklch(54% 0.17 152))}
+
+  .helptext{font-size:12px; color:var(--ink-soft); text-align:center; margin-top:14px; line-height:1.5}
+  .btnrow.split{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+  .btnrow.split .btn{justify-content:center; width:100%}
+
+  /* ---------- DIVIDERS ---------- */
+  .screen-divider{display:flex; align-items:center; gap:18px; margin:30px 0 10px}
+  .screen-divider .ln{flex:1; height:1px; background:linear-gradient(90deg, transparent, var(--ink-soft), transparent); opacity:.25}
+  .screen-divider .lbl{font-size:11px; font-weight:700; letter-spacing:.18em; text-transform:uppercase; color:var(--ink-soft); padding:6px 14px; border-radius:999px;
+    background:var(--surface); box-shadow: inset 0 1px 0 var(--neu-light), 0 1px 2px var(--neu-dark)}
+
+  /* ---------- FAB / TUNER ---------- */
+  .fab-tuner{position:fixed; bottom:22px; right:22px; z-index:81; width:58px; height:58px; border-radius:20px; border:none; cursor:pointer; display:grid; place-items:center; overflow:hidden;
+    background:linear-gradient(180deg, var(--accent-bright), var(--accent), var(--accent-deep));
+    box-shadow: inset 0 1px 0 oklch(100% 0 0 / .55), inset 0 -4px 8px oklch(0% 0 0 / .3), 0 4px 8px var(--accent-glow), 0 18px 30px -14px var(--accent-glow);
+    transition:transform .35s var(--spring)}
+  .fab-tuner::before{content:""; position:absolute; inset:1px 1px 55% 1px; border-radius:19px;
+    background:linear-gradient(180deg, oklch(100% 0 0 / .55), transparent)}
+  .fab-tuner:active{transform:scale(.92)}
+  .fab-tuner svg{width:26px; height:26px; color:#fff; position:relative; z-index:1}
+
+  /* ---------- TWEAKS ---------- */
+  .tweaks{position:fixed; bottom:22px; right:22px; z-index:80; width:300px; border-radius:26px; padding:20px; transform:translateY(calc(100% + 30px));
+    -webkit-backdrop-filter:blur(28px) saturate(1.8); backdrop-filter:blur(28px) saturate(1.8);
+    background:linear-gradient(180deg, var(--glass-edge), var(--glass-tint));
+    border:1px solid var(--glass-edge);
+    box-shadow: inset 0 1px 0 oklch(100% 0 0 / .7), 0 30px 60px -20px oklch(0% 0 0 / .5);
+    transition:transform .55s var(--spring)}
+  .tweaks.open{transform:translateY(0)}
+  .tweaks h3{font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--ink); margin-bottom:16px}
+  .tw-row{display:flex; flex-direction:column; gap:8px; margin-bottom:16px}
+  .tw-row label{font-size:12px; color:var(--ink-soft); font-weight:600; display:flex; justify-content:space-between}
+  .ios-slider{-webkit-appearance:none; appearance:none; width:100%; height:30px; background:transparent; cursor:pointer}
+  .ios-slider::-webkit-slider-runnable-track{height:10px; border-radius:999px;
+    background:linear-gradient(90deg, var(--accent), var(--accent-bright)) no-repeat, var(--bg-2);
+    background-size: var(--fill,50%) 100%, 100% 100%;
+    box-shadow: inset 0 2px 5px var(--inner-dark), inset 0 -1px 0 var(--neu-light)}
+  .ios-slider::-webkit-slider-thumb{-webkit-appearance:none; appearance:none; width:28px; height:28px; margin-top:-9px;
+    border-radius:50%; background:linear-gradient(180deg,#fff,oklch(90% 0.004 250));
+    box-shadow: inset 0 1px 0 #fff, 0 2px 6px oklch(0% 0 0 / .4), 0 5px 10px oklch(0% 0 0 / .22)}
+  .themebtns{display:flex; gap:8px}
+  .themebtns button{flex:1; padding:10px; border:none; border-radius:13px; cursor:pointer; font-family:var(--font); font-size:12px; font-weight:600;
+    background:var(--surface); color:var(--ink-soft);
+    box-shadow: inset 0 1px 0 var(--neu-light), 0 1px 2px var(--neu-dark)}
+  .themebtns button.on{color:#fff; background:linear-gradient(180deg, var(--accent-bright), var(--accent-deep)); box-shadow:0 2px 6px var(--accent-glow)}
+  .tw-close{position:absolute; top:14px; right:14px; width:30px; height:30px; border:none; border-radius:50%; cursor:pointer;
+    background:var(--bg-2); color:var(--ink); display:grid; place-items:center; font-size:16px;
+    box-shadow: inset 0 1px 0 var(--neu-light), 0 1px 2px var(--neu-dark)}
+
+  footer{text-align:center; font-size:12px; color:var(--ink-soft); padding:30px 0 60px}
+
+  ::selection{background:var(--accent-glow)}
+
+  /* Responsive */
+  @media (max-width: 560px){
+    .brand{top:14px; left:14px; padding:6px 12px 6px 6px}
+    .brand .bm{width:28px; height:28px}
+    .hero{padding-top:60px}
+    .btnrow.split{grid-template-columns:1fr}
+    .modal-scrim{min-height:auto}
+  }
+</style>
+</head>
+<body>
+
+<a class="brand" href="#top" aria-label="Keysight CloudLens for Azure">
+  <span class="bm">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M7 18a4 4 0 0 1 0-8 5 5 0 0 1 9.5-1A4 4 0 0 1 17 18H7z"/>
+      <circle cx="12" cy="14" r="1.5" fill="currentColor"/>
+    </svg>
+  </span>
+  <span class="bt">CloudLens<small>for Azure</small></span>
+</a>
+
+<div class="wrap" id="top">
+
+  <!-- ============ SCREEN 1: LANDING / HERO ============ -->
+  <header class="hero">
+    <span class="eyebrow"><b></b> Verified June 2026 · Real Azure</span>
+    <h1>CloudLens for Azure.<br><span class="lg">Deploy in minutes.</span></h1>
+    <p class="sub">Azure VMs, Linux and Windows, 5,000 plus sensors at scale. One Ansible playbook spins up the full stack so packet visibility lands the moment your tenancy boots.</p>
+
+    <div class="btnrow" style="margin-top:14px">
+      <button class="btn primary lg">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 0 1 0-8 5 5 0 0 1 9.5-1A4 4 0 0 1 17 18H7z"/><path d="M12 13v4"/><path d="M9.5 15.5 12 18l2.5-2.5"/></svg>
+        Deploy to Azure
+      </button>
+      <button class="btn glass lg">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7l4 4-4 4"/><path d="M13 17h6"/></svg>
+        Cloud Shell
+      </button>
+      <button class="btn tinted lg">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="6" height="5" rx="1"/><rect x="10" y="9" width="6" height="5" rx="1"/><rect x="6.5" y="4" width="6" height="5" rx="1"/><path d="M3 16c2 4 16 4 18-2 -3 1 -5 0 -5 0"/></svg>
+        Docker
+      </button>
+    </div>
+
+    <div class="stats">
+      <div class="stile">
+        <div class="k">Smoke tests</div>
+        <div class="v"><em>3/3</em> passed</div>
+      </div>
+      <div class="stile">
+        <div class="k">End-to-end</div>
+        <div class="v"><em>8</em> min</div>
+      </div>
+      <div class="stile">
+        <div class="k">Brand · OKLCH</div>
+        <div class="v"><em>0078D4</em></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============ SCREEN 2: WELCOME ============ -->
+  <div class="screen-divider"><span class="ln"></span><span class="lbl">Screen 2 · Welcome</span><span class="ln"></span></div>
+
+  <section>
+    <div class="panel">
+      <div style="margin-bottom:24px; max-width:640px">
+        <span class="eyebrow" style="margin-bottom:14px"><b></b> Step 0 · Pick your path</span>
+        <h2 style="font-size:clamp(26px,3.6vw,38px); font-weight:700; letter-spacing:-.02em; margin-top:14px; line-height:1.1">Welcome to CloudLens for Azure</h2>
+        <p style="font-size:15px; color:var(--ink-soft); margin-top:10px; line-height:1.55">Three doorways into the same stack. Pick the one that matches how your team already deploys.</p>
+      </div>
+
+      <div class="cardgrid">
+
+        <div class="card">
+          <div class="chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px"><path d="M13 3 5 13h6l-1 8 8-10h-6l1-8z"/></svg>
+          </div>
+          <div class="ck-title">One Command, Full Stack</div>
+          <p class="ck-body">Bring a vNet, a sub, and your Ansible vars. The playbook handles vLM, vPB, and sensors end to end.</p>
+          <code class="code">curl -fsSL keysight.io/cl/azure | bash</code>
+          <button class="btn primary block">Try the Stack</button>
+        </div>
+
+        <div class="card">
+          <div class="chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5c2.5 2.5 2.5 14.5 0 17C9.5 18 9.5 6 12 3.5z"/></svg>
+          </div>
+          <div class="ck-title">ARM or Terraform</div>
+          <p class="ck-body">Marketplace listings for ARM templates, plus a curated Terraform module set that mirrors the Ansible roles.</p>
+          <p class="ck-body" style="margin-top:-6px; opacity:.9">Same shape, same outputs, your IaC.</p>
+          <button class="btn glass block">Browse Deploys</button>
+        </div>
+
+        <div class="card">
+          <div class="chip gold">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px"><path d="M6 8h12l1 12H5L6 8z"/><path d="M9 8a3 3 0 0 1 6 0"/></svg>
+          </div>
+          <div class="ck-title">Sensors at Scale</div>
+          <p class="ck-body">Ansible inventories tested past 5,000 hosts. Linux and Windows together, idempotent rollouts, surgical pinning.</p>
+          <p class="ck-body" style="margin-top:-6px; opacity:.9">Drop-in for your AAP or AWX setup.</p>
+          <button class="btn tinted block">Explore Sensors</button>
+        </div>
+
+      </div>
+
+      <div class="qa-grid">
+        <button class="qa-tile">
+          <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px"><path d="M5 12.5 10 17.5 19 7"/></svg></span>
+          <span>Get Started</span>
+        </button>
+        <button class="qa-tile">
+          <span class="chip gold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px"><path d="M13 3 5 13h6l-1 8 8-10h-6l1-8z"/></svg></span>
+          <span>Wizard</span>
+        </button>
+        <button class="qa-tile">
+          <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px"><circle cx="12" cy="12" r="8.5"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-1 .4-1 1.2-1 2.2"/><path d="M12 17.5v.5"/></svg></span>
+          <span>FAQ</span>
+        </button>
+        <button class="qa-tile">
+          <span class="chip gold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px"><rect x="5" y="3" width="14" height="18" rx="2.5"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span>
+          <span>Runbook PDF</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN 3: LOGIN / SP AUTH ============ -->
+  <div class="screen-divider"><span class="ln"></span><span class="lbl">Screen 3 · Sign In</span><span class="ln"></span></div>
+
+  <section>
+    <div class="panel" style="padding:0; overflow:hidden">
+      <div class="modal-scrim">
+        <div class="dialog" id="loginDialog">
+          <div class="d-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:30px;height:30px"><rect x="5" y="10" width="14" height="10" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+          </div>
+          <div class="d-eyebrow">Step 1 of 5 · Azure Authentication</div>
+          <h3>Sign in to Azure</h3>
+          <p class="d-sub">Choose how you want to authenticate. We never store secrets, they stay in your local environment.</p>
+
+          <div class="segmented" id="authseg">
+            <div class="segglide" id="segglide"></div>
+            <button class="seg" data-i="0">Cloud Shell</button>
+            <button class="seg on" data-i="1">Service Principal</button>
+            <button class="seg" data-i="2">Az CLI</button>
+          </div>
+
+          <div style="margin-top:22px" id="authforms">
+            <!-- Cloud Shell -->
+            <div class="authform" data-i="0" style="display:none">
+              <p style="font-size:13.5px; color:var(--ink-soft); line-height:1.55; margin-bottom:18px">Open the Azure Cloud Shell and paste a single line. We will inherit your tenant context from the session.</p>
+              <code class="code">bash &lt;(curl -sL keysight.io/cl/cloudshell)</code>
+              <button class="btn primary block">Open Cloud Shell</button>
+            </div>
+
+            <!-- Service Principal (default) -->
+            <div class="authform" data-i="1">
+              <div class="field">
+                <label>Subscription ID</label>
+                <div class="control"><input type="text" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off"></div>
+              </div>
+              <div class="field">
+                <label>Tenant ID</label>
+                <div class="control"><input type="text" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off"></div>
+              </div>
+              <div class="field">
+                <label>Client ID</label>
+                <div class="control"><input type="text" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off"></div>
+              </div>
+              <div class="field">
+                <label>Client Secret</label>
+                <div class="control"><input type="password" placeholder="••••••••••••••••••••" autocomplete="off"></div>
+              </div>
+
+              <div class="banner success" id="successBanner">
+                <div class="b-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px"><path d="M5 12.5 10 17.5 19 7"/></svg>
+                </div>
+                <div class="b-text">
+                  <b>Connection verified</b>
+                  <span>Tenant resolved, role assignments look good. Ready to continue.</span>
+                </div>
+              </div>
+
+              <div class="btnrow split" style="margin-top:18px">
+                <button class="btn glass" id="testBtn">
+                  <span class="spin" aria-hidden="true"></span>
+                  Test Connection
+                </button>
+                <button class="btn primary">Continue</button>
+              </div>
+            </div>
+
+            <!-- Az CLI -->
+            <div class="authform" data-i="2" style="display:none">
+              <p style="font-size:13.5px; color:var(--ink-soft); line-height:1.55; margin-bottom:18px">Already logged in with the Azure CLI? Hand off your active context and we will pick up from there.</p>
+              <code class="code">az login &amp;&amp; az account show</code>
+              <button class="btn primary block">Use Active Context</button>
+            </div>
+          </div>
+
+          <p class="helptext">We never store these, they go straight to your local environment.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>CloudLens for Azure · Sample preview · iOS 26 Skeuomorphic adaptation</footer>
+</div>
+
+<!-- TUNER -->
+<button class="fab-tuner" id="twToggle" aria-label="Open tuner">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h6"/><path d="M14 7h6"/><circle cx="12" cy="7" r="2.2"/><path d="M4 17h12"/><circle cx="18" cy="17" r="2.2"/></svg>
+</button>
+
+<aside class="tweaks" id="tweaks" aria-hidden="true">
+  <button class="tw-close" id="twClose" aria-label="Close tuner">×</button>
+  <h3>Live Tuner</h3>
+  <div class="tw-row">
+    <label>Depth <span id="depthv">100%</span></label>
+    <input type="range" class="ios-slider" id="depth" min="0" max="160" value="100">
+  </div>
+  <div class="tw-row">
+    <label>Gloss <span id="glossv">90%</span></label>
+    <input type="range" class="ios-slider" id="gloss" min="0" max="140" value="90">
+  </div>
+  <div class="tw-row">
+    <label>Corner radius <span id="radv">22px</span></label>
+    <input type="range" class="ios-slider" id="rad" min="8" max="34" value="22">
+  </div>
+  <div class="tw-row">
+    <label>Theme</label>
+    <div class="themebtns">
+      <button id="thLight" class="on">Light</button>
+      <button id="thDark">Dark</button>
+    </div>
+  </div>
+</aside>
+
+<script>
+(function(){
+  // --- Tuner ---
+  const tweaks = document.getElementById('tweaks');
+  const twToggle = document.getElementById('twToggle');
+  const twClose = document.getElementById('twClose');
+  twToggle.addEventListener('click', ()=>{
+    tweaks.classList.add('open');
+    twToggle.style.display = 'none';
+  });
+  twClose.addEventListener('click', ()=>{
+    tweaks.classList.remove('open');
+    twToggle.style.display = '';
+  });
+
+  function setVar(name, val){ document.documentElement.style.setProperty(name, val); }
+
+  const depth = document.getElementById('depth');
+  const depthv = document.getElementById('depthv');
+  depth.addEventListener('input', e=>{
+    const v = e.target.value;
+    setVar('--depth', (v/100));
+    depthv.textContent = v + '%';
+    e.target.style.setProperty('--fill', (v / 160 * 100) + '%');
+  });
+
+  const gloss = document.getElementById('gloss');
+  const glossv = document.getElementById('glossv');
+  gloss.addEventListener('input', e=>{
+    const v = e.target.value;
+    setVar('--gloss', (v/100));
+    glossv.textContent = v + '%';
+    e.target.style.setProperty('--fill', (v / 140 * 100) + '%');
+  });
+
+  const rad = document.getElementById('rad');
+  const radv = document.getElementById('radv');
+  rad.addEventListener('input', e=>{
+    const v = e.target.value;
+    setVar('--radius', v + 'px');
+    radv.textContent = v + 'px';
+    e.target.style.setProperty('--fill', ((v-8) / 26 * 100) + '%');
+  });
+
+  // Init slider fills
+  depth.style.setProperty('--fill', '62%');
+  gloss.style.setProperty('--fill', '64%');
+  rad.style.setProperty('--fill', '54%');
+
+  // Theme switcher
+  const thLight = document.getElementById('thLight');
+  const thDark = document.getElementById('thDark');
+  function setTheme(t){
+    document.documentElement.setAttribute('data-theme', t);
+    thLight.classList.toggle('on', t === 'light');
+    thDark.classList.toggle('on', t === 'dark');
+  }
+  thLight.addEventListener('click', ()=>setTheme('light'));
+  thDark.addEventListener('click', ()=>setTheme('dark'));
+
+  // --- Segmented control (login tabs) ---
+  const seg = document.getElementById('authseg');
+  const segglide = document.getElementById('segglide');
+  const segs = seg.querySelectorAll('.seg');
+  const forms = document.querySelectorAll('.authform');
+
+  function moveGlide(btn){
+    const segRect = seg.getBoundingClientRect();
+    const r = btn.getBoundingClientRect();
+    segglide.style.width = r.width + 'px';
+    segglide.style.transform = `translateX(${r.left - segRect.left - 4}px)`;
+  }
+  function selectSeg(i){
+    segs.forEach(s => s.classList.toggle('on', +s.dataset.i === i));
+    forms.forEach(f => f.style.display = (+f.dataset.i === i) ? '' : 'none');
+    moveGlide(segs[i]);
+    // hide banner when switching tabs
+    document.getElementById('successBanner').classList.remove('show');
+  }
+  segs.forEach(s => s.addEventListener('click', ()=> selectSeg(+s.dataset.i)));
+  // init on load + resize
+  window.addEventListener('load', ()=> selectSeg(1));
+  window.addEventListener('resize', ()=>{
+    const on = seg.querySelector('.seg.on');
+    if(on) moveGlide(on);
+  });
+  // small kick because fonts may shift width
+  setTimeout(()=> selectSeg(1), 50);
+
+  // --- Test Connection (fake) ---
+  const testBtn = document.getElementById('testBtn');
+  const banner = document.getElementById('successBanner');
+  testBtn.addEventListener('click', ()=>{
+    if(testBtn.classList.contains('loading')) return;
+    banner.classList.remove('show');
+    testBtn.classList.add('loading');
+    setTimeout(()=>{
+      testBtn.classList.remove('loading');
+      banner.classList.add('show');
+    }, 1400);
+  });
+})();
+</script>
+</body>
+</html>
