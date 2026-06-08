@@ -1,4 +1,4 @@
-# CloudLens Ansible for Azure — Landing Site
+# CloudLens Ansible for Azure: Landing Site
 
 This directory contains the static GitHub Pages site published at:
 

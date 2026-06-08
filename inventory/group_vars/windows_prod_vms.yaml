@@ -1,5 +1,5 @@
 ---
-# Windows-specific vars — WinRM uses PUBLIC IP (no jumpbox)
+# Windows-specific vars. WinRM uses PUBLIC IP (no jumpbox)
 ansible_host: "{{ azure_public_ip | default(azure_private_ip) }}"
 ansible_user: "{{ windows.ansible_user | default('azureuser') }}"
 ansible_password: "{{ lookup('env', 'ANSIBLE_WINRM_PASSWORD') }}"

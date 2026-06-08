@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # =====================================================================
-# Sharded deployment — for >2,000 VMs
+# Sharded deployment for more than 2,000 VMs
 # =====================================================================
 # Splits inventory into N chunks, runs them in parallel
-# Each shard is independent — failures in one don't affect others
+# Each shard is independent: failures in one do not affect others
 # =====================================================================
 set -euo pipefail
 

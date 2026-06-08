@@ -1,5 +1,5 @@
 ---
-# Master deployment sequence — all OS families
+# Master deployment sequence across all OS families
 # Customer inputs read from customer_input.yaml
 
 - import_playbook: playbooks/bootstrap_windows_winrm.yaml

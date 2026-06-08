@@ -1,4 +1,4 @@
-# Global vars — loaded from customer_input.yaml at runtime
+# Global vars, loaded from customer_input.yaml at runtime
 cloudlens_manager_ip_or_FQDN: "{{ cloudlens.manager_ip_or_fqdn }}"
 project_key: "{{ cloudlens.project_key }}"
 custom_tags: "{{ cloudlens.custom_tags }}"

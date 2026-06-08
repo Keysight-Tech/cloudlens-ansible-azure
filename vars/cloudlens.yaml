@@ -1,6 +1,6 @@
 ---
 # =====================================================================
-# Default values — overridden by customer_input.yaml via -e flag
+# Default values, overridden by customer_input.yaml via -e flag
 # Customer-overridable values now live in inventory/group_vars/all.yaml
 # This file only holds STATIC fallbacks for things not in customer_input.yaml
 # =====================================================================
@@ -9,7 +9,7 @@
 podman_command: podman
 redhat_ca_cert_dir: "/etc/pki/ca-trust/source/anchors"
 
-# Windows installer — DEFAULTS only, overridden by customer_input.yaml.windows.installer_path
+# Windows installer defaults, overridden by customer_input.yaml.windows.installer_path
 # To use a different installer, set in customer_input.yaml:
 #   windows:
 #     installer_path: "files/cloudlens-win-sensor-X.Y.Z.exe"

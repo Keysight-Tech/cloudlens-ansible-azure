@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Docker entrypoint — routes commands to the right action
+# Docker entrypoint that routes commands to the right action
 set -euo pipefail
 
 cd /work

@@ -1,5 +1,5 @@
 ---
-# Master cleanup sequence — removes sensor from all OS families
+# Master cleanup sequence that removes sensor from all OS families
 - import_playbook: playbooks/ubuntu_cleanup.yaml
   vars:
     target_group: ubuntu_prod_vms
