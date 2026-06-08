@@ -77,13 +77,13 @@
             "name": "vmSize",
             "type": "Microsoft.Common.DropDown",
             "label": "VM size",
-            "defaultValue": "Standard_D8s_v3 (minimum, recommended)",
+            "defaultValue": "Standard_D8s_v3 (8 vCPU, 32 GB, minimum recommended)",
             "toolTip": "Minimum Standard_D8s_v3 required: vPB needs three NICs with accelerated networking, and smaller D-series sizes do not support 3+ NICs.",
             "constraints": {
               "allowedValues": [
-                { "label": "Standard_D8s_v3 (8 vCPU, 32 GB) - minimum, recommended", "value": "Standard_D8s_v3" },
-                { "label": "Standard_D16s_v3 (16 vCPU, 64 GB) - higher throughput", "value": "Standard_D16s_v3" },
-                { "label": "Standard_D32s_v3 (32 vCPU, 128 GB) - highest throughput", "value": "Standard_D32s_v3" }
+                { "label": "Standard_D8s_v3 (8 vCPU, 32 GB, minimum recommended)", "value": "Standard_D8s_v3" },
+                { "label": "Standard_D16s_v3 (16 vCPU, 64 GB, higher throughput)", "value": "Standard_D16s_v3" },
+                { "label": "Standard_D32s_v3 (32 vCPU, 128 GB, highest throughput)", "value": "Standard_D32s_v3" }
               ],
               "required": true
             }
@@ -103,7 +103,7 @@
             "name": "vnetMode",
             "type": "Microsoft.Common.OptionsGroup",
             "label": "Virtual network",
-            "defaultValue": "Create new",
+            "defaultValue": "Create new (3 subnets)",
             "toolTip": "Create a new VNet with three subnets (mgmt, ingress, egress), or attach to a VNet you already own that already has those three subnets.",
             "constraints": {
               "allowedValues": [

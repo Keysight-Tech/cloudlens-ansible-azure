@@ -77,14 +77,14 @@
             "name": "vmSize",
             "type": "Microsoft.Common.DropDown",
             "label": "VM size",
-            "defaultValue": "Standard_D4s_v5 (recommended)",
+            "defaultValue": "Standard_D4s_v5 (4 vCPU, 16 GB, recommended)",
             "toolTip": "Standard_D4s_v5 (4 vCPU, 16 GB) is recommended for most deployments. Scale up for environments managing thousands of sensors.",
             "constraints": {
               "allowedValues": [
-                { "label": "Standard_D2s_v5 (2 vCPU, 8 GB) - small dev/test", "value": "Standard_D2s_v5" },
-                { "label": "Standard_D4s_v5 (4 vCPU, 16 GB) - recommended", "value": "Standard_D4s_v5" },
-                { "label": "Standard_D8s_v5 (8 vCPU, 32 GB) - large fleets", "value": "Standard_D8s_v5" },
-                { "label": "Standard_D16s_v5 (16 vCPU, 64 GB) - very large fleets", "value": "Standard_D16s_v5" }
+                { "label": "Standard_D2s_v5 (2 vCPU, 8 GB, small dev/test)", "value": "Standard_D2s_v5" },
+                { "label": "Standard_D4s_v5 (4 vCPU, 16 GB, recommended)", "value": "Standard_D4s_v5" },
+                { "label": "Standard_D8s_v5 (8 vCPU, 32 GB, large fleets)", "value": "Standard_D8s_v5" },
+                { "label": "Standard_D16s_v5 (16 vCPU, 64 GB, very large fleets)", "value": "Standard_D16s_v5" }
               ],
               "required": true
             }
