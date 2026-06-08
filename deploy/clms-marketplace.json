@@ -30,14 +30,8 @@
     "vmSize": {
       "type": "string",
       "defaultValue": "Standard_D4s_v5",
-      "allowedValues": [
-        "Standard_D2s_v5",
-        "Standard_D4s_v5",
-        "Standard_D8s_v5",
-        "Standard_D16s_v5"
-      ],
       "metadata": {
-        "description": "VM size for the CloudLens Manager. Standard_D4s_v5 (4 vCPU, 16 GB RAM) is recommended for most deployments. Scale up for environments managing thousands of sensors."
+        "description": "VM size for the CloudLens Manager. Standard_D4s_v5 (4 vCPU, 16 GB RAM) is recommended for most deployments. Recommended values: Standard_D2s_v5, Standard_D4s_v5, Standard_D8s_v5, Standard_D16s_v5. Scale up for environments managing thousands of sensors."
       }
     },
     "location": {
