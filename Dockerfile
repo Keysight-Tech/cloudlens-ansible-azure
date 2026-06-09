@@ -49,12 +49,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Azure CLI (official install)
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
-# Python deps: Ansible, Azure SDKs, WinRM
+# Python deps: Ansible, Azure SDKs, WinRM (Basic + NTLM transports).
+# Note: requests-kerberos is intentionally excluded. It needs C build deps
+# (libkrb5-dev, gcc) not present in python:3.12-slim, and our playbooks
+# use Basic / NTLM transport for WinRM. Add it back here and install
+# libkrb5-dev + gcc above if a customer ever needs Kerberos transport.
 RUN pip install --no-cache-dir \
     "ansible-core>=2.16,<2.18" \
     pywinrm \
     requests-ntlm \
-    requests-kerberos \
     "azure-identity>=1.15" \
     "azure-mgmt-compute>=30" \
     "azure-mgmt-network>=25" \
