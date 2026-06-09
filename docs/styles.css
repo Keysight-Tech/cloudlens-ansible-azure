@@ -110,6 +110,38 @@ html[data-theme="dark"] a:hover { color: oklch(85% 0.08 235); }
 .skip-link:focus { top: 14px; }
 
 /* ============================================================
+   INTERNAL BANNER - Keysight Only marker (pinned at the very top)
+   ============================================================ */
+.internal-banner {
+  position: relative; z-index: 60;
+  background: linear-gradient(180deg,
+    oklch(var(--gold-l) var(--gold-c) var(--gold-h) / .18),
+    oklch(var(--gold-l) var(--gold-c) var(--gold-h) / .08));
+  border-bottom: 1px solid oklch(var(--gold-l) var(--gold-c) var(--gold-h) / .28);
+  box-shadow: inset 0 -1px 0 oklch(100% 0 0 / .35), 0 1px 0 oklch(0% 0 0 / .04);
+  padding: 8px 0;
+  font-size: 12.5px; letter-spacing: .01em;
+  color: oklch(32% 0.06 80);
+}
+html[data-theme="dark"] .internal-banner {
+  background: linear-gradient(180deg,
+    oklch(var(--gold-l) var(--gold-c) var(--gold-h) / .12),
+    oklch(var(--gold-l) var(--gold-c) var(--gold-h) / .05));
+  border-bottom-color: oklch(var(--gold-l) var(--gold-c) var(--gold-h) / .25);
+  color: var(--gold-bright);
+}
+.internal-banner-inner {
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  text-align: center;
+}
+.internal-banner .ib-lock { flex-shrink: 0; color: inherit; opacity: .85; }
+.internal-banner strong { font-weight: 700; letter-spacing: .02em; }
+@media (max-width: 560px) {
+  .internal-banner { font-size: 11.5px; padding: 7px 0; }
+  .internal-banner-inner { gap: 7px; padding-inline: 12px; }
+}
+
+/* ============================================================
    SITE HEADER - floating glass island
    ============================================================ */
 .site-header {
