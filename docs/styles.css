@@ -110,35 +110,40 @@ html[data-theme="dark"] a:hover { color: oklch(85% 0.08 235); }
 .skip-link:focus { top: 14px; }
 
 /* ============================================================
-   INTERNAL BANNER - Keysight Only marker (pinned at the very top)
+   KEYSIGHT BRAND BAR - red strip with white wordmark, pinned at top
    ============================================================ */
 .internal-banner {
   position: relative; z-index: 60;
   background: linear-gradient(180deg,
-    oklch(var(--gold-l) var(--gold-c) var(--gold-h) / .18),
-    oklch(var(--gold-l) var(--gold-c) var(--gold-h) / .08));
-  border-bottom: 1px solid oklch(var(--gold-l) var(--gold-c) var(--gold-h) / .28);
-  box-shadow: inset 0 -1px 0 oklch(100% 0 0 / .35), 0 1px 0 oklch(0% 0 0 / .04);
+    oklch(58% 0.20 25),
+    oklch(48% 0.22 25));
+  border-bottom: 1px solid oklch(40% 0.20 25);
+  box-shadow: inset 0 -1px 0 oklch(0% 0 0 / .12), inset 0 1px 0 oklch(100% 0 0 / .12), 0 1px 0 oklch(0% 0 0 / .05);
   padding: 8px 0;
-  font-size: 12.5px; letter-spacing: .01em;
-  color: oklch(32% 0.06 80);
+  color: #fff;
 }
 html[data-theme="dark"] .internal-banner {
   background: linear-gradient(180deg,
-    oklch(var(--gold-l) var(--gold-c) var(--gold-h) / .12),
-    oklch(var(--gold-l) var(--gold-c) var(--gold-h) / .05));
-  border-bottom-color: oklch(var(--gold-l) var(--gold-c) var(--gold-h) / .25);
-  color: var(--gold-bright);
+    oklch(52% 0.22 25),
+    oklch(42% 0.22 25));
+  border-bottom-color: oklch(34% 0.20 25);
 }
 .internal-banner-inner {
-  display: flex; align-items: center; justify-content: center; gap: 9px;
+  display: flex; align-items: center; justify-content: center;
   text-align: center;
 }
-.internal-banner .ib-lock { flex-shrink: 0; color: inherit; opacity: .85; }
-.internal-banner strong { font-weight: 700; letter-spacing: .02em; }
+.internal-banner .ib-mark {
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .26em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 1px 1px oklch(0% 0 0 / .25);
+}
 @media (max-width: 560px) {
-  .internal-banner { font-size: 11.5px; padding: 7px 0; }
-  .internal-banner-inner { gap: 7px; padding-inline: 12px; }
+  .internal-banner { padding: 6px 0; }
+  .internal-banner .ib-mark { font-size: 11.5px; letter-spacing: .22em; }
 }
 
 /* ============================================================
