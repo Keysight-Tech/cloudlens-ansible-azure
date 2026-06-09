@@ -98,7 +98,7 @@
                 <small>One curl command</small>
               </span>
             </a>
-            <a class="btn btn-tertiary tier" href="https://github.com/Keysight-Tech/cloudlens-ansible-azure/pkgs/container/cloudlens-ansible-azure" target="_blank" rel="noopener">
+            <a class="btn btn-tertiary tier" href="#docker">
               <span class="tier-num">3</span>
               <span class="tier-label">
                 <strong>Pull Docker Image</strong>
@@ -154,6 +154,45 @@ terraform init &amp;&amp; terraform apply</code></pre>
             <h4><span class="path-icon" aria-hidden="true">&#128214;</span> Printable Runbook</h4>
             <p>Executive-friendly PDF guide. Best for: customer CTO, procurement, training.</p>
             <a class="btn btn-primary" href="https://github.com/Keysight-Tech/cloudlens-ansible-azure/blob/main/docs/CloudLens_Stack_Deployment_Runbook.pdf" target="_blank" rel="noopener">Download Runbook</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 1.2 DOCKER PATH (Tier 3 deep-link target) -->
+    <section id="docker" class="full-stack-section">
+      <div class="container">
+        <h2>Run from Docker</h2>
+        <p class="lede">Pinned image with Ansible, Azure SDKs, and pywinrm. Works from your laptop, a CI runner, or any container host.</p>
+
+        <div class="full-stack-cmd-wrap">
+          <pre id="docker-cmd"><code>docker run --rm -it \
+  -v $(pwd)/customer_input.yaml:/work/customer_input.yaml \
+  -v $HOME/.ssh:/root/.ssh:ro \
+  -e AZURE_SUBSCRIPTION_ID -e AZURE_TENANT \
+  -e AZURE_CLIENT_ID -e AZURE_SECRET \
+  ghcr.io/keysight-tech/cloudlens-ansible-azure:latest</code></pre>
+          <button class="copy-btn" data-copy="docker-cmd" type="button" aria-label="Copy docker run command">Copy</button>
+        </div>
+
+        <p class="full-stack-note">Service Principal credentials passed via env vars (use <code>scripts/setup_azure_sp.sh</code> to create one). Same behavior as the Cloud Shell quickstart, just packaged for CI/CD or repeat customer deployments.</p>
+
+        <div class="full-stack-paths">
+          <div class="path-card">
+            <h4>📦 Image registry</h4>
+            <p>Image is published to GitHub Container Registry on every push to <code>main</code>.</p>
+            <a class="btn btn-secondary" href="https://github.com/Keysight-Tech/cloudlens-ansible-azure/pkgs/container/cloudlens-ansible-azure" target="_blank" rel="noopener">View on ghcr.io</a>
+          </div>
+          <div class="path-card">
+            <h4>🔧 Build locally</h4>
+            <p>Prefer to build your own image instead of pulling? The Dockerfile is in the repo root.</p>
+            <pre><code>git clone https://github.com/Keysight-Tech/cloudlens-ansible-azure.git
+cd cloudlens-ansible-azure
+docker build -t cloudlens-ansible-azure .</code></pre>
+          </div>
+          <div class="path-card">
+            <h4>🤖 CI/CD pattern</h4>
+            <p>Drop the same <code>docker run</code> into GitHub Actions, GitLab CI, Jenkins, or Azure DevOps. Mount your <code>customer_input.yaml</code> as a build artifact.</p>
           </div>
         </div>
       </div>
