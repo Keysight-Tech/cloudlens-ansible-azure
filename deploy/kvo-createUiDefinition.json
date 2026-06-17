@@ -6,14 +6,14 @@
     "config": {
       "isWizard": true,
       "basics": {
-        "description": "Deploy Keysight CloudLens vController (formerly CLMS) v6.14.0-89 from Azure Marketplace. vController is the central control plane for CloudLens network visibility. After deployment, the web UI is reachable in about 60 seconds and full initialization completes in roughly 15 minutes. Default UI credentials: admin / Cl0udLens@dm!n (change on first login).",
+        "description": "Deploy Keysight Vision Orchestrator (KVO) v3.0.0-55 from Azure Marketplace. KVO is the centralized control and automation layer for Keysight Visibility solutions, managing virtual Packet Broker (vPB) fleets across physical, virtual, and cloud environments. After deployment, the web UI is reachable in about 60 seconds and full initialization completes in roughly 15 minutes. Refer to Keysight KVO documentation for default UI credentials.",
         "subscription": {},
         "resourceGroup": {
           "allowExisting": true
         },
         "location": {
           "label": "Region",
-          "toolTip": "Azure region for deployment. Pick the region closest to your monitored workloads to minimize latency."
+          "toolTip": "Azure region for deployment. Pick the region closest to the vPB fleet you plan to orchestrate."
         }
       }
     },
@@ -23,7 +23,7 @@
         "name": "vmConfig",
         "label": "Virtual Machine",
         "subLabel": {
-          "preValidation": "Configure the vController VM",
+          "preValidation": "Configure the KVO VM",
           "postValidation": "Done"
         },
         "bladeTitle": "Virtual Machine",
@@ -32,8 +32,8 @@
             "name": "vmName",
             "type": "Microsoft.Common.TextBox",
             "label": "VM name",
-            "defaultValue": "clms",
-            "toolTip": "Name of the vController VM. Used as the computer name and as a prefix for the public IP, NSG, NIC, and (when creating one) the VNet.",
+            "defaultValue": "kvo",
+            "toolTip": "Name of the KVO VM. Used as the computer name and as a prefix for the public IP, NSG, NIC, and (when creating one) the VNet.",
             "constraints": {
               "required": true,
               "regex": "^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$",
@@ -46,7 +46,7 @@
             "type": "Microsoft.Compute.UserNameTextBox",
             "label": "Linux admin username",
             "defaultValue": "azureuser",
-            "toolTip": "OS-level admin user for SSH. The vController web UI uses its own separate admin account (admin / Cl0udLens@dm!n).",
+            "toolTip": "OS-level admin user for SSH. The KVO web UI uses its own separate admin account (refer to Keysight KVO documentation for default UI credentials).",
             "osPlatform": "Linux",
             "constraints": {
               "required": true
@@ -60,7 +60,7 @@
               "confirmPassword": "Confirm password"
             },
             "toolTip": {
-              "password": "12+ characters with uppercase, lowercase, a digit, and a symbol. This is the OS-level password, not the vController web UI password."
+              "password": "12+ characters with uppercase, lowercase, a digit, and a symbol. This is the OS-level password, not the KVO web UI password."
             },
             "osPlatform": "Linux",
             "constraints": {
@@ -78,7 +78,7 @@
             "type": "Microsoft.Common.DropDown",
             "label": "VM size",
             "defaultValue": "Standard_D4s_v5 (4 vCPU, 16 GB, recommended)",
-            "toolTip": "Standard_D4s_v5 (4 vCPU, 16 GB) is recommended for most deployments. Scale up for environments managing thousands of sensors.",
+            "toolTip": "Standard_D4s_v5 (4 vCPU, 16 GB) is recommended for most deployments. Scale up for environments orchestrating many vPB fleets.",
             "constraints": {
               "allowedValues": [
                 { "label": "Standard_D2s_v5 (2 vCPU, 8 GB, small dev/test)", "value": "Standard_D2s_v5" },
@@ -118,12 +118,12 @@
             "name": "addressSpace",
             "type": "Microsoft.Common.TextBox",
             "label": "VNet address space (CIDR)",
-            "defaultValue": "10.50.0.0/16",
+            "defaultValue": "10.60.0.0/16",
             "toolTip": "Address space for the new VNet. Must not overlap with VNets you plan to peer with.",
             "constraints": {
               "required": true,
               "regex": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
-              "validationMessage": "Enter a valid CIDR block (for example, 10.50.0.0/16)."
+              "validationMessage": "Enter a valid CIDR block (for example, 10.60.0.0/16)."
             },
             "visible": "[equals(steps('networkConfig').vnetMode, 'new')]"
           },
@@ -131,12 +131,12 @@
             "name": "subnetPrefix",
             "type": "Microsoft.Common.TextBox",
             "label": "Subnet prefix (CIDR)",
-            "defaultValue": "10.50.1.0/24",
-            "toolTip": "Subnet prefix for the vController NIC. Must be contained within the VNet address space.",
+            "defaultValue": "10.60.1.0/24",
+            "toolTip": "Subnet prefix for the KVO NIC. Must be contained within the VNet address space.",
             "constraints": {
               "required": true,
               "regex": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
-              "validationMessage": "Enter a valid CIDR block (for example, 10.50.1.0/24)."
+              "validationMessage": "Enter a valid CIDR block (for example, 10.60.1.0/24)."
             },
             "visible": "[equals(steps('networkConfig').vnetMode, 'new')]"
           },
@@ -167,7 +167,7 @@
             "type": "Microsoft.Common.TextBox",
             "label": "Existing subnet name",
             "defaultValue": "",
-            "toolTip": "Subnet within the existing VNet to attach the vController NIC to.",
+            "toolTip": "Subnet within the existing VNet to attach the KVO NIC to.",
             "constraints": {
               "required": true
             },
@@ -185,8 +185,8 @@
       "vnetName": "[if(equals(steps('networkConfig').vnetMode, 'existing'), steps('networkConfig').existingVnetName, '')]",
       "existingVnetResourceGroup": "[if(equals(steps('networkConfig').vnetMode, 'existing'), steps('networkConfig').existingVnetResourceGroup, '')]",
       "subnetName": "[if(equals(steps('networkConfig').vnetMode, 'existing'), steps('networkConfig').existingSubnetName, '')]",
-      "addressSpace": "[if(equals(steps('networkConfig').vnetMode, 'new'), steps('networkConfig').addressSpace, '10.50.0.0/16')]",
-      "subnetPrefix": "[if(equals(steps('networkConfig').vnetMode, 'new'), steps('networkConfig').subnetPrefix, '10.50.1.0/24')]"
+      "addressSpace": "[if(equals(steps('networkConfig').vnetMode, 'new'), steps('networkConfig').addressSpace, '10.60.0.0/16')]",
+      "subnetPrefix": "[if(equals(steps('networkConfig').vnetMode, 'new'), steps('networkConfig').subnetPrefix, '10.60.1.0/24')]"
     }
   }
 }

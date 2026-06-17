@@ -198,28 +198,38 @@ docker build -t cloudlens-ansible-azure .</code></pre>
       </div>
     </section>
 
-    <!-- 1.25 PREREQUISITE DEPLOYS: CLMS + vPB MARKETPLACE -->
+    <!-- 1.25 PREREQUISITE DEPLOYS: vController + KVO + vPB MARKETPLACE -->
     <section id="prereq-deploys" class="prereq-section">
       <div class="container">
-        <h2>Don't have CLMS or vPB yet?</h2>
+        <h2>Don't have vController, KVO, or vPB yet?</h2>
         <p class="lede">Deploy them from Azure Marketplace in one click before running sensor deployments.</p>
 
         <div class="prereq-cards">
           <div class="prereq-card">
-            <h3>CloudLens Manager (CLMS)</h3>
+            <h3>CloudLens vController <span class="rebrand-tag">formerly CLMS</span></h3>
             <p>Central management for sensors. Required for any sensor deployment.</p>
             <ul>
-              <li>Version 6.13.076 from Azure Marketplace</li>
+              <li>Version 6.14.0-89 from Azure Marketplace</li>
               <li>One VM, public IP, ready in 15 minutes</li>
               <li>Default UI: admin / Cl0udLens@dm!n</li>
             </ul>
-            <a class="btn btn-primary" href="https://portal.azure.com/#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fclms-marketplace.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fclms-createUiDefinition.json" target="_blank" rel="noopener">&#9654; Deploy CLMS</a>
+            <a class="btn btn-primary" href="https://portal.azure.com/#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fclms-marketplace.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fclms-createUiDefinition.json" target="_blank" rel="noopener">&#9654; Deploy vController</a>
+          </div>
+          <div class="prereq-card">
+            <h3>Vision Orchestrator (KVO) <span class="new-tag">NEW</span></h3>
+            <p>Optional. Centralizes vPB fleet configuration and automation across physical, virtual, and cloud.</p>
+            <ul>
+              <li>Version 3.0.0-55 from Azure Marketplace</li>
+              <li>One VM, public IP, single NIC control plane</li>
+              <li>Manages multiple vController and vPB fleets</li>
+            </ul>
+            <a class="btn btn-secondary" href="https://portal.azure.com/#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fkvo-marketplace.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fkvo-createUiDefinition.json" target="_blank" rel="noopener">&#9654; Deploy KVO</a>
           </div>
           <div class="prereq-card">
             <h3>Virtual Packet Broker (vPB)</h3>
             <p>Optional. For inline traffic processing and VXLAN aggregation.</p>
             <ul>
-              <li>Version 3.15.01 from Azure Marketplace</li>
+              <li>Version 3.15.0-1 from Azure Marketplace</li>
               <li>Three-NIC layout with accelerated networking</li>
               <li>CLI access via two-hop SSH</li>
             </ul>
@@ -228,11 +238,11 @@ docker build -t cloudlens-ansible-azure .</code></pre>
         </div>
 
         <aside class="marketplace-note" aria-label="Marketplace listing names">
-          <p>In the Azure Portal, the CLMS offer appears as <strong>"CloudLens Manager (Preview)"</strong> and the vPB offer appears as <strong>"CloudLens Virtual Packet Broker"</strong>. The Deploy buttons above point to the correct offer IDs automatically.</p>
+          <p>In the Azure Portal, the offers appear as <strong>"Keysight CloudLens vController"</strong>, <strong>"Keysight Vision Orchestrator"</strong>, and <strong>"Keysight CloudLens Virtual Packet Broker"</strong>. The Deploy buttons above point to the correct offer IDs automatically. CLMS was renamed to vController in 2026.</p>
         </aside>
 
-        <p class="callout">After CLMS finishes initializing (about 15 minutes), open the UI, create a project, copy the project key, then return here to run the sensor deployment.</p>
-        <p class="prereq-note">First-time use of these images requires accepting Marketplace terms. The Portal will prompt you on first deploy, or run <code>az vm image terms accept --publisher keysight-technologies-cloudlens --offer &lt;offer&gt; --plan &lt;plan&gt;</code>.</p>
+        <p class="callout">After vController finishes initializing (about 15 minutes), open the UI, create a project, copy the project key, then return here to run the sensor deployment.</p>
+        <p class="prereq-note">First-time use of these images requires accepting Marketplace terms. The Portal will prompt you on first deploy, or run <code>az vm image terms accept --publisher keysight-technologies-cloudlens --offer &lt;offer&gt; --plan &lt;plan&gt;</code> (use <code>keysight-technologies-kvop</code> for KVO).</p>
 
         <details class="terraform-note">
           <summary>Prefer Terraform?</summary>

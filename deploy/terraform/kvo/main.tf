@@ -1,7 +1,7 @@
 ############################################
-# Keysight CloudLens Manager (CLMS) Marketplace deployment
+# Keysight Vision Orchestrator (KVO) Marketplace deployment
 #
-# Mirrors deploy/clms-marketplace.json: single Linux VM from
+# Mirrors deploy/kvo-marketplace.json: single Linux VM from
 # Azure Marketplace with VNet, public IP, NSG, and NIC.
 ############################################
 
@@ -9,7 +9,7 @@ locals {
   create_new_vnet       = var.existing_vnet_name == ""
   effective_vnet_name   = local.create_new_vnet ? "${var.vm_name}-vnet" : var.existing_vnet_name
   effective_vnet_rg     = var.existing_vnet_resource_group != "" ? var.existing_vnet_resource_group : var.resource_group_name
-  effective_subnet_name = var.existing_subnet_name != "" ? var.existing_subnet_name : "clms-subnet"
+  effective_subnet_name = var.existing_subnet_name != "" ? var.existing_subnet_name : "kvo-subnet"
 
   pip_name = "${var.vm_name}-pip"
   nsg_name = "${var.vm_name}-nsg"
@@ -36,7 +36,7 @@ locals {
 }
 
 # Public IP
-resource "azurerm_public_ip" "clms" {
+resource "azurerm_public_ip" "kvo" {
   name                = local.pip_name
   resource_group_name = local.rg_name
   location            = local.rg_location
@@ -47,7 +47,7 @@ resource "azurerm_public_ip" "clms" {
 }
 
 # Network Security Group
-resource "azurerm_network_security_group" "clms" {
+resource "azurerm_network_security_group" "kvo" {
   name                = local.nsg_name
   resource_group_name = local.rg_name
   location            = local.rg_location
@@ -79,7 +79,7 @@ resource "azurerm_network_security_group" "clms" {
 }
 
 # VNet (create only when no existing VNet supplied)
-resource "azurerm_virtual_network" "clms" {
+resource "azurerm_virtual_network" "kvo" {
   count = local.create_new_vnet ? 1 : 0
 
   name                = local.effective_vnet_name
@@ -89,12 +89,12 @@ resource "azurerm_virtual_network" "clms" {
   tags                = var.tags
 }
 
-resource "azurerm_subnet" "clms" {
+resource "azurerm_subnet" "kvo" {
   count = local.create_new_vnet ? 1 : 0
 
   name                 = local.effective_subnet_name
   resource_group_name  = local.rg_name
-  virtual_network_name = azurerm_virtual_network.clms[0].name
+  virtual_network_name = azurerm_virtual_network.kvo[0].name
   address_prefixes     = var.subnet_prefix
 }
 
@@ -108,11 +108,11 @@ data "azurerm_subnet" "existing" {
 }
 
 locals {
-  subnet_id = local.create_new_vnet ? azurerm_subnet.clms[0].id : data.azurerm_subnet.existing[0].id
+  subnet_id = local.create_new_vnet ? azurerm_subnet.kvo[0].id : data.azurerm_subnet.existing[0].id
 }
 
 # NIC
-resource "azurerm_network_interface" "clms" {
+resource "azurerm_network_interface" "kvo" {
   name                = local.nic_name
   resource_group_name = local.rg_name
   location            = local.rg_location
@@ -122,17 +122,17 @@ resource "azurerm_network_interface" "clms" {
     name                          = "ipconfig1"
     subnet_id                     = local.subnet_id
     private_ip_address_allocation = "Dynamic"
-    public_ip_address_id          = azurerm_public_ip.clms.id
+    public_ip_address_id          = azurerm_public_ip.kvo.id
   }
 }
 
-resource "azurerm_network_interface_security_group_association" "clms" {
-  network_interface_id      = azurerm_network_interface.clms.id
-  network_security_group_id = azurerm_network_security_group.clms.id
+resource "azurerm_network_interface_security_group_association" "kvo" {
+  network_interface_id      = azurerm_network_interface.kvo.id
+  network_security_group_id = azurerm_network_security_group.kvo.id
 }
 
-# CLMS VM from Azure Marketplace
-resource "azurerm_linux_virtual_machine" "clms" {
+# KVO VM from Azure Marketplace
+resource "azurerm_linux_virtual_machine" "kvo" {
   name                            = var.vm_name
   resource_group_name             = local.rg_name
   location                        = local.rg_location
@@ -144,7 +144,7 @@ resource "azurerm_linux_virtual_machine" "clms" {
   tags                            = var.tags
 
   network_interface_ids = [
-    azurerm_network_interface.clms.id,
+    azurerm_network_interface.kvo.id,
   ]
 
   os_disk {
@@ -153,21 +153,21 @@ resource "azurerm_linux_virtual_machine" "clms" {
   }
 
   source_image_reference {
-    publisher = "keysight-technologies-cloudlens"
-    offer     = "keysight-cloudlens-vcontroller"
-    sku       = "cloudlens-vcontroller-6-14-0_89"
+    publisher = "keysight-technologies-kvop"
+    offer     = "keysight-vision-orchestrator"
+    sku       = "keysight_vision_orchestrator_3-0-0_55"
     version   = "latest"
   }
 
   plan {
-    name      = "cloudlens-vcontroller-6-14-0_89"
-    publisher = "keysight-technologies-cloudlens"
-    product   = "keysight-cloudlens-vcontroller"
+    name      = "keysight_vision_orchestrator_3-0-0_55"
+    publisher = "keysight-technologies-kvop"
+    product   = "keysight-vision-orchestrator"
   }
 
   boot_diagnostics {}
 
   depends_on = [
-    azurerm_network_interface_security_group_association.clms,
+    azurerm_network_interface_security_group_association.kvo,
   ]
 }

@@ -63,6 +63,28 @@ variable "clms_vm_size" {
 }
 
 ###############################################################################
+# KVO knobs (Keysight Vision Orchestrator)
+###############################################################################
+
+variable "deploy_kvo" {
+  description = "Toggle for KVO. Set true to deploy Keysight Vision Orchestrator alongside vController."
+  type        = bool
+  default     = false
+}
+
+variable "kvo_vm_name" {
+  description = "Name of the KVO VM."
+  type        = string
+  default     = "kvo"
+}
+
+variable "kvo_vm_size" {
+  description = "VM size for KVO. Allowed: Standard_D2s_v5, Standard_D4s_v5, Standard_D8s_v5, Standard_D16s_v5."
+  type        = string
+  default     = "Standard_D4s_v5"
+}
+
+###############################################################################
 # vPB knobs
 ###############################################################################
 
@@ -101,9 +123,15 @@ variable "address_space" {
 }
 
 variable "clms_subnet_prefix" {
-  description = "Subnet for CLMS."
+  description = "Subnet for vController (formerly CLMS)."
   type        = list(string)
   default     = ["10.50.1.0/24"]
+}
+
+variable "kvo_subnet_prefix" {
+  description = "Subnet for KVO (used when deploy_kvo is true)."
+  type        = list(string)
+  default     = ["10.50.5.0/24"]
 }
 
 variable "vpb_mgmt_subnet_prefix" {

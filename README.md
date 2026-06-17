@@ -21,7 +21,9 @@
 
 ## Deploy the full stack with one command
 
-Three ways to deploy CLMS + vPB + sensors end to end. Same result, different workflows.
+Three ways to deploy vController + KVO (optional) + vPB + sensors end to end. Same result, different workflows.
+
+> **Naming note:** Keysight rebranded CLMS to **vController** in 2026 (Marketplace offer `keysight-cloudlens-vcontroller`). The runbook now uses the new offer; the legacy `keysight-cloudlens-manager-preview` no longer exists in Azure Marketplace. **KVO** (Keysight Vision Orchestrator) is a new optional component that centrally manages vPB fleets and is wired into the deploy stack behind the `--with-kvo` flag (or `deploy_kvo = true` in Terraform).
 
 ### Bash (recommended)
 
@@ -41,7 +43,7 @@ terraform init && terraform apply
 
 [CloudLens_Stack_Deployment_Runbook.pdf](docs/CloudLens_Stack_Deployment_Runbook.pdf) is the executive-facing guide. Hand it to procurement or training teams.
 
-All three deploy the same Azure resources, accept Marketplace terms automatically, and chain through CLMS, vPB, and sensor deployment.
+All three deploy the same Azure resources, accept Marketplace terms automatically, and chain through vController, KVO (optional), vPB, and sensor deployment.
 
 ---
 
@@ -434,11 +436,11 @@ done
 
 | VM Count | Auto Forks | Sharded? | Approx Time |
 |---|---|---|---|
-| 1–50 | 20 | No | 5–10 min |
-| 50–500 | 50 | No | 15–30 min |
-| 500–2,000 | 200 | No | 30–60 min |
-| 2,000–10,000 | 500/shard | Yes (auto) | 30–60 min |
-| 10,000+ | 1000/shard | AWX | 1–2 hr |
+| 1 to 50 | 20 | No | 5 to 10 min |
+| 50 to 500 | 50 | No | 15 to 30 min |
+| 500 to 2,000 | 200 | No | 30 to 60 min |
+| 2,000 to 10,000 | 500/shard | Yes (auto) | 30 to 60 min |
+| 10,000+ | 1000/shard | AWX | 1 to 2 hr |
 
 Auto-tunes based on discovered VM count. See [docs/SCALING.md](docs/SCALING.md) for details.
 

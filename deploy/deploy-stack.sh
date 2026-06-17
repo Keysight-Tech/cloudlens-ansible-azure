@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # =====================================================================
-# CloudLens Stack Deployment: CLMS + vPB + Sensors, end to end
+# CloudLens Stack Deployment: vController + KVO + vPB + Sensors
+# (vController is the new name for what used to be called CLMS)
 # =====================================================================
 # One paste, full stack. Detects Azure Cloud Shell vs local, accepts
 # Marketplace terms, deploys CLMS, waits for init, optionally adds vPB,
@@ -29,11 +30,18 @@ REPO_NAME="cloudlens-ansible-azure"
 REPO_RAW="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main"
 
 CLMS_TEMPLATE_URL="${REPO_RAW}/deploy/clms-marketplace.json"
+KVO_TEMPLATE_URL="${REPO_RAW}/deploy/kvo-marketplace.json"
 VPB_TEMPLATE_URL="${REPO_RAW}/deploy/vpb-marketplace.json"
 
+# vController (formerly CLMS) marketplace coordinates
 CLMS_PUBLISHER="keysight-technologies-cloudlens"
-CLMS_OFFER="keysight-cloudlens-manager-preview"
-CLMS_PLAN="clms-6-13-0_76"
+CLMS_OFFER="keysight-cloudlens-vcontroller"
+CLMS_PLAN="cloudlens-vcontroller-6-14-0_89"
+
+# KVO (Keysight Vision Orchestrator) marketplace coordinates
+KVO_PUBLISHER="keysight-technologies-kvop"
+KVO_OFFER="keysight-vision-orchestrator"
+KVO_PLAN="keysight_vision_orchestrator_3-0-0_55"
 
 VPB_PUBLISHER="keysight-technologies-cloudlens"
 VPB_OFFER="keysight-cloudlens-virtual-packet-broker"
@@ -42,8 +50,10 @@ VPB_PLAN="cloudlens-virtual-packet-broker-3-15-0_1"
 DEFAULT_RG="cloudlens-rg"
 DEFAULT_LOCATION="eastus2"
 DEFAULT_CLMS_NAME="clms"
+DEFAULT_KVO_NAME="kvo"
 DEFAULT_VPB_NAME="vpb"
 CLMS_VM_SIZE="Standard_D4s_v5"
+KVO_VM_SIZE="Standard_D4s_v5"
 VPB_VM_SIZE="Standard_D8s_v3"
 
 SUMMARY_FILE="cloudlens-deploy-summary.txt"
@@ -51,6 +61,7 @@ LOG_FILE="cloudlens-deploy-stack.log"
 
 # Flag defaults (set by argument parser)
 DRY_RUN=false
+DEPLOY_KVO=""
 DEPLOY_VPB=""
 CHAIN_SENSORS=""
 ARG_RG=""
@@ -60,8 +71,10 @@ ARG_LOCATION=""
 PHASE_NAME="init"
 CREATED_RG=false
 DEPLOYED_CLMS=false
+DEPLOYED_KVO=false
 DEPLOYED_VPB=false
 CLMS_PUBLIC_IP=""
+KVO_PUBLIC_IP=""
 VPB_PUBLIC_IP=""
 ADMIN_USERNAME="azureuser"
 ADMIN_PASSWORD=""
@@ -112,28 +125,33 @@ Options:
                             without touching Azure. Safe to run anywhere.
   --resource-group NAME     Override default resource group (cloudlens-rg)
   --location REGION         Override default Azure region (eastus2)
+  --no-kvo                  Skip KVO deployment (Keysight Vision Orchestrator)
+  --with-kvo                Deploy KVO (skip interactive prompt)
   --no-vpb                  Skip vPB deployment
   --no-sensors              Skip sensor playbook chain at the end
   -h, --help                Show this help
 
-What it does (10 phases):
+What it does (phases):
   1. Banner + environment detection (Cloud Shell vs local)
   2. Pre-flight checks (az CLI, subscription access, quota)
   3. Customer input (resource group, region, admin password)
-  4. Marketplace terms acceptance
+  4. Marketplace terms acceptance (vController + KVO + vPB as selected)
   5. Resource group creation (skipped if exists)
-  6. CLMS deployment via ARM template
-  7. Wait for CLMS to initialize (~15 minutes)
-  8. vPB deployment (optional)
-  9. Manual project key step
- 10. Sensor chain (optional, runs quickstart.sh)
- 11. Final summary written to cloudlens-deploy-summary.txt
+  6. vController deployment via ARM template (formerly CLMS)
+  7. Wait for vController to initialize (~15 minutes)
+  8. KVO deployment (optional, orchestrator for vPB fleets)
+  9. vPB deployment (optional)
+ 10. Manual project key step (from vController UI)
+ 11. Sensor chain (optional, runs quickstart.sh)
+ 12. Final summary written to cloudlens-deploy-summary.txt
 HLP
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN=true; shift ;;
+    --no-kvo) DEPLOY_KVO=false; shift ;;
+    --with-kvo) DEPLOY_KVO=true; shift ;;
     --no-vpb) DEPLOY_VPB=false; shift ;;
     --no-sensors) CHAIN_SENSORS=false; shift ;;
     --resource-group) ARG_RG="$2"; shift 2 ;;
@@ -175,8 +193,9 @@ on_error() {
   echo
   echo "What was created so far:"
   [[ "$CREATED_RG" == "true" ]]    && echo "  - Resource group: ${RESOURCE_GROUP:-unknown}"
-  [[ "$DEPLOYED_CLMS" == "true" ]] && echo "  - CLMS VM: ${DEFAULT_CLMS_NAME} (IP ${CLMS_PUBLIC_IP:-pending})"
-  [[ "$DEPLOYED_VPB" == "true" ]]  && echo "  - vPB VM:  ${DEFAULT_VPB_NAME}  (IP ${VPB_PUBLIC_IP:-pending})"
+  [[ "$DEPLOYED_CLMS" == "true" ]] && echo "  - vController VM: ${DEFAULT_CLMS_NAME} (IP ${CLMS_PUBLIC_IP:-pending})"
+  [[ "$DEPLOYED_KVO" == "true" ]]  && echo "  - KVO VM:         ${DEFAULT_KVO_NAME}  (IP ${KVO_PUBLIC_IP:-pending})"
+  [[ "$DEPLOYED_VPB" == "true" ]]  && echo "  - vPB VM:         ${DEFAULT_VPB_NAME}  (IP ${VPB_PUBLIC_IP:-pending})"
   echo
   echo "Cleanup options:"
   if [[ "$CREATED_RG" == "true" ]] && [[ -n "${RESOURCE_GROUP:-}" ]]; then
@@ -201,7 +220,7 @@ trap on_interrupt INT TERM
 # Phase 1: Banner + environment detection
 # =====================================================================
 step "Phase 1: Banner + environment detection"
-banner "CloudLens Stack Deployment: CLMS + vPB + Sensors"
+banner "CloudLens Stack: vController + KVO + vPB + Sensors"
 echo
 [[ "$DRY_RUN" == "true" ]] && warn "DRY-RUN MODE: no Azure resources will be created"
 echo
@@ -322,9 +341,21 @@ else
   ok "Using supplied password"
 fi
 
+# Deploy KVO?
+if [[ -z "$DEPLOY_KVO" ]]; then
+  read -rp "Deploy KVO (Keysight Vision Orchestrator) alongside vController? [y/N]: " yn
+  yn_lc=$(to_lower "$yn")
+  if [[ "$yn_lc" == "y" ]] || [[ "$yn_lc" == "yes" ]]; then
+    DEPLOY_KVO=true
+  else
+    DEPLOY_KVO=false
+  fi
+fi
+ok "Deploy KVO: ${DEPLOY_KVO}"
+
 # Deploy vPB?
 if [[ -z "$DEPLOY_VPB" ]]; then
-  read -rp "Deploy vPB alongside CLMS? [y/N]: " yn
+  read -rp "Deploy vPB alongside vController? [y/N]: " yn
   yn_lc=$(to_lower "$yn")
   if [[ "$yn_lc" == "y" ]] || [[ "$yn_lc" == "yes" ]]; then
     DEPLOY_VPB=true
@@ -347,7 +378,10 @@ fi
 ok "Chain sensors: ${CHAIN_SENSORS}"
 
 # Now we know enough to probe quotas
-check_quota_family "standardDSv5Family" "$LOCATION" 4
+# vController = 4 vCPU; KVO = +4 vCPU; both in DSv5 family
+kvo_vcpu=0
+[[ "$DEPLOY_KVO" == "true" ]] && kvo_vcpu=4
+check_quota_family "standardDSv5Family" "$LOCATION" $((4 + kvo_vcpu))
 if [[ "$DEPLOY_VPB" == "true" ]]; then
   check_quota_family "standardDSv3Family" "$LOCATION" 8
 fi
@@ -373,6 +407,9 @@ accept_terms() {
 }
 
 accept_terms "$CLMS_PUBLISHER" "$CLMS_OFFER" "$CLMS_PLAN"
+if [[ "$DEPLOY_KVO" == "true" ]]; then
+  accept_terms "$KVO_PUBLISHER" "$KVO_OFFER" "$KVO_PLAN"
+fi
 if [[ "$DEPLOY_VPB" == "true" ]]; then
   accept_terms "$VPB_PUBLISHER" "$VPB_OFFER" "$VPB_PLAN"
 fi
@@ -401,9 +438,9 @@ else
 fi
 
 # =====================================================================
-# Phase 6: CLMS deployment
+# Phase 6: vController deployment (formerly CLMS)
 # =====================================================================
-step "Phase 6: Deploy CLMS"
+step "Phase 6: Deploy vController (formerly CLMS)"
 
 clms_exists() {
   [[ "$DRY_RUN" == "true" ]] && return 1
@@ -411,16 +448,16 @@ clms_exists() {
 }
 
 if clms_exists; then
-  warn "CLMS VM '${DEFAULT_CLMS_NAME}' already exists in ${RESOURCE_GROUP}"
-  read -rp "Reuse existing CLMS? [Y/n]: " yn
+  warn "vController VM '${DEFAULT_CLMS_NAME}' already exists in ${RESOURCE_GROUP}"
+  read -rp "Reuse existing vController? [Y/n]: " yn
   yn_lc=$(to_lower "$yn")
   if [[ "$yn_lc" == "n" ]] || [[ "$yn_lc" == "no" ]]; then
-    fail "Refusing to overwrite existing CLMS. Delete it first or pick a different RG."
+    fail "Refusing to overwrite existing vController. Delete it first or pick a different RG."
   fi
   CLMS_PUBLIC_IP=$(run_az_capture network public-ip show \
     -g "$RESOURCE_GROUP" -n "${DEFAULT_CLMS_NAME}-pip" --query ipAddress -o tsv 2>/dev/null \
     || echo "unknown")
-  ok "Reusing CLMS at ${CLMS_PUBLIC_IP}"
+  ok "Reusing vController at ${CLMS_PUBLIC_IP}"
 else
   note "Deploying ARM template: ${CLMS_TEMPLATE_URL}"
   if [[ "$DRY_RUN" == "true" ]]; then
@@ -429,7 +466,7 @@ else
   else
     az deployment group create \
       -g "$RESOURCE_GROUP" \
-      -n "clms-stack-$(date +%s)" \
+      -n "vcontroller-stack-$(date +%s)" \
       --template-uri "$CLMS_TEMPLATE_URL" \
       --parameters \
           vmName="$DEFAULT_CLMS_NAME" \
@@ -440,18 +477,18 @@ else
     CLMS_PUBLIC_IP=$(python3 -c "import json; print(json.load(open('/tmp/clms-outputs.json'))['clmsPublicIp']['value'])" 2>/dev/null || echo "unknown")
   fi
   DEPLOYED_CLMS=true
-  ok "CLMS deployed at ${CLMS_PUBLIC_IP}"
+  ok "vController deployed at ${CLMS_PUBLIC_IP}"
 fi
 
 # =====================================================================
-# Phase 7: Wait for CLMS init
+# Phase 7: Wait for vController init
 # =====================================================================
-step "Phase 7: Wait for CLMS initialization"
+step "Phase 7: Wait for vController initialization"
 
 if [[ "$DRY_RUN" == "true" ]]; then
   dryrun_say "would poll https://${CLMS_PUBLIC_IP}:443 every 15s for up to 17 minutes"
 else
-  echo "CLMS needs ~15 minutes to initialize. Web UI on 443 typically responds in 60 seconds,"
+  echo "vController needs ~15 minutes to initialize. Web UI on 443 typically responds in 60 seconds,"
   echo "with a further 2-minute settle for backend services."
   echo
 
@@ -464,7 +501,7 @@ else
       printf "\r%s seconds remaining, probing port 443..." "$remaining"
       if (echo > /dev/tcp/"${CLMS_PUBLIC_IP}"/443) >/dev/null 2>&1; then
         echo
-        ok "CLMS port 443 is open"
+        ok "vController port 443 is open"
         echo "Settling 2 more minutes for backend init..."
         sleep 120
         break
@@ -476,10 +513,55 @@ else
 fi
 
 # =====================================================================
-# Phase 8: vPB deployment (optional)
+# Phase 8: KVO deployment (optional)
+# =====================================================================
+if [[ "$DEPLOY_KVO" == "true" ]]; then
+  step "Phase 8: Deploy KVO (Keysight Vision Orchestrator)"
+
+  kvo_exists() {
+    [[ "$DRY_RUN" == "true" ]] && return 1
+    az vm show -g "$RESOURCE_GROUP" -n "$DEFAULT_KVO_NAME" >/dev/null 2>&1
+  }
+
+  if kvo_exists; then
+    warn "KVO VM '${DEFAULT_KVO_NAME}' already exists, reusing"
+    KVO_PUBLIC_IP=$(run_az_capture network public-ip show \
+      -g "$RESOURCE_GROUP" -n "${DEFAULT_KVO_NAME}-pip" --query ipAddress -o tsv 2>/dev/null \
+      || echo "unknown")
+    ok "Reusing KVO at ${KVO_PUBLIC_IP}"
+  else
+    note "Deploying ARM template: ${KVO_TEMPLATE_URL}"
+    if [[ "$DRY_RUN" == "true" ]]; then
+      dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-uri ${KVO_TEMPLATE_URL} --parameters adminPassword=<hidden> vmSize=${KVO_VM_SIZE}"
+      KVO_PUBLIC_IP="203.0.113.15"
+    else
+      az deployment group create \
+        -g "$RESOURCE_GROUP" \
+        -n "kvo-stack-$(date +%s)" \
+        --template-uri "$KVO_TEMPLATE_URL" \
+        --parameters \
+            vmName="$DEFAULT_KVO_NAME" \
+            adminUsername="$ADMIN_USERNAME" \
+            adminPassword="$ADMIN_PASSWORD" \
+            vmSize="$KVO_VM_SIZE" \
+        --query 'properties.outputs' -o json > /tmp/kvo-outputs.json
+      KVO_PUBLIC_IP=$(python3 -c "import json; print(json.load(open('/tmp/kvo-outputs.json'))['kvoPublicIp']['value'])" 2>/dev/null || echo "unknown")
+    fi
+    DEPLOYED_KVO=true
+    ok "KVO deployed at ${KVO_PUBLIC_IP}"
+  fi
+
+  note "KVO web UI is reachable in about 60 seconds; full init ~15 minutes."
+  note "Refer to Keysight KVO documentation for default UI credentials."
+else
+  step "Phase 8: KVO deployment (skipped)"
+fi
+
+# =====================================================================
+# Phase 9: vPB deployment (optional)
 # =====================================================================
 if [[ "$DEPLOY_VPB" == "true" ]]; then
-  step "Phase 8: Deploy vPB"
+  step "Phase 9: Deploy vPB"
 
   vpb_exists() {
     [[ "$DRY_RUN" == "true" ]] && return 1
@@ -515,19 +597,19 @@ if [[ "$DEPLOY_VPB" == "true" ]]; then
 
   note "vPB management SSH is reachable 10 to 15 minutes after deploy."
 else
-  step "Phase 8: vPB deployment (skipped)"
+  step "Phase 9: vPB deployment (skipped)"
 fi
 
 # =====================================================================
-# Phase 9: Manual project key step
+# Phase 10: Manual project key step
 # =====================================================================
-step "Phase 9: Get project key from CLMS"
+step "Phase 10: Get project key from vController"
 
 cat <<EOM
 
-CLMS is now reachable. To deploy sensors, you need a project key.
+vController is now reachable. To deploy sensors, you need a project key.
 
-  1. Open the CLMS UI: https://${CLMS_PUBLIC_IP}
+  1. Open the vController UI: https://${CLMS_PUBLIC_IP}
   2. Sign in with the default credentials: admin / Cl0udLens@dm!n
   3. You will be prompted to change the password on first login.
   4. Go to Projects -> Add Project, give it a name, then open the
@@ -545,10 +627,10 @@ if [[ "$CHAIN_SENSORS" == "true" ]]; then
 fi
 
 # =====================================================================
-# Phase 10: Sensor chain (optional)
+# Phase 11: Sensor chain (optional)
 # =====================================================================
 if [[ "$CHAIN_SENSORS" == "true" ]]; then
-  step "Phase 10: Chain into sensor deployment"
+  step "Phase 11: Chain into sensor deployment"
 
   if [[ "$DRY_RUN" == "true" ]]; then
     dryrun_say "would generate customer_input.yaml and run bash quickstart.sh"
@@ -582,13 +664,13 @@ YAML
     fi
   fi
 else
-  step "Phase 10: Sensor chain (skipped)"
+  step "Phase 11: Sensor chain (skipped)"
 fi
 
 # =====================================================================
-# Phase 11: Final summary
+# Phase 12: Final summary
 # =====================================================================
-step "Phase 11: Final summary"
+step "Phase 12: Final summary"
 
 write_summary() {
   cat <<SUMMARY
@@ -601,7 +683,7 @@ Subscription:       ${SUB_NAME} (${SUB_ID})
 Resource group:     ${RESOURCE_GROUP}
 Region:             ${LOCATION}
 
---- CLMS ---
+--- vController (formerly CLMS) ---
 Name:               ${DEFAULT_CLMS_NAME}
 Public IP:          ${CLMS_PUBLIC_IP}
 Web UI:             https://${CLMS_PUBLIC_IP}
@@ -611,6 +693,21 @@ OS-level user:      ${ADMIN_USERNAME}
 OS-level password:  ${ADMIN_PASSWORD}
 
 SUMMARY
+
+  if [[ "$DEPLOY_KVO" == "true" ]]; then
+    cat <<KSUMMARY
+--- KVO (Keysight Vision Orchestrator) ---
+Name:               ${DEFAULT_KVO_NAME}
+Public IP:          ${KVO_PUBLIC_IP}
+Web UI:             https://${KVO_PUBLIC_IP}
+SSH:                ssh ${ADMIN_USERNAME}@${KVO_PUBLIC_IP}
+Default UI creds:   see Keysight KVO documentation
+OS-level user:      ${ADMIN_USERNAME}
+OS-level password:  ${ADMIN_PASSWORD}
+Purpose:            Centralized vPB fleet orchestration and configuration
+
+KSUMMARY
+  fi
 
   if [[ "$DEPLOY_VPB" == "true" ]]; then
     cat <<VSUMMARY
@@ -627,10 +724,18 @@ VSUMMARY
 
   cat <<EOM
 --- Next steps ---
-1. Open https://${CLMS_PUBLIC_IP} and change the default password
-2. Create a project in the CLMS UI and copy the project key
-3. To deploy sensors later:
-     curl -sSL ${REPO_RAW}/quickstart.sh | bash
+1. Open https://${CLMS_PUBLIC_IP} and change the default vController password
+2. Create a project in the vController UI and copy the project key
+EOM
+  if [[ "$DEPLOY_KVO" == "true" ]]; then
+    echo "3. Open https://${KVO_PUBLIC_IP} (KVO) and register your vController + vPB fleet"
+    echo "4. To deploy sensors later:"
+    echo "     curl -sSL ${REPO_RAW}/quickstart.sh | bash"
+  else
+    echo "3. To deploy sensors later:"
+    echo "     curl -sSL ${REPO_RAW}/quickstart.sh | bash"
+  fi
+  cat <<EOM
 
 --- Cleanup ---
 Delete everything: az group delete -n ${RESOURCE_GROUP} --yes --no-wait
@@ -647,7 +752,8 @@ banner "Stack deployment complete"
 echo
 echo "Summary saved to:    ${SUMMARY_FILE}"
 echo "Log saved to:        ${LOG_FILE}"
-echo "CLMS UI:             https://${CLMS_PUBLIC_IP}"
+echo "vController UI:      https://${CLMS_PUBLIC_IP}"
+[[ "$DEPLOY_KVO" == "true" ]] && echo "KVO UI:              https://${KVO_PUBLIC_IP}"
 [[ "$DEPLOY_VPB" == "true" ]] && echo "vPB management:      ${VPB_PUBLIC_IP}"
 echo
 ok "Done."

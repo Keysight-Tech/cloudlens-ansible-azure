@@ -2,43 +2,43 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
   "contentVersion": "1.0.0.0",
   "metadata": {
-    "title": "Keysight CloudLens vController (formerly CLMS) from Azure Marketplace",
-    "description": "One-click deployment of Keysight CloudLens vController v6.14.0-89 (formerly known as CLMS) from Azure Marketplace. Provisions a single vController VM with a public IP, NSG (SSH + HTTPS), and a new VNet (or attaches to one you already own). Default UI credentials: admin / Cl0udLens@dm!n (change on first login). The web UI typically responds within 60 seconds, and full system initialization completes in about 15 minutes.",
+    "title": "Keysight Vision Orchestrator (KVO) from Azure Marketplace",
+    "description": "One-click deployment of Keysight Vision Orchestrator v3.0.0-55 from Azure Marketplace. KVO is the centralized control and automation layer for Keysight Visibility solutions, simplifying configuration and managing Virtual Packet Brokers (vPB) across physical, virtual, and cloud environments. Provisions a single KVO VM with a public IP, NSG (SSH + HTTPS), and a new VNet (or attaches to one you already own). See Keysight KVO documentation for default UI credentials.",
     "author": "Keysight Technologies"
   },
   "parameters": {
     "vmName": {
       "type": "string",
-      "defaultValue": "clms",
+      "defaultValue": "kvo",
       "metadata": {
-        "description": "Name of the CloudLens Manager VM. Used as the computer name and as a prefix for the public IP, NSG, NIC, and (when creating one) the VNet. Lowercase letters, digits, and hyphens are recommended."
+        "description": "Name of the Keysight Vision Orchestrator VM. Used as the computer name and as a prefix for the public IP, NSG, NIC, and (when creating one) the VNet. Lowercase letters, digits, and hyphens are recommended."
       }
     },
     "adminUsername": {
       "type": "string",
       "defaultValue": "azureuser",
       "metadata": {
-        "description": "Linux admin username used for SSH access to the underlying VM. This is the OS-level account; the CLMS web UI uses its own separate admin account (admin / Cl0udLens@dm!n)."
+        "description": "Linux admin username used for SSH access to the underlying VM. This is the OS-level account; the KVO web UI uses its own separate admin account (refer to Keysight KVO documentation for the default UI credentials)."
       }
     },
     "adminPassword": {
       "type": "securestring",
       "metadata": {
-        "description": "Linux admin password for SSH access. Must be 12+ characters and include uppercase, lowercase, a digit, and a symbol. This is the OS-level password, not the CLMS web UI password."
+        "description": "Linux admin password for SSH access. Must be 12+ characters and include uppercase, lowercase, a digit, and a symbol. This is the OS-level password, not the KVO web UI password."
       }
     },
     "vmSize": {
       "type": "string",
       "defaultValue": "Standard_D4s_v5",
       "metadata": {
-        "description": "VM size for the CloudLens Manager. Standard_D4s_v5 (4 vCPU, 16 GB RAM) is recommended for most deployments. Recommended values: Standard_D2s_v5, Standard_D4s_v5, Standard_D8s_v5, Standard_D16s_v5. Scale up for environments managing thousands of sensors."
+        "description": "VM size for the Keysight Vision Orchestrator. Standard_D4s_v5 (4 vCPU, 16 GB RAM) is recommended for most deployments. Recommended values: Standard_D2s_v5, Standard_D4s_v5, Standard_D8s_v5, Standard_D16s_v5. Scale up for environments orchestrating many vPB fleets."
       }
     },
     "location": {
       "type": "string",
       "defaultValue": "[resourceGroup().location]",
       "metadata": {
-        "description": "Azure region for deployment. Defaults to the resource group location. Pick the region closest to your monitored workloads to minimize latency."
+        "description": "Azure region for deployment. Defaults to the resource group location. Pick the region closest to the vPB fleet you plan to orchestrate."
       }
     },
     "vnetName": {
@@ -59,19 +59,19 @@
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Existing subnet name to attach the CLMS NIC to (required when deploying into an existing VNet). Leave blank to create a new subnet named clms-subnet."
+        "description": "Existing subnet name to attach the KVO NIC to (required when deploying into an existing VNet). Leave blank to create a new subnet named kvo-subnet."
       }
     },
     "addressSpace": {
       "type": "string",
-      "defaultValue": "10.50.0.0/16",
+      "defaultValue": "10.60.0.0/16",
       "metadata": {
         "description": "VNet address space in CIDR notation. Only used when creating a new VNet. Must not overlap with VNets you plan to peer with."
       }
     },
     "subnetPrefix": {
       "type": "string",
-      "defaultValue": "10.50.1.0/24",
+      "defaultValue": "10.60.1.0/24",
       "metadata": {
         "description": "Subnet prefix in CIDR notation, contained within the VNet address space. Only used when creating a new VNet."
       }
@@ -81,14 +81,14 @@
     "createNewVnet": "[empty(parameters('vnetName'))]",
     "vnetResourceGroup": "[if(empty(parameters('existingVnetResourceGroup')), resourceGroup().name, parameters('existingVnetResourceGroup'))]",
     "effectiveVnetName": "[if(variables('createNewVnet'), concat(parameters('vmName'), '-vnet'), parameters('vnetName'))]",
-    "effectiveSubnetName": "[if(empty(parameters('subnetName')), 'clms-subnet', parameters('subnetName'))]",
+    "effectiveSubnetName": "[if(empty(parameters('subnetName')), 'kvo-subnet', parameters('subnetName'))]",
     "subnetId": "[if(variables('createNewVnet'), resourceId('Microsoft.Network/virtualNetworks/subnets', variables('effectiveVnetName'), variables('effectiveSubnetName')), resourceId(variables('vnetResourceGroup'), 'Microsoft.Network/virtualNetworks/subnets', variables('effectiveVnetName'), variables('effectiveSubnetName')))]",
     "pipName": "[concat(parameters('vmName'), '-pip')]",
     "nsgName": "[concat(parameters('vmName'), '-nsg')]",
     "nicName": "[concat(parameters('vmName'), '-nic')]",
-    "imagePublisher": "keysight-technologies-cloudlens",
-    "imageOffer": "keysight-cloudlens-vcontroller",
-    "imageSku": "cloudlens-vcontroller-6-14-0_89"
+    "imagePublisher": "keysight-technologies-kvop",
+    "imageOffer": "keysight-vision-orchestrator",
+    "imageSku": "keysight_vision_orchestrator_3-0-0_55"
   },
   "resources": [
     {
@@ -189,9 +189,9 @@
         "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
       ],
       "plan": {
-        "name": "cloudlens-vcontroller-6-14-0_89",
-        "publisher": "keysight-technologies-cloudlens",
-        "product": "keysight-cloudlens-vcontroller"
+        "name": "keysight_vision_orchestrator_3-0-0_55",
+        "publisher": "keysight-technologies-kvop",
+        "product": "keysight-vision-orchestrator"
       },
       "properties": {
         "hardwareProfile": { "vmSize": "[parameters('vmSize')]" },
@@ -224,21 +224,17 @@
     }
   ],
   "outputs": {
-    "clmsPublicIp": {
+    "kvoPublicIp": {
       "type": "string",
       "value": "[reference(variables('pipName')).ipAddress]"
     },
-    "clmsUiUrl": {
+    "kvoUiUrl": {
       "type": "string",
       "value": "[concat('https://', reference(variables('pipName')).ipAddress)]"
     },
-    "defaultCredentials": {
-      "type": "string",
-      "value": "admin / Cl0udLens@dm!n (change on first login)"
-    },
     "nextStep": {
       "type": "string",
-      "value": "[concat('vController (formerly CLMS) is initializing. The web UI will be reachable at https://', reference(variables('pipName')).ipAddress, ' within about 60 seconds; full system initialization takes around 15 minutes. Log in with admin / Cl0udLens@dm!n, create a Project, copy the project key, then return to https://keysight-tech.github.io/cloudlens-ansible-azure/ to deploy sensors.')]"
+      "value": "[concat('KVO is initializing. The web UI will be reachable at https://', reference(variables('pipName')).ipAddress, ' within about 60 seconds; full system initialization takes around 15 minutes. Refer to Keysight KVO documentation for the default UI credentials, then log in to register your vController and vPB fleets for centralized orchestration.')]"
     }
   }
 }

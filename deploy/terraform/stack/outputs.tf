@@ -13,27 +13,46 @@ output "region" {
 }
 
 ###############################################################################
-# CLMS
+# vController (formerly CLMS)
 ###############################################################################
 
 output "clms_public_ip" {
-  description = "Public IP of the CLMS VM."
+  description = "Public IP of the vController VM (output name kept for backward compatibility)."
   value       = module.clms.clms_public_ip
 }
 
 output "clms_ui_url" {
-  description = "HTTPS URL for the CLMS web UI."
+  description = "HTTPS URL for the vController web UI."
   value       = module.clms.clms_ui_url
 }
 
 output "clms_ssh_command" {
-  description = "SSH command for OS-level access to the CLMS VM."
+  description = "SSH command for OS-level access to the vController VM."
   value       = module.clms.ssh_command
 }
 
 output "clms_default_credentials" {
-  description = "Default CLMS web UI credentials. Change immediately on first login."
+  description = "Default vController web UI credentials. Change immediately on first login."
   value       = module.clms.default_credentials
+}
+
+###############################################################################
+# KVO (conditional)
+###############################################################################
+
+output "kvo_public_ip" {
+  description = "Public IP of the KVO VM. Null when deploy_kvo is false."
+  value       = var.deploy_kvo ? module.kvo[0].kvo_public_ip : null
+}
+
+output "kvo_ui_url" {
+  description = "HTTPS URL for the KVO web UI. Null when deploy_kvo is false."
+  value       = var.deploy_kvo ? module.kvo[0].kvo_ui_url : null
+}
+
+output "kvo_ssh_command" {
+  description = "SSH command for OS-level access to the KVO VM. Null when deploy_kvo is false."
+  value       = var.deploy_kvo ? module.kvo[0].ssh_command : null
 }
 
 ###############################################################################
@@ -70,5 +89,5 @@ output "vpb_private_ips" {
 
 output "next_step" {
   description = "What to do once the stack is up."
-  value       = "Open ${module.clms.clms_ui_url}, sign in with admin / Cl0udLens@dm!n, change the password, create a project, and copy the project key. Then run quickstart.sh to deploy sensors to your tagged VMs."
+  value       = "Open ${module.clms.clms_ui_url} (vController), sign in with admin / Cl0udLens@dm!n, change the password, create a project, and copy the project key. Then run quickstart.sh to deploy sensors to your tagged VMs.${var.deploy_kvo ? " For centralized fleet orchestration, also open the KVO UI." : ""}"
 }

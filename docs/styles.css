@@ -754,7 +754,27 @@ html[data-theme="dark"] .card.link:hover h3 { color: var(--accent-bright); }
 .prereq-section .lede { margin-bottom: 26px; }
 
 .prereq-cards {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 18px;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 18px;
+}
+@media (max-width: 1100px) {
+  .prereq-cards { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 720px) {
+  .prereq-cards { grid-template-columns: 1fr; }
+}
+.rebrand-tag, .new-tag {
+  display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; padding: 3px 8px; border-radius: 999px; margin-left: 6px;
+  vertical-align: middle;
+}
+.rebrand-tag {
+  background: oklch(80% 0.10 240 / .25); color: oklch(40% 0.18 240);
+  border: 1px solid oklch(60% 0.12 240 / .4);
+}
+.new-tag {
+  background: linear-gradient(180deg, oklch(65% 0.22 25), oklch(48% 0.22 25));
+  color: #FFFFFF; border: 1px solid oklch(38% 0.20 25);
+  box-shadow: inset 0 1px 0 oklch(100% 0 0 / .25);
 }
 .prereq-card {
   position: relative; border-radius: 24px; padding: 26px; overflow: hidden;
