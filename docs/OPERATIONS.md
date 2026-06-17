@@ -230,6 +230,33 @@ all three. If `username` is not a verb, try `user` or `auth`.
 
 Both happen one time at KVO bootstrap.
 
+**Known issue (vPB v3.15.0.13 in Azure, June 2026).** Even with everything
+above configured correctly, `show kvo` may stay `disconnected` because:
+
+- The vPB pod's `vpb-firewall` iptables chain appears to drop inbound
+  traffic from outside the pod's own K8s subnet, including from a peered
+  Azure VNet
+- The `kvo enable` CLI verb only whitelists the KVO IP - the actual
+  registration is initiated FROM KVO TO vPB on port 8443, which is then
+  silently rejected
+- KVO's `Adopt Auto Discovered Device` dialog stays empty because Azure
+  VNet peering does not forward the multicast announcements KVO normally
+  listens for
+
+**Workaround until Keysight engineering documents v3.15 fully:** the
+out-of-band visibility architecture (sensors -> vPB -> tool) works
+without KVO adoption. KVO is the optional fleet-management layer above
+multiple vPBs; the single-vPB demo proceeds without it. To prove the
+data path, configure vPB directly via the CLI (`interface ethN`,
+`vxlan`, `match-rule`, `write memory`) and ignore the KVO disconnected
+status for now.
+
+If you do need KVO adoption, open a Keysight TAC ticket with:
+- vPB version: `show version` from the CLI
+- The NSG rules on the vPB management NIC
+- The `vpb-firewall` iptables chain dump:
+  `sudo kubectl --kubeconfig=/etc/kubernetes/admin.conf exec -n default <pod> -c vpbsystem -- sudo iptables -L vpb-firewall -n`
+
 **Step 4: Confirm vPB is talking to KVO**
 
 ```text
