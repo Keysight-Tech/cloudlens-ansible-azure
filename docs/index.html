@@ -620,9 +620,12 @@ done</code></pre>
           <details class="faq-item">
             <summary>vPB just deployed. Why can't I SSH yet?</summary>
             <div class="faq-body">
-              <p><strong>Expected:</strong> vPB takes 10 to 15 minutes after the Azure deployment finishes before SSH on port 22 is reachable. The VM itself is up, but the internal CLI service and SSH daemon are still initializing.</p>
-              <p><strong>What to do:</strong> wait 15 minutes after deploy succeeds, then try <code>ssh azureuser@&lt;vpb-public-ip&gt;</code>. From there, two-hop into the CLI with <code>ssh admin@localhost -p 2222</code> (default password: <code>ixia</code>).</p>
-              <p><strong>Same applies to vController:</strong> the web UI on port 443 is usually ready within 60 seconds, but full system initialization (including the registry and project creation) takes around 15 minutes.</p>
+              <p><strong>The vPB image uses port 9022 for SSH, NOT the default port 22.</strong> Keysight CloudLens OS (KCOS) binds sshd only to <code>9022</code> on the public interface. Connections to <code>:22</code> will time out forever even after the VM is fully booted.</p>
+              <p><strong>What to do:</strong> wait 10-15 minutes after deploy succeeds for KCOS to initialize, then:</p>
+              <pre><code>ssh azureuser@&lt;vpb-public-ip&gt; -p 9022          # OS shell
+ssh admin@localhost -p 2222                       # vPB CLI (admin / ixia)</code></pre>
+              <p><strong>NSG rule:</strong> make sure your Network Security Group on the vPB management NIC allows inbound TCP on port 9022. The marketplace ARM template opens this automatically; if you deployed via a custom path, add the rule manually.</p>
+              <p><strong>Same vController initialization note:</strong> the web UI on port 443 is usually ready within 60 seconds, but full system initialization (including the registry and project creation) takes around 15 minutes.</p>
             </div>
           </details>
 

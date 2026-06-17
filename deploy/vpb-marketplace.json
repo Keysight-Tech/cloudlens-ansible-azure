@@ -18,7 +18,7 @@
       "type": "string",
       "defaultValue": "azureuser",
       "metadata": {
-        "description": "Linux admin username used for SSH access to the underlying VM. The vPB CLI uses its own separate admin account (admin / ixia) reachable as a two-hop SSH on port 2222."
+        "description": "Linux admin username used for SSH access to the underlying VM. KCOS-based vPB images expose OS-level SSH on port 9022 (NOT the default 22): ssh azureuser@<public-ip> -p 9022. The vPB CLI uses its own separate admin account (admin / ixia) reachable as a two-hop SSH on port 2222 from inside the OS shell."
       }
     },
     "adminPassword": {
@@ -140,6 +140,19 @@
               "sourcePortRange": "*",
               "destinationAddressPrefix": "*",
               "destinationPortRange": "22"
+            }
+          },
+          {
+            "name": "AllowKCOSSsh",
+            "properties": {
+              "priority": 105,
+              "protocol": "Tcp",
+              "access": "Allow",
+              "direction": "Inbound",
+              "sourceAddressPrefix": "*",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "9022"
             }
           },
           {

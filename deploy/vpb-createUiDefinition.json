@@ -46,7 +46,7 @@
             "type": "Microsoft.Compute.UserNameTextBox",
             "label": "Linux admin username",
             "defaultValue": "azureuser",
-            "toolTip": "OS-level admin user for SSH. The vPB CLI uses its own separate admin account (admin / ixia) reachable via two-hop SSH on port 2222.",
+            "toolTip": "OS-level admin user for SSH on port 9022 (KCOS images do NOT use port 22). The vPB CLI uses its own separate admin account (admin / ixia) reachable via two-hop SSH on port 2222 from inside the OS shell.",
             "osPlatform": "Linux",
             "constraints": {
               "required": true
