@@ -49,7 +49,7 @@
       </a>
       <nav class="primary-nav" aria-label="Primary">
         <a href="#full-stack">Full Stack</a>
-        <a href="#prereq-deploys">Deploy CLMS</a>
+        <a href="#prereq-deploys">Deploy vController / KVO / vPB</a>
         <a href="#start-here">Get Started</a>
         <a href="#why">Why</a>
         <a href="#wizard">Wizard</a>
@@ -129,14 +129,14 @@
     <section id="full-stack" class="full-stack-section">
       <div class="container">
         <h2>One command, full stack</h2>
-        <p class="lede">CLMS, vPB, and sensors. End to end. From a single paste.</p>
+        <p class="lede">vController, KVO, and vPB plus sensors. End to end. From a single paste.</p>
 
         <div class="full-stack-cmd-wrap">
           <pre id="full-stack-cmd"><code>curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/deploy/deploy-stack.sh | bash</code></pre>
           <button class="copy-btn" data-copy="full-stack-cmd" type="button" aria-label="Copy curl command">Copy</button>
         </div>
 
-        <p class="full-stack-note">Prompts for resource group and region, accepts Marketplace terms, deploys CLMS, waits for initialization, optionally adds vPB, and chains to sensor deployment. Run from Azure Cloud Shell or any machine with Azure CLI.</p>
+        <p class="full-stack-note">Prompts for resource group and region, accepts Marketplace terms, deploys vController, waits for initialization, optionally adds vPB, and chains to sensor deployment. Run from Azure Cloud Shell or any machine with Azure CLI.</p>
 
         <div class="full-stack-paths">
           <div class="path-card">
@@ -145,7 +145,7 @@
           </div>
           <div class="path-card">
             <h4><span class="path-icon" aria-hidden="true">&#128230;</span> Terraform Stack Module</h4>
-            <p>Single tfvars, both CLMS and vPB. Best for: IaC pipelines and repeatable infra.</p>
+            <p>Single tfvars, vController plus KVO and vPB. Best for: IaC pipelines and repeatable infra.</p>
 <pre><code>cd deploy/terraform/stack
 cp terraform.tfvars.example terraform.tfvars
 terraform init &amp;&amp; terraform apply</code></pre>
@@ -246,7 +246,7 @@ docker build -t cloudlens-ansible-azure .</code></pre>
 
         <details class="terraform-note">
           <summary>Prefer Terraform?</summary>
-          <p>Both CLMS and vPB are also available as Terraform modules in <code>deploy/terraform/</code>. Same marketplace images, IaC-friendly for pipelines and repeatable deployments.</p>
+          <p>vController, KVO, and vPB are all available as Terraform modules in <code>deploy/terraform/</code>. Same marketplace images, IaC-friendly for pipelines and repeatable deployments.</p>
           <pre><code>cd deploy/terraform/clms
 cp terraform.tfvars.example terraform.tfvars
 terraform init &amp;&amp; terraform apply</code></pre>
@@ -275,11 +275,11 @@ terraform init &amp;&amp; terraform apply</code></pre>
                 <p>You need these in place before deploying:</p>
                 <ul>
                   <li>Azure subscription with Reader and Virtual Machine Contributor roles</li>
-                  <li>CloudLens Manager (CLMS) deployed and reachable from your target VMs</li>
-                  <li>A project key from CLMS (Settings, Projects, API Keys)</li>
+                  <li>CloudLens vController (formerly CLMS) deployed and reachable from your target VMs</li>
+                  <li>A project key from vController (Settings, Projects, API Keys)</li>
                   <li>SSH key (for Linux targets) or admin password (for Windows targets)</li>
                 </ul>
-                <p class="callout">If you do not have CLMS deployed yet, use the <a href="#prereq-deploys">Deploy CLMS button above</a>.</p>
+                <p class="callout">If you do not have vController deployed yet, use the <a href="#prereq-deploys">Deploy vController button above</a>.</p>
               </div>
             </details>
           </li>
@@ -362,14 +362,14 @@ done</code></pre>
             <details>
               <summary>
                 <span class="step-icon" aria-hidden="true">&#9989;</span>
-                <span class="step-title">Verify in CLMS</span>
+                <span class="step-title">Verify in vController</span>
                 <span class="step-time">2 minutes</span>
               </summary>
               <div class="step-body">
-                <p>Open your CLMS web UI and confirm:</p>
+                <p>Open your vController web UI and confirm:</p>
                 <ul>
                   <li>Each tagged VM appears as a registered sensor (under Sensors)</li>
-                  <li>Custom tags from your config match what you see in CLMS</li>
+                  <li>Custom tags from your config match what you see in vController</li>
                   <li>Sensors show as connected and reporting</li>
                 </ul>
                 <p class="callout">Stuck? See the troubleshooting section below or the full <a href="https://github.com/Keysight-Tech/cloudlens-ansible-azure/blob/main/docs/TROUBLESHOOTING.md">troubleshooting docs</a>.</p>
@@ -423,26 +423,26 @@ done</code></pre>
         <div class="wizard-grid">
           <form class="wizard" id="wizard-form" autocomplete="off">
             <div class="step" data-step="1">
-              <div class="step-head"><span class="step-num">1</span><h3>CloudLens Manager</h3></div>
-              <label for="clms-ip">CLMS IP or FQDN</label>
+              <div class="step-head"><span class="step-num">1</span><h3>CloudLens vController</h3></div>
+              <label for="clms-ip">vController IP or FQDN</label>
               <input id="clms-ip" name="clms_ip" type="text" placeholder="10.0.0.10 or clms.example.com" value="10.0.0.10" required />
               <details class="field-help">
                 <summary>Where do I find this?</summary>
-                <p>The IP or hostname of your CloudLens Manager deployment. You can find it in your Azure Portal under the CLMS VM details, or in the output of your CLMS Terraform deployment.</p>
+                <p>The IP or hostname of your vController deployment. You can find it in your Azure Portal under the vController VM details, or in the output of your vController Terraform deployment.</p>
               </details>
             </div>
             <div class="step" data-step="2">
               <div class="step-head"><span class="step-num">2</span><h3>Project key</h3></div>
-              <label for="project-key">CLMS project API key</label>
+              <label for="project-key">vController project API key</label>
               <div class="input-row">
-                <input id="project-key" name="project_key" type="password" placeholder="paste from CLMS UI" value="" required />
+                <input id="project-key" name="project_key" type="password" placeholder="paste from vController UI" value="" required />
                 <button type="button" class="icon-btn small" id="toggle-key" aria-label="Show or hide key" title="Show or hide key">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
                 </button>
               </div>
               <details class="field-help">
                 <summary>Where do I find this?</summary>
-                <p>In CLMS web UI: Settings, Projects, API Keys, copy the key for the project you want sensors to register under.</p>
+                <p>In vController web UI: Settings, Projects, API Keys, copy the key for the project you want sensors to register under.</p>
               </details>
             </div>
             <div class="step" data-step="3">
@@ -451,7 +451,7 @@ done</code></pre>
               <input id="tags" name="tags" type="text" placeholder="Env=Azure,Region=eastus2" value="Env=Azure" />
               <details class="field-help">
                 <summary>What does this do?</summary>
-                <p>These tags are attached to each registered sensor and visible in CLMS. Use them to filter and group sensors (for example: Customer=Acme, Region=eastus2).</p>
+                <p>These tags are attached to each registered sensor and visible in vController. Use them to filter and group sensors (for example: Customer=Acme, Region=eastus2).</p>
               </details>
             </div>
             <div class="step" data-step="4">
@@ -507,12 +507,12 @@ done</code></pre>
       <div class="container">
         <header class="section-head">
           <h2>Live architecture flow</h2>
-          <p>A single Ansible control point authenticates to Azure, discovers VMs by tag, and routes each host to the right OS lane. Every sensor self registers with CLMS on first start.</p>
+          <p>A single Ansible control point authenticates to Azure, discovers VMs by tag, and routes each host to the right OS lane. Every sensor self registers with vController on first start.</p>
         </header>
         <div class="diagram-frame">
           <object data="assets/architecture-diagram.svg" type="image/svg+xml" aria-label="CloudLens Ansible Azure architecture diagram"></object>
         </div>
-        <p class="caption">Hover any block above to highlight the path. The dotted line shows sensor registration traffic back to CLMS.</p>
+        <p class="caption">Hover any block above to highlight the path. The dotted line shows sensor registration traffic back to vController.</p>
       </div>
     </section>
 
@@ -578,7 +578,7 @@ done</code></pre>
           <div class="metric">
             <strong>100%</strong>
             <span>Sensor registration rate</span>
-            <em>CLMS 6.14.141</em>
+            <em>vController 6.14.141</em>
           </div>
           <div class="metric">
             <strong>2026 06 02</strong>
@@ -594,7 +594,7 @@ done</code></pre>
               <tr><td>Ubuntu 22.04 (private IP via jumpbox)</td><td><span class="pill ok">Sensor running</span></td><td>4 min</td></tr>
               <tr><td>Ubuntu 22.04 (private IP via jumpbox)</td><td><span class="pill ok">Sensor running</span></td><td>4 min</td></tr>
               <tr><td>Windows Server 2022 (WinRM direct)</td><td><span class="pill ok">Sensor running</span></td><td>6 min</td></tr>
-              <tr><td>CLMS 6.14.141 registration</td><td><span class="pill ok">3/3 registered</span></td><td>&lt;1 min</td></tr>
+              <tr><td>vController 6.14.141 registration</td><td><span class="pill ok">3/3 registered</span></td><td>&lt;1 min</td></tr>
             </tbody>
           </table>
         </div>
@@ -611,9 +611,9 @@ done</code></pre>
 
         <div class="faq-grid">
           <details class="faq-item">
-            <summary>I don't have CLMS yet. Where do I start?</summary>
+            <summary>I don't have vController (formerly CLMS) yet. Where do I start?</summary>
             <div class="faq-body">
-              <p>Use the <a href="#prereq-deploys">Deploy CLMS button</a> at the top of this page. CLMS comes from Azure Marketplace, deploys in 15 minutes, and is ready before you start tagging your VMs.</p>
+              <p>Use the <a href="#prereq-deploys">Deploy vController button</a> at the top of this page. vController comes from Azure Marketplace, deploys in 15 minutes, and is ready before you start tagging your VMs. While you are there, also deploy <strong>KVO</strong> if you want centralized fleet orchestration across multiple vPB instances.</p>
             </div>
           </details>
 
@@ -622,7 +622,7 @@ done</code></pre>
             <div class="faq-body">
               <p><strong>Expected:</strong> vPB takes 10 to 15 minutes after the Azure deployment finishes before SSH on port 22 is reachable. The VM itself is up, but the internal CLI service and SSH daemon are still initializing.</p>
               <p><strong>What to do:</strong> wait 15 minutes after deploy succeeds, then try <code>ssh azureuser@&lt;vpb-public-ip&gt;</code>. From there, two-hop into the CLI with <code>ssh admin@localhost -p 2222</code> (default password: <code>ixia</code>).</p>
-              <p><strong>Same applies to CLMS:</strong> the web UI on port 443 is usually ready within 60 seconds, but full system initialization (including the registry and project creation) takes around 15 minutes.</p>
+              <p><strong>Same applies to vController:</strong> the web UI on port 443 is usually ready within 60 seconds, but full system initialization (including the registry and project creation) takes around 15 minutes.</p>
             </div>
           </details>
 
@@ -651,10 +651,10 @@ done</code></pre>
           </details>
 
           <details class="faq-item">
-            <summary>Sensor does not appear in CLMS</summary>
+            <summary>Sensor does not appear in vController</summary>
             <div class="faq-body">
-              <p><strong>Cause:</strong> wrong project key, or sensor cannot reach CLMS network.</p>
-              <p><strong>Fix:</strong> double-check the project key from CLMS UI. Verify the VM can reach CLMS on port 443.</p>
+              <p><strong>Cause:</strong> wrong project key, or sensor cannot reach vController network.</p>
+              <p><strong>Fix:</strong> double-check the project key from vController UI. Verify the VM can reach vController on port 443.</p>
             </div>
           </details>
 
