@@ -199,15 +199,19 @@ curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azur
 sudo chmod +x /usr/local/bin/vpb
 ```
 
-**Step 3: Tell vPB where KVO lives**
+**Step 3: Tell vPB where KVO lives, plus credentials**
 
-Enter the `kvo` submode and set the KVO IP. Use the **private IP** if the
-two VNets are peered (recommended), otherwise the public IP.
+Enter the `kvo` submode and set the IP, port, KVO user, and password. Use
+the **private IP** if the two VNets are peered (recommended). Always set
+credentials - without them, vPB shows `disconnected` even after `enable`
+because it cannot authenticate to KVO during the registration handshake.
 
 ```text
 CloudLensVPB# kvo
 CloudLensVPB-kvo# ip 10.60.1.4
 CloudLensVPB-kvo# port 443
+CloudLensVPB-kvo# username clms@keysight.com
+CloudLensVPB-kvo# password <kvo-user-password>
 CloudLensVPB-kvo# enable
 CloudLensVPB-kvo# exit
 CloudLensVPB#
@@ -216,7 +220,15 @@ CloudLensVPB#
 If your build does not accept `kvo` as a verb, type `?` at the
 `CloudLensVPB#` prompt to see what it does accept. On 3.14 builds it is
 `management-server`; on some 3.15 builds it is `orchestrator`. The submode
-fields (`ip`, `port`, `enable`) are the same across all three.
+fields (`ip`, `port`, `username`, `password`, `enable`) are the same across
+all three. If `username` is not a verb, try `user` or `auth`.
+
+**KVO side check.** Before this works, KVO must have:
+- `Live Settings > Remote Access URL` set to `https://<kvo-private-ip>`
+- A user (e.g. `clms@keysight.com`) created under `User Management` with the
+  `KVO User` role or higher
+
+Both happen one time at KVO bootstrap.
 
 **Step 4: Confirm vPB is talking to KVO**
 
