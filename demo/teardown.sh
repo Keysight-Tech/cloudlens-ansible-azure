@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # =====================================================================
-# NetRefer demo full teardown
+# CloudLens Azure Visibility Demo full teardown
 # =====================================================================
-# Nukes everything created by setup-netrefer-demo.sh. The KVO that was
+# Nukes everything created by setup-azure-visibility-demo.sh. The KVO that was
 # deployed earlier (kvo-test-rg) is left untouched - pass --include-kvo
 # to also tear that down.
 # =====================================================================

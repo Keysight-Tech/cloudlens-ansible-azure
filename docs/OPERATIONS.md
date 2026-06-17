@@ -316,12 +316,12 @@ configuration for both devices.
 
 ---
 
-## 5. vPB out-of-band traffic configuration for NetRefer-style demo
+## 5. vPB out-of-band traffic configuration for out-of-band visibility demo
 
 Once vPB is adopted and licensed, the actual packet broker config:
 
 ```text
-admin> hostname vpb-netrefer
+admin> hostname vpb-demo
 admin> eth1 ingress-mode ip,arp,icmp
 admin> eth1 ingress-filter vxlan port 4789 strip   # terminate sensor VXLAN
 admin> eth2 ingress-mode ip,arp,icmp
@@ -380,7 +380,7 @@ For the GWLB hairpin pattern (a separate use case), see
 |---|---|
 | `quickstart.sh` | Customer-facing one-command sensor deploy. Reads `customer_input.yaml`, runs `deploy.yaml` Ansible playbook. |
 | `deploy/deploy-stack.sh` | End-to-end Azure stack deploy: vController + KVO (optional) + vPB + sensors. The "Deploy to Azure" button on the site uses this. |
-| `demo/setup-netrefer-demo.sh` | NetRefer-style demo orchestrator: workload VMs + vController + KVO + vPB + Vectra mock + peerings, then runs `quickstart.sh`. |
+| `demo/setup-azure-visibility-demo.sh` | out-of-band visibility demo orchestrator: workload VMs + vController + KVO + vPB + Vectra mock + peerings, then runs `quickstart.sh`. |
 | `demo/teardown.sh` | Nuke the demo (three RGs). `--include-kvo` to also drop `kvo-test-rg`. |
 | `scripts/vcontroller_project_key.py` | Programmatic project + API key retrieval against the vController REST API (used by the demo orchestrator). |
 

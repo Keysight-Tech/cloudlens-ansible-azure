@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =====================================================================
-# NetRefer-style CloudLens Visibility Demo: end-to-end build
+# Keysight CloudLens Azure Visibility Demo Kit: end-to-end build
 # =====================================================================
 # Provisions everything a customer would have in a real deployment, then
 # runs the CUSTOMER-FACING automation (deploy-stack.sh ARM templates +
@@ -14,10 +14,10 @@
 #   - run-demo.sh generated for live walkthrough
 #
 # Usage:
-#   bash demo/setup-netrefer-demo.sh                     # full build
-#   bash demo/setup-netrefer-demo.sh --skip-workloads    # reuse existing VMs
-#   bash demo/setup-netrefer-demo.sh --skip-sensors      # don't run Ansible
-#   bash demo/setup-netrefer-demo.sh --teardown          # nuke everything
+#   bash demo/setup-azure-visibility-demo.sh                     # full build
+#   bash demo/setup-azure-visibility-demo.sh --skip-workloads    # reuse existing VMs
+#   bash demo/setup-azure-visibility-demo.sh --skip-sensors      # don't run Ansible
+#   bash demo/setup-azure-visibility-demo.sh --teardown          # nuke everything
 #
 # Teardown (~30s):
 #   az group delete -n demo-prod-rg -n demo-cloudlens-rg -n demo-vectra-rg --yes --no-wait
@@ -46,7 +46,7 @@ VECTRA_VNET_CIDR="10.200.0.0/16"
 VECTRA_SUBNET_CIDR="10.200.1.0/24"
 
 ADMIN_USER="azureuser"
-STATE_DIR="${HOME}/.netrefer-demo"
+STATE_DIR="${HOME}/.cloudlens-demo"
 mkdir -p "$STATE_DIR" && chmod 700 "$STATE_DIR"
 PASSWORD_FILE="${STATE_DIR}/admin_pw"
 
@@ -90,7 +90,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "$DO_TEARDOWN" == "true" ]]; then
-  banner "Tearing down NetRefer demo"
+  banner "Tearing down CloudLens Azure Visibility Demo"
   for rg in "$PROD_RG" "$CLOUDLENS_RG" "$VECTRA_RG"; do
     if az group show -n "$rg" >/dev/null 2>&1; then
       az group delete -n "$rg" --yes --no-wait
@@ -106,7 +106,7 @@ fi
 # ---------------------------------------------------------------------
 # Pre-flight
 # ---------------------------------------------------------------------
-banner "NetRefer Demo: end-to-end CloudLens visibility build"
+banner "CloudLens Azure Visibility Demo: end-to-end CloudLens visibility build"
 
 step "Phase 0: Pre-flight"
 command -v az >/dev/null || fail "az CLI not found"
@@ -114,7 +114,7 @@ az account show --query "{name:name, user:user.name}" -o tsv | head -1 | awk '{p
 SUB_ID=$(az account show --query id -o tsv)
 ok "Subscription confirmed"
 
-[[ -f ~/.ssh/id_rsa.pub ]] || fail "~/.ssh/id_rsa.pub missing — run ssh-keygen first"
+[[ -f ~/.ssh/id_rsa.pub ]] || fail "~/.ssh/id_rsa.pub missing : run ssh-keygen first"
 SSH_PUB_KEY=$(cat ~/.ssh/id_rsa.pub)
 ok "SSH public key ready"
 
@@ -144,7 +144,7 @@ for rg in "$PROD_RG" "$CLOUDLENS_RG" "$VECTRA_RG"; do
     ok "exists: $rg"
   else
     az group create -n "$rg" -l "$LOCATION" \
-      --tags purpose=netrefer-demo deployedBy=cloudlens-demo >/dev/null
+      --tags purpose=cloudlens-demo deployedBy=cloudlens-demo >/dev/null
     ok "created: $rg"
   fi
 done
@@ -213,7 +213,7 @@ else
       --ssh-key-values ~/.ssh/id_rsa.pub \
       --vnet-name "$PROD_VNET" --subnet "$PROD_SUBNET" \
       --public-ip-sku Standard \
-      --tags cloudlens=yes os=ubuntu env=prod purpose=netrefer-demo \
+      --tags cloudlens=yes os=ubuntu env=prod purpose=cloudlens-demo \
       --nsg "" --no-wait
     ok "deploying (async): $name"
   }
@@ -225,7 +225,7 @@ else
       --admin-username "$ADMIN_USER" --admin-password "$ADMIN_PW" \
       --vnet-name "$PROD_VNET" --subnet "$PROD_SUBNET" \
       --public-ip-sku Standard \
-      --tags cloudlens=yes os=windows env=prod purpose=netrefer-demo \
+      --tags cloudlens=yes os=windows env=prod purpose=cloudlens-demo \
       --nsg "" --no-wait
     ok "deploying (async): $name"
   }
@@ -297,11 +297,10 @@ else
         adminUsername="$ADMIN_USER" \
         adminPassword="$ADMIN_PW" \
         vmSize=Standard_D8s_v3 \
-        addressSpace=10.150.0.0/16 \
-        mgmtSubnetPrefix=10.150.2.0/24 \
-        ingressSubnetPrefix=10.150.3.0/24 \
-        egressSubnetPrefix=10.150.4.0/24 \
-        existingVnetName=vcontroller-vnet \
+        addressSpace=10.160.0.0/16 \
+        mgmtSubnetPrefix=10.160.2.0/24 \
+        ingressSubnetPrefix=10.160.3.0/24 \
+        egressSubnetPrefix=10.160.4.0/24 \
     --query "{state:properties.provisioningState}" -o tsv
   ok "vPB deployed"
 fi
@@ -344,7 +343,7 @@ CI
     --public-ip-sku Standard \
     --custom-data "$CLOUD_INIT" \
     --nsg-rule SSH \
-    --tags purpose=netrefer-demo role=vectra-mock >/dev/null
+    --tags purpose=cloudlens-demo role=vectra-mock >/dev/null
   rm -f "$CLOUD_INIT"
   ok "vectra-mock deployed"
 fi
@@ -355,20 +354,35 @@ ok "Vectra mock IP: $VECTRA_IP"
 # ---------------------------------------------------------------------
 # Phase 7: VNet peering so sensors can reach vPB
 # ---------------------------------------------------------------------
-step "Phase 7: VNet peering (workload <-> cloudlens-stack)"
+step "Phase 7: VNet peering (prod <-> vcontroller, prod <-> vpb, vpb <-> vectra)"
 peer_exists() { az network vnet peering show -g "$1" --vnet-name "$2" -n "$3" >/dev/null 2>&1; }
 PROD_VNET_ID=$(az network vnet show -g "$PROD_RG" -n "$PROD_VNET" --query id -o tsv)
-CL_VNET_ID=$(az network vnet show -g "$CLOUDLENS_RG" -n vcontroller-vnet --query id -o tsv)
-if ! peer_exists "$PROD_RG" "$PROD_VNET" prod-to-cloudlens; then
-  az network vnet peering create -g "$PROD_RG" --vnet-name "$PROD_VNET" -n prod-to-cloudlens \
-    --remote-vnet "$CL_VNET_ID" --allow-vnet-access >/dev/null
-  ok "peering created: prod -> cloudlens"
-fi
-if ! peer_exists "$CLOUDLENS_RG" vcontroller-vnet cloudlens-to-prod; then
-  az network vnet peering create -g "$CLOUDLENS_RG" --vnet-name vcontroller-vnet -n cloudlens-to-prod \
-    --remote-vnet "$PROD_VNET_ID" --allow-vnet-access >/dev/null
-  ok "peering created: cloudlens -> prod"
-fi
+VC_VNET_ID=$(az network vnet show -g "$CLOUDLENS_RG" -n vcontroller-vnet --query id -o tsv)
+VPB_VNET_ID=$(az network vnet show -g "$CLOUDLENS_RG" -n vpb-vnet --query id -o tsv)
+VECTRA_VNET_ID=$(az network vnet show -g "$VECTRA_RG" -n "$VECTRA_VNET" --query id -o tsv)
+
+make_peer() {
+  # rg_a vnet_a name_a remote_vnet_id
+  if ! peer_exists "$1" "$2" "$3"; then
+    az network vnet peering create -g "$1" --vnet-name "$2" -n "$3" \
+      --remote-vnet "$4" --allow-vnet-access >/dev/null
+    ok "peering created: $3"
+  else
+    ok "peering exists: $3"
+  fi
+}
+
+# prod <-> vcontroller (sensor control plane reachability)
+make_peer "$PROD_RG"      "$PROD_VNET"      prod-to-vcontroller "$VC_VNET_ID"
+make_peer "$CLOUDLENS_RG" vcontroller-vnet  vcontroller-to-prod "$PROD_VNET_ID"
+
+# prod <-> vpb (sensor VXLAN data plane to vPB ingress)
+make_peer "$PROD_RG"      "$PROD_VNET"      prod-to-vpb         "$VPB_VNET_ID"
+make_peer "$CLOUDLENS_RG" vpb-vnet          vpb-to-prod         "$PROD_VNET_ID"
+
+# vpb <-> vectra (vPB egress to Vectra mock)
+make_peer "$CLOUDLENS_RG" vpb-vnet          vpb-to-vectra       "$VECTRA_VNET_ID"
+make_peer "$VECTRA_RG"    "$VECTRA_VNET"    vectra-to-vpb       "$VPB_VNET_ID"
 
 # ---------------------------------------------------------------------
 # Phase 8: Project key + sensor deployment (the customer-facing path)
@@ -386,7 +400,7 @@ else
   PROJECT_KEY=$(VCONTROLLER_NEW_PASS="$ADMIN_PW" \
     python3 "${REPO_ROOT}/scripts/vcontroller_project_key.py" \
         --host "$VC_IP" \
-        --project "netrefer-demo" \
+        --project "cloudlens-demo" \
         --insecure 2>&1 1>/tmp/.project_key.out; cat /tmp/.project_key.out)
   rm -f /tmp/.project_key.out
   if [[ -z "$PROJECT_KEY" ]]; then
@@ -395,7 +409,7 @@ else
 
   Manual fallback:
   1. Open https://${VC_IP}, sign in admin / Cl0udLens@dm!n (or change-to password)
-  2. Projects -> Add Project, name it "netrefer-demo"
+  2. Projects -> Add Project, name it "cloudlens-demo"
   3. Open the project, copy the API key
 EOM
     read -rp "Paste the project key (or press Enter to skip): " PROJECT_KEY
@@ -407,7 +421,7 @@ EOM
     warn "Skipping sensor deployment"
   else
     cat > "${REPO_ROOT}/customer_input.yaml" <<YAML
-# Auto-generated by demo/setup-netrefer-demo.sh on $(date -u +%FT%TZ)
+# Auto-generated by demo/setup-azure-visibility-demo.sh on $(date -u +%FT%TZ)
 azure:
   subscription_id: "${SUB_ID}"
   tag_filters:
@@ -417,7 +431,7 @@ azure:
 cloudlens:
   manager_ip_or_fqdn: "${VC_IP}"
   project_key: "${PROJECT_KEY}"
-  custom_tags: "Customer=NetRefer Env=Demo Region=${LOCATION}"
+  custom_tags: "Customer=Demo Env=Demo Region=${LOCATION}"
   registry_type: "insecure"
   ssl_verify: "no"
   auto_update: "yes"
@@ -456,7 +470,7 @@ VECTRA_IP="${VECTRA_IP}"
 VPB_MGMT="${VPB_MGMT_IP}"
 APP_VM_IP=\$(az network public-ip show -g ${PROD_RG} -n app01-ubuntuPublicIP --query ipAddress -o tsv 2>/dev/null)
 
-echo "=== NetRefer CloudLens Visibility Demo ==="
+echo "=== Keysight CloudLens Azure Visibility Demo ==="
 echo ""
 echo "Slide 1 - The architecture"
 open "https://keysight-tech.github.io/cloudlens-ansible-azure/"
@@ -488,6 +502,22 @@ DEMO
 chmod +x "${REPO_ROOT}/demo/run-demo.sh"
 ok "run-demo.sh generated"
 
+# Cache the IPs so subsequent runs do not need to re-query Azure
+cat > "${STATE_DIR}/state.env" <<STATE
+# Sourced by run-demo.sh - regenerated on every successful build.
+VC_IP=${VC_IP}
+VPB_MGMT_IP=${VPB_MGMT_IP}
+VECTRA_IP=${VECTRA_IP}
+KVO_IP=20.230.15.87
+PROD_RG=${PROD_RG}
+CLOUDLENS_RG=${CLOUDLENS_RG}
+VECTRA_RG=${VECTRA_RG}
+ADMIN_USER=${ADMIN_USER}
+GENERATED=$(date -u +%FT%TZ)
+STATE
+chmod 600 "${STATE_DIR}/state.env"
+ok "Demo state cached to ${STATE_DIR}/state.env"
+
 # ---------------------------------------------------------------------
 # Phase 10: Final summary
 # ---------------------------------------------------------------------
@@ -511,7 +541,7 @@ Live walkthrough:
   bash demo/run-demo.sh
 
 Teardown (~30s):
-  bash demo/setup-netrefer-demo.sh --teardown
+  bash demo/setup-azure-visibility-demo.sh --teardown
 
 Cost estimate:
   vController D4s_v5     ~\$5/day
