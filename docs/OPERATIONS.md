@@ -161,29 +161,37 @@ Enter:
 Save. The vController device will heartbeat to KVO within ~30s and appear
 in KVO under `Devices > Adoptable`.
 
-### 4c. Add vPB to KVO
+### 4c. Add vPB to KVO (full 6-step walkthrough)
 
-**vPB v3.15 changed the CLI access model.** The classic
-`ssh admin@localhost -p 2222` from v3.14 is GONE - the vPB image now runs
-as a K8s pod cluster (KCOS), and the CLI (`/usr/local/bin/xf-client`) lives
-INSIDE a container called `vpbsystem`. Customers and SEs reach it via a
-`sudo vpb` wrapper that hides the kubectl ceremony.
+This is the entire flow from "just clicked Deploy on the marketplace" to
+"vPB shows up as Adopted in KVO". Six commands. Do them in order.
 
-**Step 1: Enter the vPB CLI**
-
-From the OS shell (`ssh azureuser@<vpb-public-ip> -p 9022`):
+**Step 1: SSH into the vPB OS shell** (port **9022**, not 22)
 
 ```bash
-sudo vpb                  # interactive CLI - lands at CloudLensVPB#
-sudo vpb -c "show version"  # one-shot command
+ssh azureuser@<vpb-public-ip> -p 9022
+# password: the adminPassword you set during the marketplace deploy
 ```
 
-The first invocation prompts to accept the Keysight EULA: type `n` to skip
-display, then `y` to accept. From then on you go straight to the
-`CloudLensVPB#` prompt.
+**Step 2: Enter the vPB CLI**
 
-The `sudo vpb` wrapper is installed at `/usr/local/bin/vpb` by the
-marketplace ARM template's cloud-init. If it is missing on an older deploy:
+```bash
+sudo vpb
+```
+
+You will see the Keysight EULA prompt the first time only:
+
+```
+YOU MUST ACCEPT THE KEYSIGHT SOFTWARE END USER LICENSE AGREEMENT (EULA) BEFORE PROCEEDING.
+Do you want to display the EULA here now?
+Please indicate: [y/n] n
+I have read the Keysight Software End User License Agreement and I agree to its terms.
+Please indicate: [y/n] y
+CloudLensVPB#
+```
+
+If `sudo vpb` is "command not found" on an older marketplace image, install
+the wrapper once:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/scripts/vpb-cli-wrapper.sh \
@@ -191,42 +199,65 @@ curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azur
 sudo chmod +x /usr/local/bin/vpb
 ```
 
-**Step 2: Point vPB at KVO**
+**Step 3: Tell vPB where KVO lives**
 
-Use the KVO **private IP** (e.g. `10.60.1.4`) since you peered the VNets
-during setup. Public IP `<kvo-public-ip>` works as a fallback if peering
-ever breaks, but private is cleaner.
-
-Inside `CloudLensVPB#` prompt, type `?` or `help` to discover the verb your
-build accepts. Across v3.15 builds we have seen:
+Enter the `kvo` submode and set the KVO IP. Use the **private IP** if the
+two VNets are peered (recommended), otherwise the public IP.
 
 ```text
-CloudLensVPB# management-server set ip 10.60.1.4
-CloudLensVPB# management-server set port 443
-CloudLensVPB# management-server enable
-CloudLensVPB# show management-server status     # waits for "connected"
+CloudLensVPB# kvo
+CloudLensVPB-kvo# ip 10.60.1.4
+CloudLensVPB-kvo# port 443
+CloudLensVPB-kvo# enable
+CloudLensVPB-kvo# exit
+CloudLensVPB#
 ```
 
-Or, on builds that renamed to `orchestrator`:
+If your build does not accept `kvo` as a verb, type `?` at the
+`CloudLensVPB#` prompt to see what it does accept. On 3.14 builds it is
+`management-server`; on some 3.15 builds it is `orchestrator`. The submode
+fields (`ip`, `port`, `enable`) are the same across all three.
+
+**Step 4: Confirm vPB is talking to KVO**
 
 ```text
-CloudLensVPB# orchestrator set ip 10.60.1.4
-CloudLensVPB# orchestrator enable
-CloudLensVPB# show orchestrator
+CloudLensVPB# show kvo
 ```
 
-**Step 3: Confirm in KVO**
+You should see status transition to `connected` within ~30 seconds. If it
+stays `disconnected`:
+- Check VNet peering between the vPB and KVO subnets is bidirectional
+- Confirm the vPB-mgmt NSG allows outbound to KVO on TCP/443
+- Confirm KVO's NSG allows inbound on TCP/443 from the vPB subnet
 
-KVO UI -> `Inventory` (or `Devices`) -> `Adopt Auto Discovered Device`.
-The vPB appears within ~30 seconds. Select it and click `Ok` to adopt.
+**Step 5: Adopt in KVO**
 
-**vPB v3.14 and earlier (legacy)** used direct SSH on port 2222 reached via
-two-hop:
+In the KVO UI (`https://<kvo-ip>`):
+
+- Left nav: `Inventory > Adopt Auto Discovered Device`
+- The vPB now appears in the `Devices Available` table
+- Check the box next to it, click `Ok`
+
+**Step 6: Activate the license**
+
+KVO UI: `Inventory > Licenses` (or `Live Settings > License Information`),
+select the vPB, apply the **vPB** license credit. The
+`License Manager Error` warning that appeared on the CLI disappears within
+~30 seconds.
+
+Same flow for **vController**: in the vController web UI, go to
+`Settings > Management Server`, enter KVO IP `10.60.1.4` + port `443`,
+save, then adopt in KVO.
+
+---
+
+### Legacy: vPB v3.14 and earlier
 
 ```text
-ssh azureuser@<vpb-public-ip>
-ssh admin@localhost -p 2222
+ssh azureuser@<vpb-public-ip>                # port 22 on v3.14
+ssh admin@localhost -p 2222                   # CLI on 2222 (removed in v3.15)
 admin> management-server set ip 10.60.1.4
+admin> management-server enable
 ```
 
 If you are on v3.14 (now end-of-life), upgrade to v3.15 to get the new
