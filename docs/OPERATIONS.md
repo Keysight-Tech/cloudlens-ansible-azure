@@ -15,7 +15,8 @@ of this doc is that nobody should ever burn the same hour twice.
 |---|---|---|---|---|---|
 | **vController** | TCP 443 (web UI), TCP 22 (Linux SSH) | n/a | `admin / Cl0udLens@dm!n` (force-change on first login) | n/a | ~15 min |
 | **KVO** | TCP 443 (web UI), TCP 22 (Linux SSH) | n/a | See Keysight KVO docs (operator must change immediately) | n/a | ~15 min |
-| **vPB** | TCP **9022** (Linux SSH on KCOS), TCP 443 (mgmt web), UDP 4789 (VXLAN), UDP 10800-10801 (Keysight VXLAN) | TCP 2222 (vPB CLI, localhost-only) | n/a | `admin / ixia` (force-change on first SSH) | 10-15 min |
+| **vPB v3.15+** | TCP **9022** (Linux SSH on KCOS), TCP 443 (mgmt web), TCP 30101 (vpb-shim NodePort), UDP 4789 (VXLAN), UDP 10800-10801 (Keysight VXLAN) | n/a (CLI on 2222 REMOVED in 3.15) | n/a | n/a (managed entirely from KVO) | 10-15 min |
+| **vPB v3.14 (legacy)** | TCP 22, TCP 443, UDP 4789, UDP 10800-10801 | TCP 2222 (vPB CLI, localhost-only) | n/a | `admin / ixia` (force-change on first SSH) | 10-15 min |
 | **Sensor** | n/a | n/a | n/a | n/a | <1 min |
 
 ### Why these are not the obvious defaults
@@ -24,9 +25,14 @@ of this doc is that nobody should ever burn the same hour twice.
   binds sshd to 9022 on the public NIC. A connection to `:22` will time out
   forever even after the VM is fully up. The marketplace ARM template now
   opens 9022 in the NSG automatically (`AllowKCOSSsh` rule).
-- **vPB CLI is on port 2222 from inside the OS shell, not externally.**
-  You must SSH into the OS shell first (port 9022), then hop with
-  `ssh admin@localhost -p 2222`. There is no direct external CLI access.
+- **vPB v3.15 moved the CLI inside a K8s pod.** v3.14 exposed a CLI on port
+  2222 from inside the OS shell, reached via two-hop SSH (`ssh azureuser@vpb
+  -p 9022` then `ssh admin@localhost -p 2222`). v3.15 stops that pod-external
+  sshd; the CLI binary (`/usr/local/bin/xf-client`) now lives inside the
+  `vpbsystem` K8s container. The marketplace ARM template installs a
+  `/usr/local/bin/vpb` wrapper at deploy time so customers just type
+  `sudo vpb` to land in `CloudLensVPB#`. Do NOT try `ssh -p 2222` on v3.15 -
+  it will time out.
 - **vController and KVO use port 22 normally**, but their web UI gates new
   sessions behind a EULA + first-login password change. Until you complete
   both in the browser, the REST API returns 405 and SSH returns "Permission
@@ -155,32 +161,76 @@ Enter:
 Save. The vController device will heartbeat to KVO within ~30s and appear
 in KVO under `Devices > Adoptable`.
 
-### 4c. Point vPB at KVO (CLI)
+### 4c. Add vPB to KVO
 
-SSH into the vPB CLI as described in section 2, then:
+**vPB v3.15 changed the CLI access model.** The classic
+`ssh admin@localhost -p 2222` from v3.14 is GONE - the vPB image now runs
+as a K8s pod cluster (KCOS), and the CLI (`/usr/local/bin/xf-client`) lives
+INSIDE a container called `vpbsystem`. Customers and SEs reach it via a
+`sudo vpb` wrapper that hides the kubectl ceremony.
+
+**Step 1: Enter the vPB CLI**
+
+From the OS shell (`ssh azureuser@<vpb-public-ip> -p 9022`):
+
+```bash
+sudo vpb                  # interactive CLI - lands at CloudLensVPB#
+sudo vpb -c "show version"  # one-shot command
+```
+
+The first invocation prompts to accept the Keysight EULA: type `n` to skip
+display, then `y` to accept. From then on you go straight to the
+`CloudLensVPB#` prompt.
+
+The `sudo vpb` wrapper is installed at `/usr/local/bin/vpb` by the
+marketplace ARM template's cloud-init. If it is missing on an older deploy:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/scripts/vpb-cli-wrapper.sh \
+  | sudo tee /usr/local/bin/vpb > /dev/null
+sudo chmod +x /usr/local/bin/vpb
+```
+
+**Step 2: Point vPB at KVO**
+
+Use the KVO **private IP** (e.g. `10.60.1.4`) since you peered the VNets
+during setup. Public IP `<kvo-public-ip>` works as a fallback if peering
+ever breaks, but private is cleaner.
+
+Inside `CloudLensVPB#` prompt, type `?` or `help` to discover the verb your
+build accepts. Across v3.15 builds we have seen:
 
 ```text
-# Replace 10.60.1.4 with your KVO private IP
+CloudLensVPB# management-server set ip 10.60.1.4
+CloudLensVPB# management-server set port 443
+CloudLensVPB# management-server enable
+CloudLensVPB# show management-server status     # waits for "connected"
+```
+
+Or, on builds that renamed to `orchestrator`:
+
+```text
+CloudLensVPB# orchestrator set ip 10.60.1.4
+CloudLensVPB# orchestrator enable
+CloudLensVPB# show orchestrator
+```
+
+**Step 3: Confirm in KVO**
+
+KVO UI -> `Inventory` (or `Devices`) -> `Adopt Auto Discovered Device`.
+The vPB appears within ~30 seconds. Select it and click `Ok` to adopt.
+
+**vPB v3.14 and earlier (legacy)** used direct SSH on port 2222 reached via
+two-hop:
+
+```text
+ssh azureuser@<vpb-public-ip>
+ssh admin@localhost -p 2222
 admin> management-server set ip 10.60.1.4
-admin> management-server set port 443
-admin> management-server enable
-admin> show management-server status
 ```
 
-The `show management-server status` output transitions from `disconnected` to
-`connected` within ~30 seconds when the peering, NSGs, and KVO credentials
-align.
-
-**Older vPB builds (3.14.x and earlier)** used the verb `orchestrator` instead
-of `management-server`:
-
-```text
-admin> orchestrator set ip 10.60.1.4
-admin> orchestrator set port 443
-admin> orchestrator enable
-```
-
-When in doubt, type `?` at the CLI prompt to list the verbs your build accepts.
+If you are on v3.14 (now end-of-life), upgrade to v3.15 to get the new
+`sudo vpb` wrapper and the KVO-driven adoption flow.
 
 ### 4d. Adopt + license in KVO
 
