@@ -77,7 +77,24 @@ fi
 source "$WORK_DIR/.venv/bin/activate"
 pip install --quiet ansible-core>=2.16 pywinrm requests-ntlm azure-identity azure-mgmt-compute azure-mgmt-network azure-mgmt-resource msgraph-core
 ansible-galaxy collection install azure.azcollection ansible.windows community.windows --upgrade -q 2>&1 | tail -2
-pip install --quiet -r ~/.ansible/collections/ansible_collections/azure/azcollection/requirements.txt 2>/dev/null || true
+
+# Install azcollection's FULL Python requirements (azure-storage-blob,
+# azure-storage-fileshare, azure-mgmt-notificationhubs, msgraph-sdk, ...).
+# These are NOT optional - the azure_rm inventory plugin silently fails to
+# load AzureCliCredential when any of them are missing, which manifests as
+# "name 'AzureCliCredential' is not defined" with no useful hint.
+REQ_FILE=~/.ansible/collections/ansible_collections/azure/azcollection/requirements.txt
+if [[ -f "$REQ_FILE" ]]; then
+  pip install --quiet -r "$REQ_FILE" || warn "azcollection requirements partial install (some packages may be missing - inventory plugin may fail)"
+fi
+
+# Default to az-CLI auth source when a service principal env is not present.
+# Without this, the Ansible azure_rm inventory plugin tries SP auth, fails,
+# and exits with a misleading "name 'client_secret' is not defined" error.
+if [[ -z "${AZURE_CLIENT_ID:-}${ARM_CLIENT_ID:-}" ]]; then
+  export ANSIBLE_AZURE_AUTH_SOURCE=cli
+  note "Using Azure CLI auth (ANSIBLE_AZURE_AUTH_SOURCE=cli)"
+fi
 ok "Ansible + Azure collections installed"
 
 # =====================================================================

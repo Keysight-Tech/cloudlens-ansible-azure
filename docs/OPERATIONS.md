@@ -374,6 +374,28 @@ For the GWLB hairpin pattern (a separate use case), see
 
 ---
 
+## 7a. Operator gotchas when running quickstart.sh from your laptop
+
+The customer-facing path is **Cloud Shell** (`curl quickstart.sh | bash`) where
+Azure CLI auth is automatic and Python deps land in a clean venv. SE operators
+running the same flow from a laptop sometimes hit these:
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `name 'AzureCliCredential' is not defined` from azure_rm inventory | The azcollection's `requirements.txt` did NOT fully install (silent pip failure) | `pip install -r ~/.ansible/collections/ansible_collections/azure/azcollection/requirements.txt` and look at every line |
+| `name 'client_secret' is not defined` from azure_rm inventory | Plugin defaults to SP auth but no SP env vars are set | `export ANSIBLE_AZURE_AUTH_SOURCE=cli` (quickstart.sh v1.1+ does this for you when no SP is in env) |
+| `ModuleNotFoundError: No module named 'azure.storage.blob'` | azcollection requirements include packages outside the headline list | Same as the first row: install the full `requirements.txt` |
+| `ERROR! A worker was found in a dead state` on macOS for Windows VMs | macOS `fork()` safety check + pywinrm | `export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` and add `--forks 1` to ansible-playbook |
+| `az vm run-command invoke` errors with `keyvault DATA_KEYVAULT` | The Azure CLI install is broken (often a pyenv + pip-installed azure-cli mismatch) | Use the Homebrew `az` binary (`/opt/homebrew/bin/az`) instead of the pyenv-shimmed one |
+| `Permission denied (publickey,password)` when SSHing to Linux VMs with a known-good password | Trailing newline in the password file you `cat`'d | `cat pwfile \| tr -d '\n'` or check `wc -c pwfile` matches the password length exactly |
+| WinRM is open in NSG but Ansible says timeout | The VM's Windows Firewall has its own block | `az vm run-command invoke ... --command-id RunPowerShellScript --scripts 'winrm quickconfig -force; Enable-PSRemoting -Force; New-NetFirewallRule -DisplayName WinRM-HTTP -Direction Inbound -Protocol TCP -LocalPort 5985 -Action Allow'` |
+
+These are exactly what we hit during the lab build. Quickstart.sh now
+handles the first two automatically; the rest are operator-environment
+specific so they live here in OPERATIONS.md.
+
+---
+
 ## 8. The runbook scripts
 
 | Script | Purpose |
