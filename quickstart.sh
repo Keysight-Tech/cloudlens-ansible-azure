@@ -3,26 +3,35 @@
 # CloudLens Ansible for Azure: One-Command Quickstart
 # =====================================================================
 # Works in: Azure Cloud Shell, Linux laptop, macOS, WSL
-# Deploys CloudLens sensors to ALL Azure VMs tagged cloudlens=yes
-# Supports: Ubuntu, RHEL, Windows VMs across resource groups & regions
-# Scales: 1 VM to 5,000+ VMs (auto-tunes forks based on VM count)
+# Deploys CloudLens sensors to ALL Azure VMs matched by tag filters
+# Supports: Ubuntu, RHEL, Windows VMs across resource groups and regions
+# Scales: 1 VM to 5,000+ VMs (auto-tunes forks from VM count + CPU cores)
 #
 # Usage:
 #   curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/quickstart.sh | bash
 #   OR
-#   ./quickstart.sh
+#   bash quickstart.sh
+#
+# Everything below is overridable via environment variable. Nothing is
+# hardcoded that a customer would reasonably want to change.
 # =====================================================================
 set -euo pipefail
 
-REPO_URL="https://github.com/Keysight-Tech/cloudlens-ansible-azure.git"
+# ---- Overridable runtime config ----
+REPO_URL="${CLOUDLENS_REPO_URL:-https://github.com/Keysight-Tech/cloudlens-ansible-azure.git}"
 WORK_DIR="${CLOUDLENS_WORK_DIR:-$HOME/cloudlens-ansible-azure}"
 BRANCH="${CLOUDLENS_BRANCH:-main}"
+INVENTORY="${CLOUDLENS_INVENTORY:-inventory/azure_rm.yaml}"
+PLAYBOOK="${CLOUDLENS_PLAYBOOK:-deploy.yaml}"
+ASSUME_YES="${CLOUDLENS_ASSUME_YES:-false}"
 
-C_GREEN='\033[0;32m'; C_YELLOW='\033[1;33m'; C_BLUE='\033[0;34m'; C_RED='\033[0;31m'; C_RESET='\033[0m'
+# ---- Helpers ----
+C_GREEN='\033[0;32m'; C_YELLOW='\033[1;33m'; C_BLUE='\033[0;34m'; C_RED='\033[0;31m'; C_DIM='\033[2m'; C_RESET='\033[0m'
 banner() { echo -e "${C_BLUE}╔══════════════════════════════════════════════════════════════╗${C_RESET}"; echo -e "${C_BLUE}║  $1${C_RESET}"; echo -e "${C_BLUE}╚══════════════════════════════════════════════════════════════╝${C_RESET}"; }
 ok()     { echo -e "${C_GREEN}✓${C_RESET} $1"; }
 warn()   { echo -e "${C_YELLOW}⚠${C_RESET} $1"; }
 fail()   { echo -e "${C_RED}✗${C_RESET} $1"; exit 1; }
+note()   { echo -e "${C_DIM}  $1${C_RESET}"; }
 step()   { echo -e "${C_BLUE}━━━ $1 ━━━${C_RESET}"; }
 
 # =====================================================================
@@ -36,33 +45,22 @@ if [[ -n "${AZUREPS_HOST_ENVIRONMENT:-}" ]] || [[ "${ACC_CLOUD:-}" == "PROD" ]] 
   IN_CLOUD_SHELL=true
   ok "Detected: Azure Cloud Shell (zero local install needed)"
 else
-  ok "Detected: Local machine ($(uname -s))"
+  ok "Detected: Local machine ($(uname -s) $(uname -m))"
 fi
+
+CPU_CORES="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
+note "CPU cores available: $CPU_CORES"
 
 # =====================================================================
 # Step 2: Install dependencies (idempotent)
 # =====================================================================
 step "Installing dependencies"
 
-install_pkg() {
-  local pkg="$1"
-  if command -v "$pkg" >/dev/null 2>&1; then ok "$pkg installed"; return 0; fi
-  if [[ "$IN_CLOUD_SHELL" == "true" ]]; then
-    pip install --quiet --user "$pkg" || warn "Could not install $pkg"
-  elif command -v apt-get >/dev/null 2>&1; then
-    sudo apt-get install -y -qq "$pkg"
-  elif command -v brew >/dev/null 2>&1; then
-    brew install -q "$pkg"
-  elif command -v yum >/dev/null 2>&1; then
-    sudo yum install -y -q "$pkg"
-  fi
-}
-
-# Azure CLI
+# Azure CLI presence check
 if ! command -v az >/dev/null 2>&1; then
   warn "Azure CLI not found"
   if [[ "$IN_CLOUD_SHELL" == "false" ]]; then
-    echo "Install: https://learn.microsoft.com/cli/azure/install-azure-cli"
+    echo "  Install: https://learn.microsoft.com/cli/azure/install-azure-cli"
     fail "Install Azure CLI and re-run"
   fi
 fi
@@ -75,22 +73,32 @@ if [[ ! -d "$WORK_DIR/.venv" ]]; then
   "$WORK_DIR/.venv/bin/pip" install --quiet --upgrade pip
 fi
 source "$WORK_DIR/.venv/bin/activate"
-pip install --quiet ansible-core>=2.16 pywinrm requests-ntlm azure-identity azure-mgmt-compute azure-mgmt-network azure-mgmt-resource msgraph-core
+
+# Quote 'ansible-core>=2.16' so bash does not interpret >= as a redirect
+pip install --quiet \
+  'ansible-core>=2.16' \
+  pywinrm \
+  requests-ntlm \
+  azure-identity \
+  azure-mgmt-compute \
+  azure-mgmt-network \
+  azure-mgmt-resource \
+  msgraph-core
+
 ansible-galaxy collection install azure.azcollection ansible.windows community.windows --upgrade -q 2>&1 | tail -2
 
-# Install azcollection's FULL Python requirements (azure-storage-blob,
-# azure-storage-fileshare, azure-mgmt-notificationhubs, msgraph-sdk, ...).
-# These are NOT optional - the azure_rm inventory plugin silently fails to
-# load AzureCliCredential when any of them are missing, which manifests as
-# "name 'AzureCliCredential' is not defined" with no useful hint.
-REQ_FILE=~/.ansible/collections/ansible_collections/azure/azcollection/requirements.txt
+# azcollection's FULL Python requirements are NOT optional. The azure_rm
+# inventory plugin silently fails to load AzureCliCredential when any of
+# them are missing, which manifests as "name 'AzureCliCredential' is not
+# defined" with no useful hint.
+REQ_FILE="$HOME/.ansible/collections/ansible_collections/azure/azcollection/requirements.txt"
 if [[ -f "$REQ_FILE" ]]; then
-  pip install --quiet -r "$REQ_FILE" || warn "azcollection requirements partial install (some packages may be missing - inventory plugin may fail)"
+  pip install --quiet -r "$REQ_FILE" || warn "azcollection requirements partial install (inventory plugin may fail)"
 fi
 
-# Default to az-CLI auth source when a service principal env is not present.
-# Without this, the Ansible azure_rm inventory plugin tries SP auth, fails,
-# and exits with a misleading "name 'client_secret' is not defined" error.
+# Default to az-CLI auth source when no service principal env is present.
+# Without this the inventory plugin tries SP auth, fails, and exits with
+# a misleading "name 'client_secret' is not defined" error.
 if [[ -z "${AZURE_CLIENT_ID:-}${ARM_CLIENT_ID:-}" ]]; then
   export ANSIBLE_AZURE_AUTH_SOURCE=cli
   note "Using Azure CLI auth (ANSIBLE_AZURE_AUTH_SOURCE=cli)"
@@ -103,7 +111,7 @@ ok "Ansible + Azure collections installed"
 step "Fetching CloudLens Ansible repo"
 if [[ -d "$WORK_DIR/.git" ]]; then
   cd "$WORK_DIR" && git fetch -q && git reset -q --hard "origin/$BRANCH"
-  ok "Repo updated"
+  ok "Repo updated to origin/$BRANCH"
 else
   git clone -q -b "$BRANCH" "$REPO_URL" "$WORK_DIR"
   ok "Repo cloned to $WORK_DIR"
@@ -111,13 +119,11 @@ fi
 cd "$WORK_DIR"
 
 # =====================================================================
-# Step 4: Azure auth (Cloud Shell skips, others use SP)
+# Step 4: Azure authentication (auto-detect)
 # =====================================================================
 step "Azure authentication"
 if [[ "$IN_CLOUD_SHELL" == "true" ]]; then
-  ok "Cloud Shell auto-authenticated (no SP needed)"
-  export AZURE_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
-  export AZURE_TENANT="$(az account show --query tenantId -o tsv)"
+  ok "Cloud Shell auto-authenticated"
 elif [[ -n "${AZURE_CLIENT_ID:-}" ]]; then
   ok "Service Principal env vars already set"
 elif [[ -f azure_sp_creds.json ]]; then
@@ -125,93 +131,160 @@ elif [[ -f azure_sp_creds.json ]]; then
   export AZURE_CLIENT_ID=$(python3 -c "import json; print(json.load(open('azure_sp_creds.json'))['appId'])")
   export AZURE_SECRET=$(python3 -c "import json; print(json.load(open('azure_sp_creds.json'))['password'])")
   export AZURE_TENANT=$(python3 -c "import json; print(json.load(open('azure_sp_creds.json'))['tenant'])")
-  export AZURE_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+elif az account show >/dev/null 2>&1; then
+  ok "Using existing az login session"
 else
-  warn "No Service Principal credentials found"
-  echo "Run: bash scripts/setup_azure_sp.sh"
-  exit 1
+  warn "No Azure credentials found"
+  echo "  Run one of:"
+  echo "    az login --use-device-code            # personal / interactive"
+  echo "    bash scripts/setup_azure_sp.sh        # service principal"
+  fail "Authenticate to Azure and re-run"
+fi
+
+# Auto-discover subscription + tenant from active session
+AUTO_SUB="$(az account show --query id -o tsv 2>/dev/null || echo '')"
+AUTO_TENANT="$(az account show --query tenantId -o tsv 2>/dev/null || echo '')"
+AUTO_SUB_NAME="$(az account show --query name -o tsv 2>/dev/null || echo '')"
+
+if [[ -n "$AUTO_SUB" ]]; then
+  export AZURE_SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID:-$AUTO_SUB}"
+  export AZURE_TENANT="${AZURE_TENANT:-$AUTO_TENANT}"
+  ok "Active subscription: $AUTO_SUB_NAME ($AUTO_SUB)"
 fi
 
 # =====================================================================
-# Step 5: Get customer input
+# Step 5: Customer input (env first, prompt only what is missing)
 # =====================================================================
 step "Gathering deployment configuration"
 if [[ -f customer_input.yaml ]]; then
   ok "Using existing customer_input.yaml"
 else
-  echo "No customer_input.yaml found. Starting interactive setup:"
   cp customer_input.yaml.example customer_input.yaml
-  read -rp "CLMS IP or FQDN: " clms_ip
-  read -rp "Project key: " proj_key
-  read -rp "Custom tags (e.g. 'Env=Azure Customer=Acme'): " ctags
-  read -rp "Resource group(s) comma-separated (or leave blank for ALL): " rgs
-  sed -i.bak "s|REPLACE_WITH_PROJECT_KEY|$proj_key|; s|clms.customer.example.com|$clms_ip|; s|Env=Azure Region=eastus2 Customer=Acme|$ctags|" customer_input.yaml
-  rm -f customer_input.yaml.bak
-  ok "customer_input.yaml created"
+
+  # Pull from env when set; only prompt for what is still missing
+  VCTRL_IP="${CLOUDLENS_MANAGER_IP:-}"
+  PROJ_KEY="${CLOUDLENS_PROJECT_KEY:-}"
+  CTAGS="${CLOUDLENS_CUSTOM_TAGS:-}"
+
+  if [[ -z "$VCTRL_IP" ]]; then
+    read -rp "vController IP or FQDN: " VCTRL_IP
+  fi
+  if [[ -z "$PROJ_KEY" ]]; then
+    read -rp "Project key (vController > Projects > API Keys): " PROJ_KEY
+  fi
+  if [[ -z "$CTAGS" ]]; then
+    read -rp "Custom tags [Env=Azure Customer=Acme]: " CTAGS
+    CTAGS="${CTAGS:-Env=Azure Customer=Acme}"
+  fi
+
+  # Write all three placeholders. Python avoids portable-sed pain on macOS.
+  python3 - "$VCTRL_IP" "$PROJ_KEY" "$CTAGS" "$AZURE_SUBSCRIPTION_ID" "$AZURE_TENANT" <<'PY'
+import sys, pathlib
+p = pathlib.Path("customer_input.yaml")
+t = p.read_text()
+ip, key, tags, sub, tenant = sys.argv[1:6]
+t = t.replace("clms.customer.example.com", ip)
+t = t.replace("REPLACE_WITH_PROJECT_KEY", key)
+t = t.replace("Env=Azure Region=eastus2 Customer=Acme", tags)
+if sub:
+    t = t.replace("00000000-0000-0000-0000-000000000000", sub, 1)
+if tenant:
+    t = t.replace("00000000-0000-0000-0000-000000000000", tenant, 1)
+p.write_text(t)
+PY
+  ok "customer_input.yaml generated (subscription + tenant auto-filled)"
 fi
 
+# Extract values back out for the rest of the script
+VCONTROLLER_IP="$(python3 -c "import yaml,sys; print(yaml.safe_load(open('customer_input.yaml'))['cloudlens']['manager_ip_or_fqdn'])" 2>/dev/null || echo '')"
+
 # =====================================================================
-# Step 6: Discover VMs + auto-tune scale
+# Step 6: Discover VMs (robust JSON parse, not fragile graph regex)
 # =====================================================================
 step "Discovering tagged VMs"
-ansible-inventory -i inventory/azure_rm.yaml --graph 2>&1 | tee /tmp/cl_inv.txt | head -30
 
-VM_COUNT=$(grep -c -E "^  \|  \|--" /tmp/cl_inv.txt || echo 0)
-ok "$VM_COUNT VMs discovered with cloudlens=yes tag"
+INV_JSON="$(ansible-inventory -i "$INVENTORY" --list 2>/dev/null || echo '{}')"
+VM_COUNT="$(printf '%s' "$INV_JSON" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(len(d.get("_meta",{}).get("hostvars",{})))')"
 
 if (( VM_COUNT == 0 )); then
-  fail "No VMs found. Tag your VMs:
-  az vm update -g <RG> -n <VM> --set tags.cloudlens=yes tags.os=ubuntu tags.env=prod"
+  ansible-inventory -i "$INVENTORY" --graph 2>&1 | head -20
+  fail "No VMs matched the tag filters in customer_input.yaml.
+  Tag your VMs:
+    az vm update -g <RG> -n <VM> --set tags.cloudlens=yes tags.os=ubuntu tags.env=prod"
+fi
+ok "$VM_COUNT VMs discovered"
+
+# Show the OS breakdown (debug-friendly)
+printf '%s' "$INV_JSON" | python3 -c '
+import json, sys, collections
+d = json.load(sys.stdin)
+hv = d.get("_meta", {}).get("hostvars", {})
+osc = collections.Counter()
+for h, v in hv.items():
+    osd = (v.get("os_disk", {}) or {}).get("os_type") or v.get("os_profile", {}).get("admin_username", "?")
+    osc[osd] += 1
+for k, v in osc.items():
+    print(f"  - {k}: {v}")
+' 2>/dev/null || true
+
+# Auto-tune forks from VM count AND CPU cores (whichever is more constraining)
+if   (( VM_COUNT <= 50 ));    then BASE_FORKS=20
+elif (( VM_COUNT <= 500 ));   then BASE_FORKS=50
+elif (( VM_COUNT <= 2000 ));  then BASE_FORKS=200
+else                                BASE_FORKS=500
 fi
 
-# Auto-tune forks based on scale
-if   (( VM_COUNT <= 50 ));    then FORKS=20
-elif (( VM_COUNT <= 500 ));   then FORKS=50
-elif (( VM_COUNT <= 2000 ));  then FORKS=200
-else                                FORKS=500
-fi
+# Cap parallelism at 4x CPU cores to avoid IO thrash on small boxes
+CORE_CAP=$(( CPU_CORES * 4 ))
+if (( BASE_FORKS > CORE_CAP )); then BASE_FORKS=$CORE_CAP; fi
 
-# Use shard mode for thousands
+FORKS="${ANSIBLE_FORKS:-$BASE_FORKS}"
+
 USE_SHARD=false
 if (( VM_COUNT > 2000 )); then
   USE_SHARD=true
-  ok "Auto-enabling SHARDED mode (VM count > 2000)"
+  note "Auto-enabling SHARDED mode (VM count > 2000)"
 fi
 
-echo
-echo "Scale plan: $VM_COUNT VMs, $FORKS parallel forks $([ "$USE_SHARD" == "true" ] && echo ', sharded')"
+# =====================================================================
+# Step 7: Pre-flight summary + confirm
+# =====================================================================
+step "Pre-flight summary"
+echo "  Subscription   : ${AUTO_SUB_NAME:-?} ($AZURE_SUBSCRIPTION_ID)"
+echo "  vController    : $VCONTROLLER_IP"
+echo "  VMs in scope   : $VM_COUNT"
+echo "  Parallel forks : $FORKS  (cap: $CORE_CAP from $CPU_CORES cores)"
+echo "  Sharded run    : $USE_SHARD"
+echo "  Inventory      : $INVENTORY"
+echo "  Playbook       : $PLAYBOOK"
 echo
 
-# =====================================================================
-# Step 7: Confirmation
-# =====================================================================
-read -rp "Proceed with deployment to $VM_COUNT VMs? [y/N] " confirm
-[[ "${confirm,,}" == "y" ]] || { warn "Cancelled"; exit 0; }
+if [[ "$ASSUME_YES" != "true" ]] && [[ "$ASSUME_YES" != "1" ]] && [[ "$ASSUME_YES" != "yes" ]]; then
+  read -rp "Proceed with deployment? [y/N] " confirm
+  [[ "${confirm,,}" == "y" ]] || { warn "Cancelled"; exit 0; }
+fi
 
 # =====================================================================
 # Step 8: Deploy
 # =====================================================================
 step "Deploying CloudLens sensors"
+export ANSIBLE_FORKS="$FORKS"
+export ANSIBLE_HOST_KEY_CHECKING=False
+export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES   # macOS WinRM forks fix
 
 if [[ "$USE_SHARD" == "true" ]]; then
   bash deploy/shard.sh "$VM_COUNT" "$FORKS"
 else
-  export ANSIBLE_FORKS="$FORKS"
-  export ANSIBLE_HOST_KEY_CHECKING=False
-  export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES   # macOS
-  ansible-playbook -i inventory/azure_rm.yaml deploy.yaml -e "@customer_input.yaml" --forks "$FORKS"
+  ansible-playbook -i "$INVENTORY" "$PLAYBOOK" -e "@customer_input.yaml" --forks "$FORKS"
 fi
 
 # =====================================================================
 # Step 9: Verify + report
 # =====================================================================
-step "Deployment complete: verifying"
-
-CLMS_IP=$(grep -E "^\s*manager_ip_or_fqdn:" customer_input.yaml | awk '{print $2}' | tr -d '"')
-banner "Done. Log into CLMS to verify sensors"
+step "Deployment complete"
+banner "Done. Log into vController to verify sensors"
 echo
-echo "  CLMS UI:    https://$CLMS_IP"
-echo "  Sensors:    $VM_COUNT registered (expected)"
-echo "  Filter by:  custom_tag=$(grep custom_tags customer_input.yaml | awk -F'"' '{print $2}')"
-echo "  Cleanup:    bash scripts/cleanup.sh"
+echo "  vController UI : https://$VCONTROLLER_IP"
+echo "  Sensors        : $VM_COUNT registered (expected)"
+echo "  Cleanup        : bash scripts/cleanup.sh"
 echo
