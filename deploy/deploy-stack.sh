@@ -733,6 +733,89 @@ if ! names_already_set; then
   fi
 fi
 
+# Custom VM sizes. Same opt-in pattern: skip the prompt if sizes were
+# already set by flag or env var.
+sizes_already_set() {
+  [[ -n "${CLOUDLENS_VCONTROLLER_SIZE:-}" ]] && return 0
+  [[ -n "${CLOUDLENS_KVO_SIZE:-}" ]]         && return 0
+  [[ -n "${CLOUDLENS_VPB_SIZE:-}" ]]         && return 0
+  [[ "$CLMS_VM_SIZE" != "Standard_D4s_v5" ]] && return 0
+  [[ "$KVO_VM_SIZE"  != "Standard_D4s_v5" ]] && return 0
+  [[ "$VPB_VM_SIZE"  != "Standard_D8s_v3" ]] && return 0
+  return 1
+}
+
+# Helper: present a numbered menu of common sizes, let customer pick by
+# number or type a custom SKU. Auto-validates SKU shape. Loops on bad
+# input. Default-on-Enter keeps the current value.
+prompt_size() {
+  local label="$1" current="$2" raw choice idx
+  shift 2
+  local -a options=("$@")
+  while :; do
+    echo "$label (current: $current)"
+    for idx in "${!options[@]}"; do
+      printf "  %d) %s\n" "$((idx+1))" "${options[$idx]}"
+    done
+    echo "  Or type a custom SKU like Standard_D32s_v3."
+    read -rp "Pick a number, or paste an SKU, or Enter to keep current: " raw
+    raw="${raw// /}"  # strip spaces
+
+    if [[ -z "$raw" ]]; then
+      echo "$current"; return 0
+    fi
+    # If they typed a number, look it up
+    if [[ "$raw" =~ ^[0-9]+$ ]]; then
+      if (( raw >= 1 && raw <= ${#options[@]} )); then
+        # Extract the SKU from the option label "Standard_D4s_v5 (4 vCPU, ...)"
+        local picked="${options[$((raw-1))]}"
+        echo "${picked%% *}"; return 0
+      fi
+      warn "  '$raw' is not 1-${#options[@]}. Try again."
+      continue
+    fi
+    # Otherwise treat as a custom SKU. Validate shape.
+    if [[ "$raw" =~ ^Standard_[A-Z][A-Za-z0-9_]+$ ]]; then
+      echo "$raw"; return 0
+    fi
+    warn "  '$raw' does not look like an Azure VM SKU (expected Standard_X...)."
+    warn "  Browse all sizes: az vm list-sizes -l <region> -o table"
+    warn "  Try again, or Ctrl+C to abort."
+  done
+}
+
+if ! sizes_already_set; then
+  echo
+  echo "VM sizes: default is Standard_D4s_v5 for vController and KVO,"
+  echo "Standard_D8s_v3 for vPB (minimum size that supports 3+ NICs)."
+  read -rp "Customize VM sizes? [y/N]: " yn
+  yn_lc=$(to_lower "$yn")
+  if [[ "$yn_lc" == "y" ]] || [[ "$yn_lc" == "yes" ]]; then
+    CLMS_VM_SIZE=$(prompt_size "vController VM size" "$CLMS_VM_SIZE" \
+      "Standard_D2s_v5 (2 vCPU, 8 GB - small dev/test)" \
+      "Standard_D4s_v5 (4 vCPU, 16 GB - recommended)" \
+      "Standard_D8s_v5 (8 vCPU, 32 GB - large fleets)" \
+      "Standard_D16s_v5 (16 vCPU, 64 GB - very large fleets)")
+
+    if [[ "$DEPLOY_KVO" == "true" ]]; then
+      KVO_VM_SIZE=$(prompt_size "KVO VM size" "$KVO_VM_SIZE" \
+        "Standard_D2s_v5 (2 vCPU, 8 GB - small dev/test)" \
+        "Standard_D4s_v5 (4 vCPU, 16 GB - recommended)" \
+        "Standard_D8s_v5 (8 vCPU, 32 GB - large fleets)")
+    fi
+
+    if [[ "$DEPLOY_VPB" == "true" ]]; then
+      VPB_VM_SIZE=$(prompt_size "vPB VM size (NEEDS 3+ NICs)" "$VPB_VM_SIZE" \
+        "Standard_D8s_v3 (8 vCPU, 32 GB - minimum, 4 NIC max)" \
+        "Standard_D16s_v3 (16 vCPU, 64 GB - 8 NIC max, multi-NIC OK)" \
+        "Standard_D32s_v3 (32 vCPU, 128 GB - high throughput)")
+    fi
+    ok "Sizes: vCtrl=${CLMS_VM_SIZE} KVO=${KVO_VM_SIZE} vPB=${VPB_VM_SIZE}"
+  else
+    ok "Using default: vCtrl=${CLMS_VM_SIZE} KVO=${KVO_VM_SIZE} vPB=${VPB_VM_SIZE}"
+  fi
+fi
+
 # Chain to sensor deployment?
 if [[ -z "$CHAIN_SENSORS" ]]; then
   read -rp "Chain to sensor deployment after stack is up? [y/N]: " yn
