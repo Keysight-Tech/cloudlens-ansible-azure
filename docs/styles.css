@@ -342,18 +342,25 @@ h1 .lg, h1 strong {
 .btn:hover::before { opacity: .35; }
 .btn-primary:hover::before, .btn.primary:hover::before { opacity: .55; }
 /* Anchor-tag buttons inherit the global a:hover blue, which makes text
-   invisible on the blue primary background. Pin text color per variant. */
-a.btn:hover, a.btn:focus, a.btn:active { color: inherit; }
-.btn-primary:hover, .btn.primary:hover,
-.btn-primary:focus, .btn.primary:focus { color: #fff; }
-.btn-secondary:hover, .btn.glass:hover,
-.btn-secondary:focus, .btn.glass:focus { color: var(--ink); }
-.btn-tertiary:hover, .btn.tinted:hover,
-.btn-tertiary:focus, .btn.tinted:focus { color: oklch(34% 0.06 80); }
-html[data-theme="dark"] .btn-tertiary:hover,
-html[data-theme="dark"] .btn.tinted:hover { color: var(--gold-bright); }
-.btn.tinted-accent:hover, .btn.tinted-accent:focus { color: var(--accent-deep); }
-html[data-theme="dark"] .btn.tinted-accent:hover { color: var(--accent-bright); }
+   invisible on the blue primary background. Pin text color per variant.
+   Use the a.btn- prefix to BEAT the global a:hover (specificity 0,1,1)
+   AND beat any well-meaning catch-all (do not add `a.btn:hover { color:
+   inherit }` here, it would win on specificity and break the variants). */
+a.btn-primary:hover, a.btn.primary:hover,
+a.btn-primary:focus, a.btn.primary:focus,
+button.btn-primary:hover, button.btn.primary:hover,
+button.btn-primary:focus, button.btn.primary:focus { color: #fff; }
+a.btn-secondary:hover, a.btn.glass:hover,
+a.btn-secondary:focus, a.btn.glass:focus,
+button.btn-secondary:hover, button.btn.glass:hover { color: var(--ink); }
+a.btn-tertiary:hover, a.btn.tinted:hover,
+a.btn-tertiary:focus, a.btn.tinted:focus { color: oklch(34% 0.06 80); }
+html[data-theme="dark"] a.btn-tertiary:hover,
+html[data-theme="dark"] a.btn.tinted:hover { color: var(--gold-bright); }
+a.btn.tinted-accent:hover, a.btn.tinted-accent:focus { color: var(--accent-deep); }
+html[data-theme="dark"] a.btn.tinted-accent:hover { color: var(--accent-bright); }
+/* copy-btn is a <button>, not <a>, but pin its hover too for safety */
+button.copy-btn:hover, button.copy-btn:focus { color: #fff; }
 /* Tier button title + subtitle get extra legibility against the blue gradient */
 .btn-primary .tier-label strong, .btn.primary .tier-label strong { text-shadow: 0 1px 1px oklch(0% 0 0 / .35); }
 .btn-primary .tier-label small, .btn.primary .tier-label small { opacity: .95; text-shadow: 0 1px 1px oklch(0% 0 0 / .25); }
