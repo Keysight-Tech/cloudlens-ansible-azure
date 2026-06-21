@@ -443,6 +443,23 @@ if [[ "$DRY_RUN" == "false" ]]; then
   SUB_ID=$(az account show --query id -o tsv)
   SUB_NAME=$(az account show --query name -o tsv)
   ok "Subscription: ${SUB_NAME} (${SUB_ID})"
+
+  # Proactively test the token is still fresh. `az account show` reads a
+  # local cache and can succeed even when the refresh token has expired
+  # (Azure conditional-access policy caps lifetime at 12-24h). The real
+  # API calls in later phases then dead-end on AADSTS70043. Catch it now.
+  if ! az account get-access-token --query expiresOn -o tsv >/dev/null 2>&1; then
+    warn "Azure refresh token expired (conditional access policy)."
+    read -rp "Run 'az login --use-device-code' to refresh now? [Y/n]: " yn
+    yn_lc=$(to_lower "${yn:-y}")
+    if [[ "$yn_lc" == "n" ]] || [[ "$yn_lc" == "no" ]]; then
+      fail "Cannot proceed without a fresh Azure token. Run 'az login --use-device-code' and re-run this script."
+    fi
+    az login --use-device-code
+    SUB_ID=$(az account show --query id -o tsv)
+    SUB_NAME=$(az account show --query name -o tsv)
+    ok "Re-authenticated. Subscription: ${SUB_NAME} (${SUB_ID})"
+  fi
 else
   SUB_ID="00000000-0000-0000-0000-000000000000"
   SUB_NAME="DryRunSubscription"
@@ -516,7 +533,27 @@ gen_password() {
   echo "${alpha:RANDOM%${#alpha}:1}${lower:RANDOM%${#lower}:1}${digit:RANDOM%${#digit}:1}${symbol:RANDOM%${#symbol}:1}${rand}"
 }
 
-read -rsp "Admin password (Enter to auto-generate): " input_pw; echo
+cat <<'PWHELP'
+
+About this password:
+  - Used ONLY for OS-level SSH into the Linux VMs that host the products
+    (e.g.  ssh azureuser@<vcontroller-ip>  or  ssh -p 9022 azureuser@<vpb-ip>).
+  - It is NOT the web UI password for any product.
+  - vController web UI logs in with the BUILT-IN admin / Cl0udLens@dm!n
+    on first browser visit and prompts you to change it - nothing to do here.
+  - KVO web UI logs in with the BUILT-IN admin / admin on first browser
+    visit and prompts you to change it - nothing to do here.
+  - vPB CLI uses its own separate credentials, configured during the
+    auto-bootstrap. Nothing to do here either.
+  - All three product web UIs are reachable as soon as their VMs come up;
+    you do not need to enter or "accept" anything for them here.
+
+Pick any 12+ char password with upper, lower, digit, and a symbol. Or
+just press Enter and the script will generate one (saved to the deploy
+summary file).
+
+PWHELP
+read -rsp "OS-level SSH password (Enter to auto-generate): " input_pw; echo
 if [[ -z "$input_pw" ]]; then
   ADMIN_PASSWORD=$(gen_password)
   ok "Generated 16-char password (saved in ${SUMMARY_FILE})"
