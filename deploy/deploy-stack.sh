@@ -692,23 +692,41 @@ if ! names_already_set; then
   echo "VM names: default is vcontroller / kvo / vpb (with -1, -2, -3"
   echo "appended when count > 1). You can override the base name per"
   echo "product to match your existing naming convention."
+  echo "  Valid: 3-42 lowercase letters, digits, hyphens. No spaces or uppercase."
   read -rp "Customize VM names? [y/N]: " yn
   yn_lc=$(to_lower "$yn")
   if [[ "$yn_lc" == "y" ]] || [[ "$yn_lc" == "yes" ]]; then
-    read -rp "  vController base name [vcontroller]: " n; DEFAULT_CLMS_NAME="${n:-vcontroller}"
+    # prompt_name PROMPT_LABEL DEFAULT_VALUE
+    # Returns the validated name on stdout. Loops until valid input;
+    # auto-lowercases what the customer typed so a stray capital does
+    # not force a re-type. Ctrl+C exits the script.
+    prompt_name() {
+      local label="$1" default="$2" raw normalized
+      while :; do
+        read -rp "$label" raw
+        raw="${raw:-$default}"
+        # Auto-lowercase (so "MarketplaceNew" -> "marketplacenew", etc)
+        normalized="$(echo "$raw" | tr '[:upper:]' '[:lower:]')"
+        if [[ "$normalized" != "$raw" ]]; then
+          note "auto-lowercased to: $normalized"
+        fi
+        if [[ "$normalized" =~ ^[a-z0-9][a-z0-9-]{1,40}[a-z0-9]$ ]]; then
+          echo "$normalized"
+          return 0
+        fi
+        warn "  '$raw' is not a valid VM name."
+        warn "  Rules: 3-42 chars, lowercase letters / digits / hyphens, start and end with letter or digit."
+        warn "  Try again, or Ctrl+C to abort."
+      done
+    }
+
+    DEFAULT_CLMS_NAME="$(prompt_name "  vController base name [vcontroller]: " "vcontroller")"
     if [[ "$DEPLOY_KVO" == "true" ]]; then
-      read -rp "  KVO base name          [kvo]:          " n; DEFAULT_KVO_NAME="${n:-kvo}"
+      DEFAULT_KVO_NAME="$(prompt_name "  KVO base name          [kvo]:          " "kvo")"
     fi
     if [[ "$DEPLOY_VPB" == "true" ]]; then
-      read -rp "  vPB base name          [vpb]:          " n; DEFAULT_VPB_NAME="${n:-vpb}"
+      DEFAULT_VPB_NAME="$(prompt_name "  vPB base name          [vpb]:          " "vpb")"
     fi
-    # Validate name shape: 3-42 chars, lowercase, digits, hyphens; start/end alnum
-    for v in "DEFAULT_CLMS_NAME" "DEFAULT_KVO_NAME" "DEFAULT_VPB_NAME"; do
-      val="${!v}"
-      if ! [[ "$val" =~ ^[a-z0-9][a-z0-9-]{1,40}[a-z0-9]$ ]]; then
-        fail "$v ('$val') must be 3-42 lowercase letters/digits/hyphens, starting and ending with a letter or digit."
-      fi
-    done
     ok "Names: vCtrl=${DEFAULT_CLMS_NAME} KVO=${DEFAULT_KVO_NAME} vPB=${DEFAULT_VPB_NAME}"
   else
     ok "Using default: vcontroller / kvo / vpb"
