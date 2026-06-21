@@ -816,6 +816,37 @@ if ! sizes_already_set; then
   fi
 fi
 
+# vPB NIC <-> VM size compatibility check. Azure VM sizes have hard NIC
+# caps and ARM deploy fails late with NetworkInterfaceCountExceeded if
+# the customer picks a count combination that the chosen size cannot
+# carry. Pre-flight: auto-upgrade vPB size when the planned NIC count
+# exceeds the chosen size's max. Customer sees a clear note explaining
+# why, before any Azure call.
+if [[ "$DEPLOY_VPB" == "true" ]]; then
+  TOTAL_VPB_NICS=$((1 + VPB_INGRESS_NICS + VPB_EGRESS_NICS))
+  vpb_size_max_nics() {
+    case "$1" in
+      Standard_D2s_v3|Standard_D4s_v3)                  echo 2 ;;
+      Standard_D8s_v3)                                  echo 4 ;;
+      Standard_D16s_v3|Standard_D32s_v3|Standard_D64s_v3) echo 8 ;;
+      # Conservative fallback for unknown SKUs - 4 NICs is the most
+      # common floor for D-series.
+      *)                                                echo 4 ;;
+    esac
+  }
+  CUR_MAX=$(vpb_size_max_nics "$VPB_VM_SIZE")
+  if (( TOTAL_VPB_NICS > CUR_MAX )); then
+    note "vPB will have $TOTAL_VPB_NICS total NICs (1 mgmt + $VPB_INGRESS_NICS ingress + $VPB_EGRESS_NICS egress)."
+    note "Selected size ${VPB_VM_SIZE} supports max $CUR_MAX NICs. Upgrading to keep the deploy from failing late."
+    # Pick the smallest D-series that fits, default to D16s_v3
+    if   (( TOTAL_VPB_NICS <= 4 )); then VPB_VM_SIZE="Standard_D8s_v3"
+    elif (( TOTAL_VPB_NICS <= 8 )); then VPB_VM_SIZE="Standard_D16s_v3"
+    else                                  VPB_VM_SIZE="Standard_D32s_v3"
+    fi
+    ok "vPB size auto-upgraded -> ${VPB_VM_SIZE} (supports $(vpb_size_max_nics "$VPB_VM_SIZE") NICs)"
+  fi
+fi
+
 # Chain to sensor deployment?
 if [[ -z "$CHAIN_SENSORS" ]]; then
   read -rp "Chain to sensor deployment after stack is up? [y/N]: " yn
