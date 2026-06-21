@@ -65,11 +65,11 @@ Every default is overridable three ways: **CLI flag wins over env var wins over 
 | `1` | `--vpb-count <N>` | `CLOUDLENS_VPB_COUNT` | 1-5 (scale-out) |
 | `1` | `--vpb-ingress-nics <N>` | `CLOUDLENS_VPB_INGRESS_NICS` | 1-3 per vPB instance |
 | `1` | `--vpb-egress-nics <N>` | `CLOUDLENS_VPB_EGRESS_NICS` | 1-3 per vPB instance |
-| (toggle) | `--with-kvo` / `--no-kvo` | : | Default: interactive prompt |
-| (toggle) | `--no-vpb` | : | Skip vPB entirely |
-| (toggle) | `--no-sensors` | : | Skip sensor playbook chain |
+| (toggle) | `--with-kvo` / `--no-kvo` | n/a | Default: interactive prompt |
+| (toggle) | `--no-vpb` | n/a | Skip vPB entirely |
+| (toggle) | `--no-sensors` | n/a | Skip sensor playbook chain |
 | `false` | `--rollback` / `--no-rollback` | `CLOUDLENS_ROLLBACK_ON_FAIL` | On failure: delete RG we created. Never touches pre-existing RGs. |
-| `false` | `--dry-run` | : | Print every az command, touch nothing |
+| `false` | `--dry-run` | n/a | Print every az command, touch nothing |
 
 **Three patterns customers use:**
 
