@@ -118,3 +118,37 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "ingress_nic_count" {
+  description = "Number of ingress NICs (receive mirror traffic). Default 1. Use 2-3 for fan-in from multiple sources. Total NICs (1 mgmt + ingress + egress) must fit the VM size NIC quota: D8s_v3=4 max, D16s_v3=8 max."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.ingress_nic_count >= 1 && var.ingress_nic_count <= 3
+    error_message = "ingress_nic_count must be between 1 and 3."
+  }
+}
+
+variable "egress_nic_count" {
+  description = "Number of egress NICs (forward to monitoring tools). Default 1. Use 2-3 for fan-out to multiple tools. Total NICs (1 mgmt + ingress + egress) must fit the VM size NIC quota."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.egress_nic_count >= 1 && var.egress_nic_count <= 3
+    error_message = "egress_nic_count must be between 1 and 3."
+  }
+}
+
+variable "enable_auto_bootstrap" {
+  description = "Run scripts/bootstrap-vpb.sh automatically after VM provisioning via Azure CustomScript extension. Installs system-wide KUBECONFIG and /usr/local/bin/vpb wrapper so SSH-in just works. Disable for air-gapped or custom-bootstrap scenarios."
+  type        = bool
+  default     = true
+}
+
+variable "bootstrap_script_url" {
+  description = "URL to the bootstrap script invoked by the CustomScript extension. Override only if you fork the repo."
+  type        = string
+  default     = "https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/scripts/bootstrap-vpb.sh"
+}

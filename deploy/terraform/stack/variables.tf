@@ -101,9 +101,37 @@ variable "vpb_vm_name" {
 }
 
 variable "vpb_vm_size" {
-  description = "VM size for vPB. Allowed: Standard_D8s_v3 or Standard_D16s_v3 (3 NICs + accelerated networking)."
+  description = "VM size for vPB. Allowed: Standard_D8s_v3 (max 4 NICs) or Standard_D16s_v3 / D32s_v3 (max 8 NICs). Pick the larger sizes for multi-NIC deploys (>3 total)."
   type        = string
   default     = "Standard_D8s_v3"
+}
+
+variable "vpb_ingress_nic_count" {
+  description = "Number of vPB ingress NICs (1-3). Default 1. Use 2-3 for fan-in from multiple mirror sources. Total NICs (1 + ingress + egress) must fit the VM size."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.vpb_ingress_nic_count >= 1 && var.vpb_ingress_nic_count <= 3
+    error_message = "vpb_ingress_nic_count must be between 1 and 3."
+  }
+}
+
+variable "vpb_egress_nic_count" {
+  description = "Number of vPB egress NICs (1-3). Default 1. Use 2-3 for fan-out to multiple monitoring tools."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.vpb_egress_nic_count >= 1 && var.vpb_egress_nic_count <= 3
+    error_message = "vpb_egress_nic_count must be between 1 and 3."
+  }
+}
+
+variable "vpb_enable_auto_bootstrap" {
+  description = "Run scripts/bootstrap-vpb.sh automatically after VM provisioning via Azure CustomScript extension. Installs KUBECONFIG system-wide and the sudo vpb wrapper so SSH-in just works. Disable for air-gapped scenarios."
+  type        = bool
+  default     = true
 }
 
 ###############################################################################

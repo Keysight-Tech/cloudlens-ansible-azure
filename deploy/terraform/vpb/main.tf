@@ -15,11 +15,11 @@ locals {
   ingress_subnet_name = local.create_new_vnet ? "vpb-ingress" : var.existing_ingress_subnet_name
   egress_subnet_name  = local.create_new_vnet ? "vpb-egress" : var.existing_egress_subnet_name
 
-  pip_name         = "${var.vm_name}-mgmt-pip"
-  nsg_name         = "${var.vm_name}-mgmt-nsg"
-  mgmt_nic_name    = "${var.vm_name}-mgmt-nic"
-  ingress_nic_name = "${var.vm_name}-ingress-nic"
-  egress_nic_name  = "${var.vm_name}-egress-nic"
+  pip_name      = "${var.vm_name}-mgmt-pip"
+  nsg_name      = "${var.vm_name}-mgmt-nsg"
+  mgmt_nic_name = "${var.vm_name}-mgmt-nic"
+  # ingress + egress NIC names are computed per-index (count.index + 1)
+  # in the resource blocks below to support 1-3 of each.
 }
 
 # Resource group: create or reference
@@ -199,9 +199,11 @@ resource "azurerm_network_interface_security_group_association" "mgmt" {
   network_security_group_id = azurerm_network_security_group.vpb_mgmt.id
 }
 
-# Ingress NIC: accelerated networking + IP forwarding
+# Ingress NICs (1-3): accelerated networking + IP forwarding
 resource "azurerm_network_interface" "ingress" {
-  name                           = local.ingress_nic_name
+  count = var.ingress_nic_count
+
+  name                           = "${var.vm_name}-ingress-${count.index + 1}"
   resource_group_name            = local.rg_name
   location                       = local.rg_location
   accelerated_networking_enabled = true
@@ -215,9 +217,11 @@ resource "azurerm_network_interface" "ingress" {
   }
 }
 
-# Egress NIC: accelerated networking + IP forwarding
+# Egress NICs (1-3): accelerated networking + IP forwarding
 resource "azurerm_network_interface" "egress" {
-  name                           = local.egress_nic_name
+  count = var.egress_nic_count
+
+  name                           = "${var.vm_name}-egress-${count.index + 1}"
   resource_group_name            = local.rg_name
   location                       = local.rg_location
   accelerated_networking_enabled = true
@@ -243,12 +247,13 @@ resource "azurerm_linux_virtual_machine" "vpb" {
   computer_name                   = var.vm_name
   tags                            = var.tags
 
-  # Order matters: management NIC first (primary), then ingress, then egress.
-  network_interface_ids = [
-    azurerm_network_interface.mgmt.id,
-    azurerm_network_interface.ingress.id,
-    azurerm_network_interface.egress.id,
-  ]
+  # Order matters: management NIC first (primary), then all ingress NICs,
+  # then all egress NICs. Total = 1 + ingress_nic_count + egress_nic_count.
+  network_interface_ids = concat(
+    [azurerm_network_interface.mgmt.id],
+    [for nic in azurerm_network_interface.ingress : nic.id],
+    [for nic in azurerm_network_interface.egress : nic.id],
+  )
 
   os_disk {
     caching              = "ReadWrite"
@@ -273,4 +278,28 @@ resource "azurerm_linux_virtual_machine" "vpb" {
   depends_on = [
     azurerm_network_interface_security_group_association.mgmt,
   ]
+}
+
+# Auto-bootstrap: installs KUBECONFIG system-wide + /usr/local/bin/vpb
+# wrapper the moment VM provisioning completes. Customer SSHes in to a
+# fully-configured vPB, no manual curl step required.
+# Disable by setting enable_auto_bootstrap = false (air-gapped scenarios).
+resource "azurerm_virtual_machine_extension" "bootstrap" {
+  count = var.enable_auto_bootstrap ? 1 : 0
+
+  name                       = "bootstrapVpb"
+  virtual_machine_id         = azurerm_linux_virtual_machine.vpb.id
+  publisher                  = "Microsoft.Azure.Extensions"
+  type                       = "CustomScript"
+  type_handler_version       = "2.1"
+  auto_upgrade_minor_version = true
+  tags                       = var.tags
+
+  settings = jsonencode({
+    fileUris = [var.bootstrap_script_url]
+  })
+
+  protected_settings = jsonencode({
+    commandToExecute = "bash bootstrap-vpb.sh > /var/log/cloudlens-bootstrap.log 2>&1"
+  })
 }

@@ -190,5 +190,9 @@ module "vpb" {
   ingress_subnet_prefix = var.vpb_ingress_subnet_prefix
   egress_subnet_prefix  = var.vpb_egress_subnet_prefix
 
+  ingress_nic_count     = var.vpb_ingress_nic_count
+  egress_nic_count      = var.vpb_egress_nic_count
+  enable_auto_bootstrap = var.vpb_enable_auto_bootstrap
+
   tags = var.tags
 }
