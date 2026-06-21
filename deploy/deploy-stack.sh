@@ -80,6 +80,13 @@ CLMS_VM_SIZE="${CLOUDLENS_VCONTROLLER_SIZE:-Standard_D4s_v5}"
 KVO_VM_SIZE="${CLOUDLENS_KVO_SIZE:-Standard_D4s_v5}"
 VPB_VM_SIZE="${CLOUDLENS_VPB_SIZE:-Standard_D8s_v3}"
 
+# Rollback behavior: when ROLLBACK_ON_FAIL=true, the on_error trap will
+# delete the resource group on failure - BUT only if we created it ourselves
+# this run (CREATED_RG=true). Pre-existing RGs supplied via --resource-group
+# are NEVER deleted by rollback. Default off so customers preserve partial
+# progress and re-run idempotently.
+ROLLBACK_ON_FAIL="${CLOUDLENS_ROLLBACK_ON_FAIL:-false}"
+
 # Per-product instance counts and vPB NIC counts (1 each by default)
 CLMS_COUNT="${CLOUDLENS_VCONTROLLER_COUNT:-1}"
 KVO_COUNT="${CLOUDLENS_KVO_COUNT:-1}"
@@ -182,6 +189,11 @@ Toggles:
   --with-kvo                Deploy KVO (skip interactive prompt)
   --no-vpb                  Skip vPB deployment
   --no-sensors              Skip sensor playbook chain at the end
+  --rollback                On any failure, delete the resource group we
+                            created (NEVER touches pre-existing RGs).
+                            5-second grace window to Ctrl+C the rollback.
+                            Default: off (keep partial progress, re-run is idempotent).
+  --no-rollback             Force keep-partial behavior (default).
   -h, --help                Show this help
 
 Env-var overrides (alternative to flags, useful for curl | bash):
@@ -223,6 +235,10 @@ while [[ $# -gt 0 ]]; do
     --with-kvo) DEPLOY_KVO=true; shift ;;
     --no-vpb) DEPLOY_VPB=false; shift ;;
     --no-sensors) CHAIN_SENSORS=false; shift ;;
+
+    # Rollback control
+    --rollback) ROLLBACK_ON_FAIL=true; shift ;;
+    --no-rollback) ROLLBACK_ON_FAIL=false; shift ;;
 
     # Naming + region
     --resource-group) ARG_RG="$2"; shift 2 ;;
@@ -299,12 +315,32 @@ on_error() {
   [[ "$DEPLOYED_KVO" == "true" ]]  && echo "  - KVO VM:         ${DEFAULT_KVO_NAME}  (IP ${KVO_PUBLIC_IP:-pending})"
   [[ "$DEPLOYED_VPB" == "true" ]]  && echo "  - vPB VM:         ${DEFAULT_VPB_NAME}  (IP ${VPB_PUBLIC_IP:-pending})"
   echo
+
+  # Auto-rollback if requested AND we created the RG this run. Never
+  # delete a pre-existing RG the customer pointed at via --resource-group.
+  if [[ "$ROLLBACK_ON_FAIL" == "true" ]] && [[ "$CREATED_RG" == "true" ]] && [[ -n "${RESOURCE_GROUP:-}" ]]; then
+    echo -e "${C_YELLOW}--rollback is ON. Deleting ${RESOURCE_GROUP} in 5 seconds (Ctrl+C to abort)...${C_RESET}"
+    for i in 5 4 3 2 1; do
+      printf "  %d... " "$i"; sleep 1
+    done
+    echo
+    if az group delete -n "$RESOURCE_GROUP" --yes --no-wait >/dev/null 2>&1; then
+      ok "Rollback initiated: az group delete -n ${RESOURCE_GROUP} --no-wait"
+      echo "    (Azure will finish removing resources in the background, ~2-5 minutes.)"
+    else
+      warn "Rollback failed - the az group delete call did not succeed."
+      warn "Inspect manually: az group show -n ${RESOURCE_GROUP}"
+    fi
+    return
+  fi
+
   echo "Cleanup options:"
   if [[ "$CREATED_RG" == "true" ]] && [[ -n "${RESOURCE_GROUP:-}" ]]; then
-    echo "  Delete everything:  az group delete -n ${RESOURCE_GROUP} --yes --no-wait"
+    echo "  Auto-rollback next time: re-run with --rollback (or CLOUDLENS_ROLLBACK_ON_FAIL=true)"
+    echo "  Delete everything now:   az group delete -n ${RESOURCE_GROUP} --yes --no-wait"
   fi
-  echo "  Re-run this script:  bash deploy/deploy-stack.sh    # idempotent, skips existing"
-  echo "  Inspect log:          ${LOG_FILE}"
+  echo "  Re-run this script:      bash deploy/deploy-stack.sh    # idempotent, skips existing"
+  echo "  Inspect log:             ${LOG_FILE}"
 }
 trap on_error ERR
 
@@ -348,6 +384,7 @@ printf "  %-22s %s (count: %d, size: %s)\n" "vController:" "$DEFAULT_CLMS_NAME" 
 printf "  %-22s %s (count: %d, size: %s)\n" "KVO:" "$DEFAULT_KVO_NAME" "$KVO_COUNT" "$KVO_VM_SIZE"
 printf "  %-22s %s (count: %d, size: %s, ingress NICs: %d, egress NICs: %d)\n" \
   "vPB:" "$DEFAULT_VPB_NAME" "$VPB_COUNT" "$VPB_VM_SIZE" "$VPB_INGRESS_NICS" "$VPB_EGRESS_NICS"
+printf "  %-22s %s\n" "Rollback on failure:" "$ROLLBACK_ON_FAIL  (override with --rollback / --no-rollback)"
 echo
 
 # =====================================================================
