@@ -204,6 +204,19 @@ docker build -t cloudlens-ansible-azure .</code></pre>
         <h2>Don't have vController, KVO, or vPB yet?</h2>
         <p class="lede">Deploy them from Azure Marketplace in one click before running sensor deployments.</p>
 
+        <div class="prereq-card prereq-card-stack">
+          <h3>&#9889; Deploy the full CloudLens Stack (recommended)</h3>
+          <p>One wizard, one click. Provisions vController + KVO + vPB into a shared VNet with five purpose-built subnets. About 15 minutes from click to ready.</p>
+          <ul>
+            <li>One Azure resource group, one shared VNet</li>
+            <li>vController + KVO + vPB deployed in parallel</li>
+            <li>Output prints the exact Cloud Shell command for sensor install</li>
+          </ul>
+          <a class="btn btn-primary btn-stack" href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fstack-marketplace.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fstack-createUiDefinition.json" target="_blank" rel="noopener">&#9654; Deploy CloudLens Stack</a>
+        </div>
+
+        <p class="prereq-or">Or deploy each product separately:</p>
+
         <div class="prereq-cards">
           <div class="prereq-card">
             <h3>CloudLens vController <span class="rebrand-tag">formerly CLMS</span></h3>

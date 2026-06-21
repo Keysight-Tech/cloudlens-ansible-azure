@@ -1,0 +1,186 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "config": {
+      "isWizard": true,
+      "basics": {
+        "description": "Deploying the full Keysight CloudLens stack in a single click. This stands up vController (control plane), KVO (orchestrator), and vPB (data plane) into a shared VNet with five purpose-built subnets. Total deploy time is about 15 minutes. After deploy, the outputs include a one-line Cloud Shell command that installs CloudLens sensors on tagged workload VMs.",
+        "subscription": {},
+        "resourceGroup": {
+          "allowExisting": true
+        },
+        "location": {
+          "label": "Region",
+          "toolTip": "Azure region for all three VMs and the shared VNet. Pick the region closest to your monitored workloads."
+        }
+      }
+    },
+    "basics": [],
+    "steps": [
+      {
+        "name": "stackConfig",
+        "label": "Stack",
+        "subLabel": {
+          "preValidation": "Configure the CloudLens stack",
+          "postValidation": "Done"
+        },
+        "bladeTitle": "Stack",
+        "elements": [
+          {
+            "name": "intro",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "**About the prefix:** the name you pick becomes the prefix for every VM and resource. The VMs will be `<prefix>-vcontroller`, `<prefix>-kvo`, `<prefix>-vpb`. For multi-region deployments, use a region-suffixed prefix like `cloudlens-eastus` so each region's stack has unique names."
+            }
+          },
+          {
+            "name": "namePrefix",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Name prefix",
+            "defaultValue": "cloudlens",
+            "toolTip": "Used as the prefix for all VMs, NICs, NSGs, public IPs, and the shared VNet. 3 to 32 characters, lowercase letters, digits, hyphens; must start and end with a letter or digit.",
+            "constraints": {
+              "required": true,
+              "regex": "^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$",
+              "validationMessage": "3 to 32 characters. Lowercase letters, digits, hyphens. Must start and end with a letter or digit."
+            }
+          },
+          {
+            "name": "adminUsername",
+            "type": "Microsoft.Compute.UserNameTextBox",
+            "label": "Linux admin username",
+            "defaultValue": "azureuser",
+            "toolTip": "OS-level admin user for SSH. Shared across vController, KVO, and vPB.",
+            "osPlatform": "Linux",
+            "constraints": {
+              "required": true
+            }
+          },
+          {
+            "name": "passwordInfoBox",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "Heads-up: the password below is for **OS-level SSH** on all three VMs. The vController **web UI** uses built-in credentials (`admin / Cl0udLens@dm!n`) you'll change on first login. The KVO **web UI** admin account is set during first-login EULA acceptance. The vPB **CLI** is reached through a two-hop SSH and has its own credentials. All separate from this password."
+            }
+          },
+          {
+            "name": "adminPassword",
+            "type": "Microsoft.Compute.CredentialsCombo",
+            "label": {
+              "password": "Linux admin password",
+              "confirmPassword": "Confirm password"
+            },
+            "toolTip": {
+              "password": "Shared OS-level password for all three VMs. 12+ chars, upper, lower, digit, symbol. NOT the web UI password."
+            },
+            "osPlatform": "Linux",
+            "constraints": {
+              "required": true
+            },
+            "options": {
+              "hideConfirmation": false,
+              "hidePassword": false
+            }
+          },
+          {
+            "name": "sizesHeader",
+            "type": "Microsoft.Common.Section",
+            "label": "VM sizes",
+            "elements": [
+              {
+                "name": "vcontrollerVmSize",
+                "type": "Microsoft.Common.DropDown",
+                "label": "vController VM size",
+                "defaultValue": "Standard_D4s_v5 (4 vCPU, 16 GB, recommended)",
+                "toolTip": "vController size. Standard_D4s_v5 is sized for most deployments. Scale up for thousands of sensors.",
+                "constraints": {
+                  "allowedValues": [
+                    { "label": "Standard_D2s_v5 (2 vCPU, 8 GB, small dev/test)", "value": "Standard_D2s_v5" },
+                    { "label": "Standard_D4s_v5 (4 vCPU, 16 GB, recommended)", "value": "Standard_D4s_v5" },
+                    { "label": "Standard_D8s_v5 (8 vCPU, 32 GB, large fleets)", "value": "Standard_D8s_v5" },
+                    { "label": "Standard_D16s_v5 (16 vCPU, 64 GB, very large fleets)", "value": "Standard_D16s_v5" }
+                  ],
+                  "required": true
+                }
+              },
+              {
+                "name": "kvoVmSize",
+                "type": "Microsoft.Common.DropDown",
+                "label": "KVO VM size",
+                "defaultValue": "Standard_D4s_v5 (4 vCPU, 16 GB, recommended)",
+                "toolTip": "KVO size. Standard_D4s_v5 is sized for most deployments.",
+                "constraints": {
+                  "allowedValues": [
+                    { "label": "Standard_D2s_v5 (2 vCPU, 8 GB, small dev/test)", "value": "Standard_D2s_v5" },
+                    { "label": "Standard_D4s_v5 (4 vCPU, 16 GB, recommended)", "value": "Standard_D4s_v5" },
+                    { "label": "Standard_D8s_v5 (8 vCPU, 32 GB, large fleets)", "value": "Standard_D8s_v5" }
+                  ],
+                  "required": true
+                }
+              },
+              {
+                "name": "vpbVmSize",
+                "type": "Microsoft.Common.DropDown",
+                "label": "vPB VM size",
+                "defaultValue": "Standard_D8s_v3 (8 vCPU, 32 GB, minimum for 3 NICs)",
+                "toolTip": "vPB size. Minimum Standard_D8s_v3 is required for three accelerated NICs.",
+                "constraints": {
+                  "allowedValues": [
+                    { "label": "Standard_D8s_v3 (8 vCPU, 32 GB, minimum for 3 NICs)", "value": "Standard_D8s_v3" },
+                    { "label": "Standard_D16s_v3 (16 vCPU, 64 GB, higher mirror throughput)", "value": "Standard_D16s_v3" },
+                    { "label": "Standard_D32s_v3 (32 vCPU, 128 GB, max throughput)", "value": "Standard_D32s_v3" }
+                  ],
+                  "required": true
+                }
+              }
+            ]
+          },
+          {
+            "name": "networkHeader",
+            "type": "Microsoft.Common.Section",
+            "label": "Shared network",
+            "elements": [
+              {
+                "name": "networkInfoBox",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": true,
+                "options": {
+                  "icon": "Info",
+                  "text": "The stack creates ONE shared VNet with five subnets: vcontroller-subnet (10.50.1.0/24), kvo-subnet (10.50.2.0/24), vpb-mgmt (10.50.10.0/24), vpb-ingress (10.50.11.0/24), vpb-egress (10.50.12.0/24). Override the address space below if your default range conflicts."
+                }
+              },
+              {
+                "name": "vnetAddressSpace",
+                "type": "Microsoft.Common.TextBox",
+                "label": "Shared VNet address space (CIDR)",
+                "defaultValue": "10.50.0.0/16",
+                "toolTip": "CIDR for the shared VNet. The five subnets carve from this. Must not overlap with VNets you plan to peer with.",
+                "constraints": {
+                  "required": true,
+                  "regex": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
+                  "validationMessage": "Enter a valid CIDR (for example, 10.50.0.0/16)."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "outputs": {
+      "namePrefix": "[steps('stackConfig').namePrefix]",
+      "adminUsername": "[steps('stackConfig').adminUsername]",
+      "adminPassword": "[steps('stackConfig').adminPassword.password]",
+      "vcontrollerVmSize": "[steps('stackConfig').sizesHeader.vcontrollerVmSize]",
+      "kvoVmSize": "[steps('stackConfig').sizesHeader.kvoVmSize]",
+      "vpbVmSize": "[steps('stackConfig').sizesHeader.vpbVmSize]",
+      "location": "[location()]",
+      "vnetAddressSpace": "[steps('stackConfig').networkHeader.vnetAddressSpace]"
+    }
+  }
+}

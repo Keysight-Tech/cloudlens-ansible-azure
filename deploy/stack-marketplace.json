@@ -1,0 +1,221 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "title": "Keysight CloudLens Stack (vController + KVO + vPB)",
+    "description": "One-click deployment of the full Keysight CloudLens visibility stack from Azure Marketplace. Creates a shared VNet with five purpose-built subnets, then deploys vController (control plane), KVO (orchestrator), and vPB (data plane) in parallel as nested marketplace deployments. Total deploy time: about 15 minutes. After deploy, the output prints a one-line Cloud Shell command that installs CloudLens sensors on tagged workload VMs.",
+    "author": "Keysight Technologies"
+  },
+  "parameters": {
+    "namePrefix": {
+      "type": "string",
+      "defaultValue": "cloudlens",
+      "metadata": {
+        "description": "Prefix for every resource. The three VMs will be named <prefix>-vcontroller, <prefix>-kvo, <prefix>-vpb. Region-suffix this for multi-DC deploys, for example cloudlens-eastus."
+      }
+    },
+    "adminUsername": {
+      "type": "string",
+      "defaultValue": "azureuser",
+      "metadata": {
+        "description": "Linux admin username for SSH access to all three VMs. This is the OS-level account; vController and KVO web UIs and the vPB CLI each have their own separate credentials."
+      }
+    },
+    "adminPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Linux admin password for SSH access (shared across all three VMs). 12+ characters, upper, lower, digit, and symbol."
+      }
+    },
+    "vcontrollerVmSize": {
+      "type": "string",
+      "defaultValue": "Standard_D4s_v5",
+      "metadata": {
+        "description": "VM size for vController. Standard_D4s_v5 (4 vCPU, 16 GB) is recommended."
+      }
+    },
+    "kvoVmSize": {
+      "type": "string",
+      "defaultValue": "Standard_D4s_v5",
+      "metadata": {
+        "description": "VM size for KVO. Standard_D4s_v5 (4 vCPU, 16 GB) is recommended."
+      }
+    },
+    "vpbVmSize": {
+      "type": "string",
+      "defaultValue": "Standard_D8s_v3",
+      "allowedValues": [
+        "Standard_D8s_v3",
+        "Standard_D16s_v3",
+        "Standard_D32s_v3"
+      ],
+      "metadata": {
+        "description": "VM size for vPB. Minimum Standard_D8s_v3 required for the three-NIC accelerated networking layout."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region for all resources. Defaults to the resource group location."
+      }
+    },
+    "vnetAddressSpace": {
+      "type": "string",
+      "defaultValue": "10.50.0.0/16",
+      "metadata": {
+        "description": "Shared VNet address space (CIDR). The stack carves out five /24 subnets from this range. Must not overlap with VNets you plan to peer with."
+      }
+    },
+    "_artifactsBaseUri": {
+      "type": "string",
+      "defaultValue": "https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/deploy",
+      "metadata": {
+        "description": "Base URI for the nested marketplace templates. Override only if you have forked the repo."
+      }
+    }
+  },
+  "variables": {
+    "sharedVnetName": "[concat(parameters('namePrefix'), '-vnet')]",
+    "vcontrollerSubnetName": "vcontroller-subnet",
+    "kvoSubnetName": "kvo-subnet",
+    "vpbMgmtSubnetName": "vpb-mgmt",
+    "vpbIngressSubnetName": "vpb-ingress",
+    "vpbEgressSubnetName": "vpb-egress",
+    "vcontrollerVmName": "[concat(parameters('namePrefix'), '-vcontroller')]",
+    "kvoVmName": "[concat(parameters('namePrefix'), '-kvo')]",
+    "vpbVmName": "[concat(parameters('namePrefix'), '-vpb')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2024-05-01",
+      "name": "[variables('sharedVnetName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": ["[parameters('vnetAddressSpace')]"]
+        },
+        "subnets": [
+          {
+            "name": "[variables('vcontrollerSubnetName')]",
+            "properties": { "addressPrefix": "10.50.1.0/24" }
+          },
+          {
+            "name": "[variables('kvoSubnetName')]",
+            "properties": { "addressPrefix": "10.50.2.0/24" }
+          },
+          {
+            "name": "[variables('vpbMgmtSubnetName')]",
+            "properties": { "addressPrefix": "10.50.10.0/24" }
+          },
+          {
+            "name": "[variables('vpbIngressSubnetName')]",
+            "properties": { "addressPrefix": "10.50.11.0/24" }
+          },
+          {
+            "name": "[variables('vpbEgressSubnetName')]",
+            "properties": { "addressPrefix": "10.50.12.0/24" }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "deploy-vcontroller",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('sharedVnetName'))]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[concat(parameters('_artifactsBaseUri'), '/clms-marketplace.json')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "vmName": { "value": "[variables('vcontrollerVmName')]" },
+          "adminUsername": { "value": "[parameters('adminUsername')]" },
+          "adminPassword": { "value": "[parameters('adminPassword')]" },
+          "vmSize": { "value": "[parameters('vcontrollerVmSize')]" },
+          "location": { "value": "[parameters('location')]" },
+          "vnetName": { "value": "[variables('sharedVnetName')]" },
+          "subnetName": { "value": "[variables('vcontrollerSubnetName')]" }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "deploy-kvo",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('sharedVnetName'))]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[concat(parameters('_artifactsBaseUri'), '/kvo-marketplace.json')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "vmName": { "value": "[variables('kvoVmName')]" },
+          "adminUsername": { "value": "[parameters('adminUsername')]" },
+          "adminPassword": { "value": "[parameters('adminPassword')]" },
+          "vmSize": { "value": "[parameters('kvoVmSize')]" },
+          "location": { "value": "[parameters('location')]" },
+          "vnetName": { "value": "[variables('sharedVnetName')]" },
+          "subnetName": { "value": "[variables('kvoSubnetName')]" }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "deploy-vpb",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('sharedVnetName'))]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[concat(parameters('_artifactsBaseUri'), '/vpb-marketplace.json')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "vmName": { "value": "[variables('vpbVmName')]" },
+          "adminUsername": { "value": "[parameters('adminUsername')]" },
+          "adminPassword": { "value": "[parameters('adminPassword')]" },
+          "vmSize": { "value": "[parameters('vpbVmSize')]" },
+          "location": { "value": "[parameters('location')]" },
+          "vnetName": { "value": "[variables('sharedVnetName')]" }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "sharedVnetName": {
+      "type": "string",
+      "value": "[variables('sharedVnetName')]"
+    },
+    "vcontrollerUrl": {
+      "type": "string",
+      "value": "[reference('deploy-vcontroller').outputs.vcontrollerUiUrl.value]"
+    },
+    "kvoUrl": {
+      "type": "string",
+      "value": "[reference('deploy-kvo').outputs.kvoUiUrl.value]"
+    },
+    "vpbPublicIp": {
+      "type": "string",
+      "value": "[reference('deploy-vpb').outputs.vpbPublicIp.value]"
+    },
+    "sensorInstallCommand": {
+      "type": "string",
+      "value": "curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/quickstart.sh | bash"
+    },
+    "nextSteps": {
+      "type": "string",
+      "value": "[concat('Stack deployed. (1) Wait ~15 minutes for vController and KVO to finish initializing. (2) Open vController at ', reference('deploy-vcontroller').outputs.vcontrollerUiUrl.value, ' (admin / Cl0udLens@dm!n on first login), create a Project, copy the project key. (3) Tag your workload VMs with cloudlens=yes plus os=ubuntu|rhel|windows and env=prod. (4) Open Azure Cloud Shell and run: curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/quickstart.sh | bash')]"
+    }
+  }
+}
