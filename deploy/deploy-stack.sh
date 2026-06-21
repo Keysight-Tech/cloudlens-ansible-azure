@@ -675,6 +675,46 @@ if ! counts_already_set; then
   fi
 fi
 
+# Custom VM names. Same opt-in pattern as the counts prompt: skip
+# entirely if the customer set names via flags or env vars; otherwise
+# ask one Y/N question, then prompt per product only if Y.
+names_already_set() {
+  [[ -n "${CLOUDLENS_VCONTROLLER_NAME:-}" ]] && return 0
+  [[ -n "${CLOUDLENS_KVO_NAME:-}" ]]         && return 0
+  [[ -n "${CLOUDLENS_VPB_NAME:-}" ]]         && return 0
+  [[ "$DEFAULT_CLMS_NAME" != "vcontroller" ]] && return 0
+  [[ "$DEFAULT_KVO_NAME"  != "kvo" ]]         && return 0
+  [[ "$DEFAULT_VPB_NAME"  != "vpb" ]]         && return 0
+  return 1
+}
+if ! names_already_set; then
+  echo
+  echo "VM names: default is vcontroller / kvo / vpb (with -1, -2, -3"
+  echo "appended when count > 1). You can override the base name per"
+  echo "product to match your existing naming convention."
+  read -rp "Customize VM names? [y/N]: " yn
+  yn_lc=$(to_lower "$yn")
+  if [[ "$yn_lc" == "y" ]] || [[ "$yn_lc" == "yes" ]]; then
+    read -rp "  vController base name [vcontroller]: " n; DEFAULT_CLMS_NAME="${n:-vcontroller}"
+    if [[ "$DEPLOY_KVO" == "true" ]]; then
+      read -rp "  KVO base name          [kvo]:          " n; DEFAULT_KVO_NAME="${n:-kvo}"
+    fi
+    if [[ "$DEPLOY_VPB" == "true" ]]; then
+      read -rp "  vPB base name          [vpb]:          " n; DEFAULT_VPB_NAME="${n:-vpb}"
+    fi
+    # Validate name shape: 3-42 chars, lowercase, digits, hyphens; start/end alnum
+    for v in "DEFAULT_CLMS_NAME" "DEFAULT_KVO_NAME" "DEFAULT_VPB_NAME"; do
+      val="${!v}"
+      if ! [[ "$val" =~ ^[a-z0-9][a-z0-9-]{1,40}[a-z0-9]$ ]]; then
+        fail "$v ('$val') must be 3-42 lowercase letters/digits/hyphens, starting and ending with a letter or digit."
+      fi
+    done
+    ok "Names: vCtrl=${DEFAULT_CLMS_NAME} KVO=${DEFAULT_KVO_NAME} vPB=${DEFAULT_VPB_NAME}"
+  else
+    ok "Using default: vcontroller / kvo / vpb"
+  fi
+fi
+
 # Chain to sensor deployment?
 if [[ -z "$CHAIN_SENSORS" ]]; then
   read -rp "Chain to sensor deployment after stack is up? [y/N]: " yn
