@@ -355,6 +355,24 @@ echo
 # =====================================================================
 step "Phase 2: Pre-flight checks"
 
+# On macOS, the system-default `az` often resolves to a pyenv-shimmed
+# Python which has broken azure-cli modules (DATA_KEYVAULT, KeyError:
+# ('dla',), etc). Homebrew's az at /opt/homebrew/bin/az (Apple Silicon)
+# or /usr/local/bin/az (Intel) ships with its own bundled Python and
+# works cleanly. Force-prefer it before any az call.
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  for candidate in /opt/homebrew/bin/az /usr/local/bin/az; do
+    if [[ -x "$candidate" ]]; then
+      candidate_dir="$(dirname "$candidate")"
+      if [[ ":$PATH:" != *":$candidate_dir:"* ]] || [[ "$(command -v az)" != "$candidate" ]]; then
+        export PATH="$candidate_dir:$PATH"
+        note "Routing around pyenv: using $candidate"
+      fi
+      break
+    fi
+  done
+fi
+
 # Auto-install Azure CLI if missing. Customers running this curl|bash
 # in a fresh Cloud Shell already have az. Customers running on a fresh
 # laptop or VM may not. Detect OS and install the official package.
@@ -563,12 +581,25 @@ accept_terms() {
     dryrun_say "az vm image terms accept --publisher ${publisher} --offer ${offer} --plan ${plan}"
     return 0
   fi
+
+  # Try terms-show first. If it fails (broken az install, network blip,
+  # etc), skip the optimization and just try the accept. The accept call
+  # itself is idempotent: re-accepting an already-accepted plan returns
+  # success and changes nothing.
   if az vm image terms show --publisher "$publisher" --offer "$offer" --plan "$plan" \
         --query accepted -o tsv 2>/dev/null | grep -q true; then
     ok "Already accepted: ${offer}/${plan}"
-  else
-    az vm image terms accept --publisher "$publisher" --offer "$offer" --plan "$plan" >/dev/null
+    return 0
+  fi
+
+  if az vm image terms accept --publisher "$publisher" --offer "$offer" --plan "$plan" >/dev/null 2>/tmp/accept-err; then
     ok "Accepted: ${offer}/${plan}"
+  else
+    warn "Could not accept terms for ${offer}/${plan} via this az install:"
+    sed 's/^/    /' /tmp/accept-err >&2 | head -5
+    note "Most likely: this offer was already accepted on this subscription,"
+    note "or the local az install is broken. The deploy will fail at the VM"
+    note "creation step if terms are NOT actually accepted - re-run then."
   fi
 }
 
