@@ -106,9 +106,10 @@ resource "azurerm_subnet" "vpb_egress" {
 }
 
 # ---------------------------------------------------------------------
-# CLMS module
+# vController (formerly CLMS): N instances - indexed names cloudlens-vcontroller-1, -2, -3
 # ---------------------------------------------------------------------
 module "clms" {
+  count  = var.vcontroller_count
   source = "../clms"
 
   subscription_id     = var.subscription_id
@@ -117,12 +118,12 @@ module "clms" {
   resource_group_name = local.rg_name
   use_existing_rg     = true # stack owns the RG
 
-  vm_name        = var.clms_vm_name
+  vm_name        = "${var.clms_vm_name}-${count.index + 1}"
   admin_username = var.admin_username
   admin_password = var.admin_password
   vm_size        = var.clms_vm_size
 
-  # When shared, point at the VNet + subnet we created above.
+  # All instances share the same VNet + subnet; Azure gives each its own private IP.
   existing_vnet_name           = var.shared_vnet ? azurerm_virtual_network.shared[0].name : ""
   existing_vnet_resource_group = var.shared_vnet ? local.rg_name : ""
   existing_subnet_name         = var.shared_vnet ? azurerm_subnet.clms[0].name : ""
@@ -134,10 +135,11 @@ module "clms" {
 }
 
 # ---------------------------------------------------------------------
-# KVO module (optional)
+# KVO: N instances - indexed cloudlens-kvo-1, -2
+# Set kvo_count = 0 (or leave deploy_kvo = false) to skip.
 # ---------------------------------------------------------------------
 module "kvo" {
-  count  = var.deploy_kvo ? 1 : 0
+  count  = var.deploy_kvo ? var.kvo_count : 0
   source = "../kvo"
 
   subscription_id     = var.subscription_id
@@ -146,7 +148,7 @@ module "kvo" {
   resource_group_name = local.rg_name
   use_existing_rg     = true # stack owns the RG
 
-  vm_name        = var.kvo_vm_name
+  vm_name        = "${var.kvo_vm_name}-${count.index + 1}"
   admin_username = var.admin_username
   admin_password = var.admin_password
   vm_size        = var.kvo_vm_size
@@ -162,10 +164,11 @@ module "kvo" {
 }
 
 # ---------------------------------------------------------------------
-# vPB module (optional)
+# vPB: N instances - indexed cloudlens-vpb-1, -2, ...
+# Each vPB has its own mgmt + ingress + egress NICs (multi-NIC honored).
 # ---------------------------------------------------------------------
 module "vpb" {
-  count  = var.deploy_vpb ? 1 : 0
+  count  = var.deploy_vpb ? var.vpb_count : 0
   source = "../vpb"
 
   subscription_id     = var.subscription_id
@@ -174,7 +177,7 @@ module "vpb" {
   resource_group_name = local.rg_name
   use_existing_rg     = true # stack owns the RG
 
-  vm_name        = var.vpb_vm_name
+  vm_name        = "${var.vpb_vm_name}-${count.index + 1}"
   admin_username = var.admin_username
   admin_password = var.admin_password
   vm_size        = var.vpb_vm_size

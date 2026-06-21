@@ -188,3 +188,34 @@ variable "tags" {
     stack   = "clms-plus-vpb"
   }
 }
+
+
+variable "vcontroller_count" {
+  description = "Number of vController VMs (1-3). Default 1. Use 2 for HA, 3 for multi-region."
+  type        = number
+  default     = 1
+  validation {
+    condition     = var.vcontroller_count >= 1 && var.vcontroller_count <= 3
+    error_message = "vcontroller_count must be between 1 and 3."
+  }
+}
+
+variable "kvo_count" {
+  description = "Number of KVO VMs (1-2). Default 1. Use 2 for HA pair."
+  type        = number
+  default     = 1
+  validation {
+    condition     = var.kvo_count >= 1 && var.kvo_count <= 2
+    error_message = "kvo_count must be between 1 and 2."
+  }
+}
+
+variable "vpb_count" {
+  description = "Number of vPB VMs (1-5). Default 1. Use 2-5 for data-plane scale-out."
+  type        = number
+  default     = 1
+  validation {
+    condition     = var.vpb_count >= 1 && var.vpb_count <= 5
+    error_message = "vpb_count must be between 1 and 5."
+  }
+}

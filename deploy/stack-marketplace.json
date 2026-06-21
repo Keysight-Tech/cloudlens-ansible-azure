@@ -74,27 +74,6 @@
         "description": "Base URI for the nested marketplace templates. Override only if you have forked the repo."
       }
     },
-    "vcontrollerVmName": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Optional. Override the vController VM name. Leave blank to use <namePrefix>-vcontroller."
-      }
-    },
-    "kvoVmName": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Optional. Override the KVO VM name. Leave blank to use <namePrefix>-kvo."
-      }
-    },
-    "vpbVmName": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Optional. Override the vPB VM name. Leave blank to use <namePrefix>-vpb."
-      }
-    },
     "vpbIngressNicCount": {
       "type": "int",
       "defaultValue": 1,
@@ -118,6 +97,43 @@
       "metadata": {
         "description": "Number of egress NICs on the vPB VM (forward to monitoring tools). Default 1. More than 3 total data NICs requires Standard_D16s_v3+."
       }
+    },
+    "vcontrollerCount": {
+      "type": "int",
+      "defaultValue": 1,
+      "allowedValues": [
+        1,
+        2,
+        3
+      ],
+      "metadata": {
+        "description": "Number of vController VMs (1-3). Default 1. Use 2 for active/standby HA, 3 for multi-region or BU isolation. Each instance becomes <prefix>-vcontroller-1, -2, -3."
+      }
+    },
+    "kvoCount": {
+      "type": "int",
+      "defaultValue": 1,
+      "allowedValues": [
+        1,
+        2
+      ],
+      "metadata": {
+        "description": "Number of KVO VMs (1-2). Default 1. Use 2 for HA. Each instance becomes <prefix>-kvo-1, -2."
+      }
+    },
+    "vpbCount": {
+      "type": "int",
+      "defaultValue": 1,
+      "allowedValues": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "metadata": {
+        "description": "Number of vPB VMs (1-5). Default 1. Use 2-5 for data-plane scale-out (higher mirror throughput, fan-out to multiple tool clusters). Each instance becomes <prefix>-vpb-1, -2, -3, -4, -5 - each with its own mgmt + ingress + egress NICs."
+      }
     }
   },
   "variables": {
@@ -126,10 +142,7 @@
     "kvoSubnetName": "kvo-subnet",
     "vpbMgmtSubnetName": "vpb-mgmt",
     "vpbIngressSubnetName": "vpb-ingress",
-    "vpbEgressSubnetName": "vpb-egress",
-    "vcontrollerVmName": "[if(empty(parameters('vcontrollerVmName')), concat(parameters('namePrefix'), '-vcontroller'), parameters('vcontrollerVmName'))]",
-    "kvoVmName": "[if(empty(parameters('kvoVmName')), concat(parameters('namePrefix'), '-kvo'), parameters('kvoVmName'))]",
-    "vpbVmName": "[if(empty(parameters('vpbVmName')), concat(parameters('namePrefix'), '-vpb'), parameters('vpbVmName'))]"
+    "vpbEgressSubnetName": "vpb-egress"
   },
   "resources": [
     {
@@ -180,7 +193,11 @@
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2022-09-01",
-      "name": "deploy-vcontroller",
+      "name": "[concat('deploy-vcontroller-', copyIndex(1))]",
+      "copy": {
+        "name": "vcontrollerLoop",
+        "count": "[parameters('vcontrollerCount')]"
+      },
       "dependsOn": [
         "[resourceId('Microsoft.Network/virtualNetworks', variables('sharedVnetName'))]"
       ],
@@ -192,7 +209,7 @@
         },
         "parameters": {
           "vmName": {
-            "value": "[variables('vcontrollerVmName')]"
+            "value": "[concat(parameters('namePrefix'), '-vcontroller-', copyIndex(1))]"
           },
           "adminUsername": {
             "value": "[parameters('adminUsername')]"
@@ -218,7 +235,11 @@
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2022-09-01",
-      "name": "deploy-kvo",
+      "name": "[concat('deploy-kvo-', copyIndex(1))]",
+      "copy": {
+        "name": "kvoLoop",
+        "count": "[parameters('kvoCount')]"
+      },
       "dependsOn": [
         "[resourceId('Microsoft.Network/virtualNetworks', variables('sharedVnetName'))]"
       ],
@@ -230,7 +251,7 @@
         },
         "parameters": {
           "vmName": {
-            "value": "[variables('kvoVmName')]"
+            "value": "[concat(parameters('namePrefix'), '-kvo-', copyIndex(1))]"
           },
           "adminUsername": {
             "value": "[parameters('adminUsername')]"
@@ -256,7 +277,11 @@
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2022-09-01",
-      "name": "deploy-vpb",
+      "name": "[concat('deploy-vpb-', copyIndex(1))]",
+      "copy": {
+        "name": "vpbLoop",
+        "count": "[parameters('vpbCount')]"
+      },
       "dependsOn": [
         "[resourceId('Microsoft.Network/virtualNetworks', variables('sharedVnetName'))]"
       ],
@@ -268,7 +293,7 @@
         },
         "parameters": {
           "vmName": {
-            "value": "[variables('vpbVmName')]"
+            "value": "[concat(parameters('namePrefix'), '-vpb-', copyIndex(1))]"
           },
           "adminUsername": {
             "value": "[parameters('adminUsername')]"
@@ -300,17 +325,17 @@
       "type": "string",
       "value": "[variables('sharedVnetName')]"
     },
-    "vcontrollerUrl": {
-      "type": "string",
-      "value": "[reference('deploy-vcontroller').outputs.vcontrollerUiUrl.value]"
+    "vcontrollerUrls": {
+      "type": "array",
+      "value": "[map(range(1, parameters('vcontrollerCount')), lambda('i', reference(concat('deploy-vcontroller-', string(lambdaVariables('i'))), '2022-09-01').outputs.vcontrollerUiUrl.value))]"
     },
-    "kvoUrl": {
-      "type": "string",
-      "value": "[reference('deploy-kvo').outputs.kvoUiUrl.value]"
+    "kvoUrls": {
+      "type": "array",
+      "value": "[map(range(1, parameters('kvoCount')), lambda('i', reference(concat('deploy-kvo-', string(lambdaVariables('i'))), '2022-09-01').outputs.kvoUiUrl.value))]"
     },
-    "vpbPublicIp": {
-      "type": "string",
-      "value": "[reference('deploy-vpb').outputs.vpbPublicIp.value]"
+    "vpbPublicIps": {
+      "type": "array",
+      "value": "[map(range(1, parameters('vpbCount')), lambda('i', reference(concat('deploy-vpb-', string(lambdaVariables('i'))), '2022-09-01').outputs.vpbPublicIp.value))]"
     },
     "sensorInstallCommand": {
       "type": "string",
@@ -318,7 +343,7 @@
     },
     "nextSteps": {
       "type": "string",
-      "value": "[concat('Stack deployed. (1) Wait ~15 minutes for vController and KVO to finish initializing. (2) Open vController at ', reference('deploy-vcontroller').outputs.vcontrollerUiUrl.value, ' (admin / Cl0udLens@dm!n on first login), create a Project, copy the project key. (3) Tag your workload VMs with cloudlens=yes plus os=ubuntu|rhel|windows and env=prod. (4) Open Azure Cloud Shell and run: curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/quickstart.sh | bash')]"
+      "value": "[concat('Stack deployed: ', string(parameters('vcontrollerCount')), ' vController, ', string(parameters('kvoCount')), ' KVO, ', string(parameters('vpbCount')), ' vPB. All web UIs reachable in ~15 minutes. (1) Open the first vController, log in admin / Cl0udLens@dm!n, create a Project, copy the project key. (2) Tag workload VMs with cloudlens=yes. (3) Run sensor install: curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/quickstart.sh | bash')]"
     }
   }
 }

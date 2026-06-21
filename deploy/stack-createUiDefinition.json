@@ -50,50 +50,96 @@
             }
           },
           {
-            "name": "customizeVmNames",
-            "type": "Microsoft.Common.CheckBox",
-            "label": "Override individual VM names (optional)",
-            "defaultValue": false,
-            "toolTip": "By default the three VMs are named <prefix>-vcontroller, <prefix>-kvo, <prefix>-vpb. Tick this box to set custom names per product (useful when matching existing naming conventions)."
-          },
-          {
-            "name": "vcontrollerVmName",
-            "type": "Microsoft.Common.TextBox",
-            "label": "vController VM name",
-            "defaultValue": "",
-            "toolTip": "Leave blank to use <prefix>-vcontroller. 3 to 64 chars, lowercase letters, digits, hyphens.",
-            "constraints": {
-              "required": false,
-              "regex": "^$|^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$",
-              "validationMessage": "Leave blank or use 3 to 64 lowercase letters, digits, hyphens. Must start and end with a letter or digit."
-            },
-            "visible": "[steps('stackConfig').customizeVmNames]"
-          },
-          {
-            "name": "kvoVmName",
-            "type": "Microsoft.Common.TextBox",
-            "label": "KVO VM name",
-            "defaultValue": "",
-            "toolTip": "Leave blank to use <prefix>-kvo. 3 to 64 chars, lowercase letters, digits, hyphens.",
-            "constraints": {
-              "required": false,
-              "regex": "^$|^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$",
-              "validationMessage": "Leave blank or use 3 to 64 lowercase letters, digits, hyphens. Must start and end with a letter or digit."
-            },
-            "visible": "[steps('stackConfig').customizeVmNames]"
-          },
-          {
-            "name": "vpbVmName",
-            "type": "Microsoft.Common.TextBox",
-            "label": "vPB VM name",
-            "defaultValue": "",
-            "toolTip": "Leave blank to use <prefix>-vpb. 3 to 64 chars, lowercase letters, digits, hyphens.",
-            "constraints": {
-              "required": false,
-              "regex": "^$|^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$",
-              "validationMessage": "Leave blank or use 3 to 64 lowercase letters, digits, hyphens. Must start and end with a letter or digit."
-            },
-            "visible": "[steps('stackConfig').customizeVmNames]"
+            "name": "countsHeader",
+            "type": "Microsoft.Common.Section",
+            "label": "Instance counts (advanced)",
+            "elements": [
+              {
+                "name": "countsInfoBox",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": true,
+                "options": {
+                  "icon": "Info",
+                  "text": "**Default is 1 of each.** For HA, multi-region, or scale-out you can deploy multiple of each product. Names get auto-indexed: `<prefix>-vcontroller-1`, `-2`, `-3`. All instances share the same shared VNet. Each vPB also gets its own ingress + egress NICs."
+                }
+              },
+              {
+                "name": "vcontrollerCount",
+                "type": "Microsoft.Common.DropDown",
+                "label": "vController count",
+                "defaultValue": "1 (default)",
+                "toolTip": "Number of vController VMs. 1 = default. 2 = HA active/standby. 3 = multi-region or BU-isolation.",
+                "constraints": {
+                  "allowedValues": [
+                    {
+                      "label": "1 (default)",
+                      "value": 1
+                    },
+                    {
+                      "label": "2 (HA active/standby)",
+                      "value": 2
+                    },
+                    {
+                      "label": "3 (multi-region / BU isolation)",
+                      "value": 3
+                    }
+                  ],
+                  "required": true
+                }
+              },
+              {
+                "name": "kvoCount",
+                "type": "Microsoft.Common.DropDown",
+                "label": "KVO count",
+                "defaultValue": "1 (default)",
+                "toolTip": "Number of KVO VMs. 1 = default. 2 = HA pair.",
+                "constraints": {
+                  "allowedValues": [
+                    {
+                      "label": "1 (default)",
+                      "value": 1
+                    },
+                    {
+                      "label": "2 (HA pair)",
+                      "value": 2
+                    }
+                  ],
+                  "required": true
+                }
+              },
+              {
+                "name": "vpbCount",
+                "type": "Microsoft.Common.DropDown",
+                "label": "vPB count",
+                "defaultValue": "1 (default)",
+                "toolTip": "Number of vPB VMs. Use 2-5 to scale out the data plane.",
+                "constraints": {
+                  "allowedValues": [
+                    {
+                      "label": "1 (default)",
+                      "value": 1
+                    },
+                    {
+                      "label": "2 (scale-out, 2 tools)",
+                      "value": 2
+                    },
+                    {
+                      "label": "3 (scale-out, 3 tools)",
+                      "value": 3
+                    },
+                    {
+                      "label": "4 (high throughput)",
+                      "value": 4
+                    },
+                    {
+                      "label": "5 (max scale)",
+                      "value": 5
+                    }
+                  ],
+                  "required": true
+                }
+              }
+            ]
           },
           {
             "name": "adminUsername",
@@ -314,11 +360,11 @@
       "vpbVmSize": "[steps('stackConfig').sizesHeader.vpbVmSize]",
       "location": "[location()]",
       "vnetAddressSpace": "[steps('stackConfig').networkHeader.vnetAddressSpace]",
-      "vcontrollerVmName": "[steps('stackConfig').vcontrollerVmName]",
-      "kvoVmName": "[steps('stackConfig').kvoVmName]",
-      "vpbVmName": "[steps('stackConfig').vpbVmName]",
       "vpbIngressNicCount": "[steps('stackConfig').sizesHeader.vpbIngressNicCount]",
-      "vpbEgressNicCount": "[steps('stackConfig').sizesHeader.vpbEgressNicCount]"
+      "vpbEgressNicCount": "[steps('stackConfig').sizesHeader.vpbEgressNicCount]",
+      "vcontrollerCount": "[steps('stackConfig').countsHeader.vcontrollerCount]",
+      "kvoCount": "[steps('stackConfig').countsHeader.kvoCount]",
+      "vpbCount": "[steps('stackConfig').countsHeader.vpbCount]"
     }
   }
 }
