@@ -58,7 +58,7 @@
             "visible": true,
             "options": {
               "icon": "Info",
-              "text": "Heads-up: the password below is for **OS-level SSH** on the underlying Linux VM (only used for advanced troubleshooting). The vController **web UI** uses built-in credentials \u2014 `admin / Cl0udLens@dm!n` \u2014 that you'll change on first login. These are two separate accounts."
+              "text": "Heads-up: the password below is for **OS-level SSH** on the underlying Linux VM (only used for advanced troubleshooting). The vController **web UI** uses built-in credentials (`admin / Cl0udLens@dm!n`) that you'll change on first login. These are two separate accounts."
             }
           },
           {
