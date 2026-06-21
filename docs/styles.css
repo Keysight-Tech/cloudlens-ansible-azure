@@ -341,6 +341,19 @@ h1 .lg, h1 strong {
 .btn:hover { transform: translateY(-2px); }
 .btn:hover::before { opacity: .35; }
 .btn-primary:hover::before, .btn.primary:hover::before { opacity: .55; }
+/* Anchor-tag buttons inherit the global a:hover blue, which makes text
+   invisible on the blue primary background. Pin text color per variant. */
+a.btn:hover, a.btn:focus, a.btn:active { color: inherit; }
+.btn-primary:hover, .btn.primary:hover,
+.btn-primary:focus, .btn.primary:focus { color: #fff; }
+.btn-secondary:hover, .btn.glass:hover,
+.btn-secondary:focus, .btn.glass:focus { color: var(--ink); }
+.btn-tertiary:hover, .btn.tinted:hover,
+.btn-tertiary:focus, .btn.tinted:focus { color: oklch(34% 0.06 80); }
+html[data-theme="dark"] .btn-tertiary:hover,
+html[data-theme="dark"] .btn.tinted:hover { color: var(--gold-bright); }
+.btn.tinted-accent:hover, .btn.tinted-accent:focus { color: var(--accent-deep); }
+html[data-theme="dark"] .btn.tinted-accent:hover { color: var(--accent-bright); }
 /* Tier button title + subtitle get extra legibility against the blue gradient */
 .btn-primary .tier-label strong, .btn.primary .tier-label strong { text-shadow: 0 1px 1px oklch(0% 0 0 / .35); }
 .btn-primary .tier-label small, .btn.primary .tier-label small { opacity: .95; text-shadow: 0 1px 1px oklch(0% 0 0 / .25); }
