@@ -889,8 +889,11 @@ html[data-theme="dark"] .card.link:hover h3 { color: var(--accent-bright); }
   font-size: 12.5px; font-family: var(--mono);
   box-shadow: inset 0 2px 5px oklch(0% 0 0 / .3);
 }
-.terraform-note code { font-family: var(--mono); color: var(--ink); }
+/* Block code (inside the dark <pre>) inherits the light code-ink color */
+.terraform-note pre code { font-family: var(--mono); color: inherit; background: transparent; box-shadow: none; padding: 0; }
+/* Inline code (inside the paragraph) keeps the dark ink-on-light pill look */
 .terraform-note p code {
+  font-family: var(--mono); color: var(--ink);
   background: var(--bg-2); padding: 1px 6px; border-radius: 6px; font-size: 12px;
   box-shadow: inset 0 1px 2px var(--inner-dark);
 }
