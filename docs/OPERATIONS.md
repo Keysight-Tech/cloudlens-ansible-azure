@@ -9,6 +9,24 @@ of this doc is that nobody should ever burn the same hour twice.
 
 ---
 
+## 0. Configuration knobs for `deploy-stack.sh`
+
+Every default in the bash one-liner is overridable. Full reference table is in [README.md "Configuration & overrides"](../README.md#configuration--overrides-bash-deploy-stacksh). Same precedence everywhere: **CLI flag wins over env var wins over hardcoded default**. Run `bash deploy-stack.sh --help` for the in-script version.
+
+Most common knobs:
+
+| What | Default | Env var | Flag |
+|---|---|---|---|
+| Resource group | `cloudlens-rg` | `CLOUDLENS_RG` | `--resource-group` |
+| Region | `eastus2` | `CLOUDLENS_REGION` | `--location` |
+| vController count | `1` | `CLOUDLENS_VCONTROLLER_COUNT` | `--vcontroller-count` |
+| vPB count | `1` | `CLOUDLENS_VPB_COUNT` | `--vpb-count` |
+| vPB ingress NICs | `1` | `CLOUDLENS_VPB_INGRESS_NICS` | `--vpb-ingress-nics` |
+| vPB egress NICs | `1` | `CLOUDLENS_VPB_EGRESS_NICS` | `--vpb-egress-nics` |
+| Rollback on failure | `false` | `CLOUDLENS_ROLLBACK_ON_FAIL` | `--rollback` |
+
+---
+
 ## 1. Quick reference: every port and credential you will touch
 
 | Component | Public port(s) | Internal port(s) | Default UI cred | Default CLI cred | First-boot wait |

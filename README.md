@@ -45,6 +45,49 @@ terraform init && terraform apply
 
 All three deploy the same Azure resources, accept Marketplace terms automatically, and chain through vController, KVO (optional), vPB, and sensor deployment.
 
+### Configuration & overrides (bash deploy-stack.sh)
+
+Every default is overridable three ways: **CLI flag wins over env var wins over hardcoded default**. Run `bash deploy-stack.sh --help` for the in-script reference, or use this table:
+
+| Default | CLI flag | Env var | Notes |
+|---|---|---|---|
+| `cloudlens-rg` | `--resource-group <name>` | `CLOUDLENS_RG` | New or existing RG name |
+| `eastus2` | `--location <region>` | `CLOUDLENS_REGION` | Any Azure region |
+| `azureuser` | `--admin-user <name>` | `CLOUDLENS_ADMIN_USER` | OS-level SSH user across all VMs |
+| `vcontroller` | `--vcontroller-name <name>` | `CLOUDLENS_VCONTROLLER_NAME` | VM name prefix |
+| `kvo` | `--kvo-name <name>` | `CLOUDLENS_KVO_NAME` | VM name prefix |
+| `vpb` | `--vpb-name <name>` | `CLOUDLENS_VPB_NAME` | VM name prefix |
+| `Standard_D4s_v5` | `--vcontroller-size <sku>` | `CLOUDLENS_VCONTROLLER_SIZE` | Azure VM size |
+| `Standard_D4s_v5` | `--kvo-size <sku>` | `CLOUDLENS_KVO_SIZE` | Azure VM size |
+| `Standard_D8s_v3` | `--vpb-size <sku>` | `CLOUDLENS_VPB_SIZE` | D16s_v3+ needed for >3 NICs total |
+| `1` | `--vcontroller-count <N>` | `CLOUDLENS_VCONTROLLER_COUNT` | 1-3 (HA / multi-region) |
+| `1` | `--kvo-count <N>` | `CLOUDLENS_KVO_COUNT` | 1-2 (HA pair) |
+| `1` | `--vpb-count <N>` | `CLOUDLENS_VPB_COUNT` | 1-5 (scale-out) |
+| `1` | `--vpb-ingress-nics <N>` | `CLOUDLENS_VPB_INGRESS_NICS` | 1-3 per vPB instance |
+| `1` | `--vpb-egress-nics <N>` | `CLOUDLENS_VPB_EGRESS_NICS` | 1-3 per vPB instance |
+| (toggle) | `--with-kvo` / `--no-kvo` | — | Default: interactive prompt |
+| (toggle) | `--no-vpb` | — | Skip vPB entirely |
+| (toggle) | `--no-sensors` | — | Skip sensor playbook chain |
+| `false` | `--rollback` / `--no-rollback` | `CLOUDLENS_ROLLBACK_ON_FAIL` | On failure: delete RG we created. Never touches pre-existing RGs. |
+| `false` | `--dry-run` | — | Print every az command, touch nothing |
+
+**Three patterns customers use:**
+
+```bash
+# 1. Take everything as-is
+curl -sSL .../deploy-stack.sh | bash
+
+# 2. Env-var overrides (cleanest for curl|bash)
+CLOUDLENS_RG=prod-rg CLOUDLENS_REGION=westeurope curl -sSL .../deploy-stack.sh | bash
+
+# 3. Full prod-style with flags
+bash deploy-stack.sh \
+  --resource-group prod-rg --location westeurope \
+  --vcontroller-count 2 --kvo-count 2 --vpb-count 3 \
+  --vpb-ingress-nics 2 --vpb-egress-nics 3 --vpb-size Standard_D16s_v3 \
+  --rollback
+```
+
 ---
 
 ## Which path?
