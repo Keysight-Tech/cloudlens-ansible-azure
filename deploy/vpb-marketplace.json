@@ -114,7 +114,9 @@
       "apiVersion": "2024-05-01",
       "name": "[variables('pipName')]",
       "location": "[parameters('location')]",
-      "sku": { "name": "Standard" },
+      "sku": {
+        "name": "Standard"
+      },
       "properties": {
         "publicIPAllocationMethod": "Static",
         "dnsSettings": {
@@ -204,19 +206,29 @@
       "name": "[variables('effectiveVnetName')]",
       "location": "[parameters('location')]",
       "properties": {
-        "addressSpace": { "addressPrefixes": ["[parameters('addressSpace')]"] },
+        "addressSpace": {
+          "addressPrefixes": [
+            "[parameters('addressSpace')]"
+          ]
+        },
         "subnets": [
           {
             "name": "[variables('mgmtSubnetName')]",
-            "properties": { "addressPrefix": "[parameters('mgmtSubnetPrefix')]" }
+            "properties": {
+              "addressPrefix": "[parameters('mgmtSubnetPrefix')]"
+            }
           },
           {
             "name": "[variables('ingressSubnetName')]",
-            "properties": { "addressPrefix": "[parameters('ingressSubnetPrefix')]" }
+            "properties": {
+              "addressPrefix": "[parameters('ingressSubnetPrefix')]"
+            }
           },
           {
             "name": "[variables('egressSubnetName')]",
-            "properties": { "addressPrefix": "[parameters('egressSubnetPrefix')]" }
+            "properties": {
+              "addressPrefix": "[parameters('egressSubnetPrefix')]"
+            }
           }
         ]
       }
@@ -237,13 +249,19 @@
           {
             "name": "ipconfig1",
             "properties": {
-              "subnet": { "id": "[variables('mgmtSubnetId')]" },
-              "publicIPAddress": { "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]" },
+              "subnet": {
+                "id": "[variables('mgmtSubnetId')]"
+              },
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]"
+              },
               "privateIPAllocationMethod": "Dynamic"
             }
           }
         ],
-        "networkSecurityGroup": { "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]" }
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+        }
       }
     },
     {
@@ -261,7 +279,9 @@
           {
             "name": "ipconfig1",
             "properties": {
-              "subnet": { "id": "[variables('ingressSubnetId')]" },
+              "subnet": {
+                "id": "[variables('ingressSubnetId')]"
+              },
               "privateIPAllocationMethod": "Dynamic"
             }
           }
@@ -283,7 +303,9 @@
           {
             "name": "ipconfig1",
             "properties": {
-              "subnet": { "id": "[variables('egressSubnetId')]" },
+              "subnet": {
+                "id": "[variables('egressSubnetId')]"
+              },
               "privateIPAllocationMethod": "Dynamic"
             }
           }
@@ -306,7 +328,9 @@
         "product": "keysight-cloudlens-virtual-packet-broker"
       },
       "properties": {
-        "hardwareProfile": { "vmSize": "[parameters('vmSize')]" },
+        "hardwareProfile": {
+          "vmSize": "[parameters('vmSize')]"
+        },
         "osProfile": {
           "computerName": "[parameters('vmName')]",
           "adminUsername": "[parameters('adminUsername')]",
@@ -321,27 +345,37 @@
           },
           "osDisk": {
             "createOption": "FromImage",
-            "managedDisk": { "storageAccountType": "Premium_LRS" }
+            "managedDisk": {
+              "storageAccountType": "Premium_LRS"
+            }
           }
         },
         "networkProfile": {
           "networkInterfaces": [
             {
               "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('mgmtNicName'))]",
-              "properties": { "primary": true }
+              "properties": {
+                "primary": true
+              }
             },
             {
               "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('ingressNicName'))]",
-              "properties": { "primary": false }
+              "properties": {
+                "primary": false
+              }
             },
             {
               "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('egressNicName'))]",
-              "properties": { "primary": false }
+              "properties": {
+                "primary": false
+              }
             }
           ]
         },
         "diagnosticsProfile": {
-          "bootDiagnostics": { "enabled": true }
+          "bootDiagnostics": {
+            "enabled": true
+          }
         }
       }
     }
@@ -353,15 +387,15 @@
     },
     "vpbSshCommand": {
       "type": "string",
-      "value": "[concat('ssh ', parameters('adminUsername'), '@', reference(variables('pipName')).ipAddress)]"
+      "value": "[concat('ssh -p 9022 ', parameters('adminUsername'), '@', reference(variables('pipName')).ipAddress)]"
     },
     "vpbCliAccess": {
       "type": "string",
-      "value": "[concat('Two-hop SSH: ssh ', parameters('adminUsername'), '@', reference(variables('pipName')).ipAddress, ', then: ssh admin@localhost -p 2222 (password: ixia)')]"
+      "value": "[concat('First-time setup (run once after first SSH): curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/scripts/bootstrap-vpb.sh | sudo bash. Then log out, ssh -p 9022 ', parameters('adminUsername'), '@', reference(variables('pipName')).ipAddress, ', and run: sudo vpb. See docs/OPERATIONS.md section 2.')]"
     },
     "nextStep": {
       "type": "string",
-      "value": "[concat('vPB is initializing. SSH is reachable at ', reference(variables('pipName')).ipAddress, ' within about 60 seconds; full vPB initialization takes 5 to 10 minutes. Access the vPB CLI with: ssh ', parameters('adminUsername'), '@', reference(variables('pipName')).ipAddress, ' then ssh admin@localhost -p 2222 (password: ixia, change immediately). Configure ingress filters and match rules per the Keysight CloudLens vPB documentation, then return to https://keysight-tech.github.io/cloudlens-ansible-azure/ to deploy sensors.')]"
+      "value": "[concat('vPB is initializing (about 5-10 minutes). Step 1: SSH on port 9022 -> ssh -p 9022 ', parameters('adminUsername'), '@', reference(variables('pipName')).ipAddress, '. Step 2: run the one-time bootstrap (installs kubeconfig + sudo vpb wrapper) -> curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/scripts/bootstrap-vpb.sh | sudo bash. Step 3: log out, SSH back in, run: sudo kubectl get pods -A and sudo vpb.')]"
     }
   }
 }

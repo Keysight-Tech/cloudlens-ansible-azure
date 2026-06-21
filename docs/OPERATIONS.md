@@ -67,19 +67,84 @@ Same flow as vController. The EULA + first-login is a one-time gate.
 ssh azureuser@<kvo-public-ip>
 ```
 
-### vPB (port 9022, two-hop into CLI)
+### vPB (port 9022, then `sudo vpb` after bootstrap)
+
+#### Step 1: SSH on port 9022 (NOT 22)
 
 ```bash
-# Step 1: OS shell on port 9022 (NOT 22)
 ssh azureuser@<vpb-mgmt-public-ip> -p 9022
-
-# Step 2: from inside the OS shell, hop to the Keysight CLI
-ssh admin@localhost -p 2222
-# default password: ixia
-# vPB will FORCE you to change it on first login
+# password: the adminPassword you set during the marketplace deploy
 ```
 
-If `ssh -p 9022` returns "Operation timed out":
+#### Step 2: First-time bootstrap (run ONCE per fresh vPB)
+
+A fresh marketplace vPB gives you a working K8s cluster but does NOT expose
+`vpb` or a friendly kubeconfig on the host PATH. Two errors every customer
+hits on first SSH:
+
+```
+$ sudo kubectl get pods -A
+The connection to the server localhost:8080 was refused
+
+$ sudo vpb
+sudo: vpb: command not found
+```
+
+Both come from the same root cause: the KCOS image puts kubeconfig at
+`/etc/rancher/k3s/k3s.yaml` (k3s) or `/etc/kubernetes/admin.conf` (kubeadm),
+and the vPB CLI runs inside a K8s pod, not as a host binary.
+
+**Run the bootstrap once per fresh vPB**:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/scripts/bootstrap-vpb.sh | sudo bash
+```
+
+It:
+
+1. Detects whether KCOS uses k3s or kubeadm and finds the right kubeconfig.
+2. Waits for the K8s API to be reachable (up to 10 min) so you do not run
+   the bootstrap before the cluster is ready.
+3. Writes `/etc/profile.d/cloudlens-vpb-kubeconfig.sh` exporting
+   `KUBECONFIG` system-wide, so every NEW shell gets a working kubectl.
+4. Installs the `sudo vpb` wrapper at `/usr/local/bin/vpb`. The wrapper
+   auto-detects the kubeconfig + the vpbsystem pod and `kubectl exec`s
+   into the Keysight CLI.
+5. Waits for the vpbsystem pod to reach Running, then prints the next-step
+   commands.
+
+#### Step 3: Log out, log back in, use it
+
+```bash
+exit
+ssh azureuser@<vpb-mgmt-public-ip> -p 9022
+
+sudo kubectl get pods -A          # cluster overview, no localhost:8080 error
+sudo vpb                          # drops you into the CloudLensVPB# CLI
+sudo vpb -c "show version"        # one-off CLI command, non-interactive
+```
+
+#### Why two SSH sessions
+
+The `/etc/profile.d/` script that exports `KUBECONFIG` only loads at login.
+The first SSH session does not have it; the second does. If you do not want
+to re-login, run `source /etc/profile.d/cloudlens-vpb-kubeconfig.sh` in the
+current shell instead.
+
+#### Legacy two-hop SSH (vPB v3.14 and earlier)
+
+```bash
+ssh azureuser@<vpb-mgmt-public-ip> -p 9022
+ssh admin@localhost -p 2222
+# default password: ixia (v3.14 forced a change on first login)
+```
+
+This two-hop pattern is gone in v3.15. The CLI lives inside the K8s pod, not
+on port 2222. Use `sudo vpb` (after bootstrap) instead.
+
+---
+
+#### If `ssh -p 9022` itself times out
 
 1. **Check the NSG.** The vPB management NIC's NSG must allow inbound TCP/9022.
    If you deployed via the latest marketplace ARM template (`vpb-marketplace.json`
