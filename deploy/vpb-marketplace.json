@@ -87,6 +87,30 @@
       "metadata": {
         "description": "Egress subnet prefix in CIDR notation. Forwards processed mirror traffic to your monitoring tools. Only used when creating a new VNet."
       }
+    },
+    "ingressNicCount": {
+      "type": "int",
+      "defaultValue": 1,
+      "allowedValues": [
+        1,
+        2,
+        3
+      ],
+      "metadata": {
+        "description": "Number of ingress NICs (receive mirror traffic). Default 1. Use 2 or 3 to fan in from multiple sources. Each extra NIC adds an Azure NIC to the VM. With more than 3 NICs total (1 mgmt + N ingress + N egress) you must select Standard_D16s_v3 or larger - D8s_v3 supports max 4 NICs."
+      }
+    },
+    "egressNicCount": {
+      "type": "int",
+      "defaultValue": 1,
+      "allowedValues": [
+        1,
+        2,
+        3
+      ],
+      "metadata": {
+        "description": "Number of egress NICs (forward processed traffic to monitoring tools). Default 1. Use 2 or 3 to fan out to multiple tools. With more than 4 NICs total you must select Standard_D16s_v3 or larger."
+      }
     }
   },
   "variables": {
@@ -102,8 +126,6 @@
     "pipName": "[concat(parameters('vmName'), '-mgmt-pip')]",
     "nsgName": "[concat(parameters('vmName'), '-mgmt-nsg')]",
     "mgmtNicName": "[concat(parameters('vmName'), '-mgmt-nic')]",
-    "ingressNicName": "[concat(parameters('vmName'), '-ingress-nic')]",
-    "egressNicName": "[concat(parameters('vmName'), '-egress-nic')]",
     "imagePublisher": "keysight-technologies-cloudlens",
     "imageOffer": "keysight-cloudlens-virtual-packet-broker",
     "imageSku": "cloudlens-virtual-packet-broker-3-15-0_1"
@@ -267,8 +289,12 @@
     {
       "type": "Microsoft.Network/networkInterfaces",
       "apiVersion": "2024-05-01",
-      "name": "[variables('ingressNicName')]",
+      "name": "[concat(parameters('vmName'), '-ingress-', copyIndex(1))]",
       "location": "[parameters('location')]",
+      "copy": {
+        "name": "ingressNicLoop",
+        "count": "[parameters('ingressNicCount')]"
+      },
       "dependsOn": [
         "[resourceId('Microsoft.Network/virtualNetworks', variables('effectiveVnetName'))]"
       ],
@@ -291,8 +317,12 @@
     {
       "type": "Microsoft.Network/networkInterfaces",
       "apiVersion": "2024-05-01",
-      "name": "[variables('egressNicName')]",
+      "name": "[concat(parameters('vmName'), '-egress-', copyIndex(1))]",
       "location": "[parameters('location')]",
+      "copy": {
+        "name": "egressNicLoop",
+        "count": "[parameters('egressNicCount')]"
+      },
       "dependsOn": [
         "[resourceId('Microsoft.Network/virtualNetworks', variables('effectiveVnetName'))]"
       ],
@@ -319,8 +349,8 @@
       "location": "[parameters('location')]",
       "dependsOn": [
         "[resourceId('Microsoft.Network/networkInterfaces', variables('mgmtNicName'))]",
-        "[resourceId('Microsoft.Network/networkInterfaces', variables('ingressNicName'))]",
-        "[resourceId('Microsoft.Network/networkInterfaces', variables('egressNicName'))]"
+        "ingressNicLoop",
+        "egressNicLoop"
       ],
       "plan": {
         "name": "cloudlens-virtual-packet-broker-3-15-0_1",
@@ -351,26 +381,7 @@
           }
         },
         "networkProfile": {
-          "networkInterfaces": [
-            {
-              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('mgmtNicName'))]",
-              "properties": {
-                "primary": true
-              }
-            },
-            {
-              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('ingressNicName'))]",
-              "properties": {
-                "primary": false
-              }
-            },
-            {
-              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('egressNicName'))]",
-              "properties": {
-                "primary": false
-              }
-            }
-          ]
+          "networkInterfaces": "[concat(array(createObject('id', resourceId('Microsoft.Network/networkInterfaces', variables('mgmtNicName')), 'properties', createObject('primary', true))),map(range(1, parameters('ingressNicCount')), lambda('i', createObject('id', resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-ingress-', string(lambdaVariables('i')))), 'properties', createObject('primary', false)))),map(range(1, parameters('egressNicCount')), lambda('i', createObject('id', resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-egress-', string(lambdaVariables('i')))), 'properties', createObject('primary', false)))))]"
         },
         "diagnosticsProfile": {
           "bootDiagnostics": {

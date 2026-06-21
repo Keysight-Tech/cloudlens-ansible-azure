@@ -103,6 +103,63 @@
               ],
               "required": true
             }
+          },
+          {
+            "name": "nicInfoBox",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "**NIC layout:** vPB always has 1 management NIC. By default it also has 1 ingress NIC (receives mirror traffic) and 1 egress NIC (forwards to tools). For production fan-in/fan-out scenarios you can add up to 3 of each. **Azure NIC limits per VM size:** D8s_v3 supports 4 NICs (use ingress+egress <= 3), D16s_v3 / D32s_v3 support 8 NICs (use ingress+egress <= 7)."
+            }
+          },
+          {
+            "name": "ingressNicCount",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Ingress NIC count",
+            "defaultValue": "1 (default, single mirror source)",
+            "toolTip": "Number of ingress NICs (receive mirror traffic from sensors / Gateway Load Balancer). Each extra NIC counts toward the VM's NIC quota.",
+            "constraints": {
+              "allowedValues": [
+                {
+                  "label": "1 (default, single mirror source)",
+                  "value": 1
+                },
+                {
+                  "label": "2 (two mirror sources or VNets)",
+                  "value": 2
+                },
+                {
+                  "label": "3 (three mirror sources, needs D16s_v3+)",
+                  "value": 3
+                }
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "egressNicCount",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Egress NIC count",
+            "defaultValue": "1 (default, single tool destination)",
+            "toolTip": "Number of egress NICs (forward processed traffic to monitoring tools). Each extra NIC counts toward the VM's NIC quota.",
+            "constraints": {
+              "allowedValues": [
+                {
+                  "label": "1 (default, single tool destination)",
+                  "value": 1
+                },
+                {
+                  "label": "2 (two tools, e.g. Vectra + Corelight)",
+                  "value": 2
+                },
+                {
+                  "label": "3 (three tools, needs D16s_v3+)",
+                  "value": 3
+                }
+              ],
+              "required": true
+            }
           }
         ]
       },
@@ -223,7 +280,9 @@
       "addressSpace": "[if(equals(steps('networkConfig').vnetMode, 'new'), steps('networkConfig').addressSpace, '10.50.0.0/16')]",
       "mgmtSubnetPrefix": "[if(equals(steps('networkConfig').vnetMode, 'new'), steps('networkConfig').mgmtSubnetPrefix, '10.50.2.0/24')]",
       "ingressSubnetPrefix": "[if(equals(steps('networkConfig').vnetMode, 'new'), steps('networkConfig').ingressSubnetPrefix, '10.50.3.0/24')]",
-      "egressSubnetPrefix": "[if(equals(steps('networkConfig').vnetMode, 'new'), steps('networkConfig').egressSubnetPrefix, '10.50.4.0/24')]"
+      "egressSubnetPrefix": "[if(equals(steps('networkConfig').vnetMode, 'new'), steps('networkConfig').egressSubnetPrefix, '10.50.4.0/24')]",
+      "ingressNicCount": "[steps('vmConfig').ingressNicCount]",
+      "egressNicCount": "[steps('vmConfig').egressNicCount]"
     }
   }
 }

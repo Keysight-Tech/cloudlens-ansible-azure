@@ -94,6 +94,30 @@
       "metadata": {
         "description": "Optional. Override the vPB VM name. Leave blank to use <namePrefix>-vpb."
       }
+    },
+    "vpbIngressNicCount": {
+      "type": "int",
+      "defaultValue": 1,
+      "allowedValues": [
+        1,
+        2,
+        3
+      ],
+      "metadata": {
+        "description": "Number of ingress NICs on the vPB VM (receive mirror traffic). Default 1. More than 3 total data NICs requires Standard_D16s_v3+."
+      }
+    },
+    "vpbEgressNicCount": {
+      "type": "int",
+      "defaultValue": 1,
+      "allowedValues": [
+        1,
+        2,
+        3
+      ],
+      "metadata": {
+        "description": "Number of egress NICs on the vPB VM (forward to monitoring tools). Default 1. More than 3 total data NICs requires Standard_D16s_v3+."
+      }
     }
   },
   "variables": {
@@ -260,6 +284,12 @@
           },
           "vnetName": {
             "value": "[variables('sharedVnetName')]"
+          },
+          "ingressNicCount": {
+            "value": "[parameters('vpbIngressNicCount')]"
+          },
+          "egressNicCount": {
+            "value": "[parameters('vpbEgressNicCount')]"
           }
         }
       }

@@ -214,6 +214,63 @@
                   ],
                   "required": true
                 }
+              },
+              {
+                "name": "vpbNicInfoBox",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": true,
+                "options": {
+                  "icon": "Info",
+                  "text": "**vPB NIC layout:** 1 mgmt NIC + N ingress + N egress. Default is 1 of each (3 NICs total). For fan-in / fan-out prod use 2-3 of each. With more than 3 data NICs you must select D16s_v3 or D32s_v3 above (D8s_v3 supports max 4 NICs)."
+                }
+              },
+              {
+                "name": "vpbIngressNicCount",
+                "type": "Microsoft.Common.DropDown",
+                "label": "vPB ingress NIC count",
+                "defaultValue": "1 (default)",
+                "toolTip": "vPB receive-side NICs.",
+                "constraints": {
+                  "allowedValues": [
+                    {
+                      "label": "1 (default)",
+                      "value": 1
+                    },
+                    {
+                      "label": "2 (two mirror sources)",
+                      "value": 2
+                    },
+                    {
+                      "label": "3 (three sources, needs D16s_v3+)",
+                      "value": 3
+                    }
+                  ],
+                  "required": true
+                }
+              },
+              {
+                "name": "vpbEgressNicCount",
+                "type": "Microsoft.Common.DropDown",
+                "label": "vPB egress NIC count",
+                "defaultValue": "1 (default)",
+                "toolTip": "vPB forward-side NICs.",
+                "constraints": {
+                  "allowedValues": [
+                    {
+                      "label": "1 (default)",
+                      "value": 1
+                    },
+                    {
+                      "label": "2 (two tools)",
+                      "value": 2
+                    },
+                    {
+                      "label": "3 (three tools, needs D16s_v3+)",
+                      "value": 3
+                    }
+                  ],
+                  "required": true
+                }
               }
             ]
           },
@@ -259,7 +316,9 @@
       "vnetAddressSpace": "[steps('stackConfig').networkHeader.vnetAddressSpace]",
       "vcontrollerVmName": "[steps('stackConfig').vcontrollerVmName]",
       "kvoVmName": "[steps('stackConfig').kvoVmName]",
-      "vpbVmName": "[steps('stackConfig').vpbVmName]"
+      "vpbVmName": "[steps('stackConfig').vpbVmName]",
+      "vpbIngressNicCount": "[steps('stackConfig').sizesHeader.vpbIngressNicCount]",
+      "vpbEgressNicCount": "[steps('stackConfig').sizesHeader.vpbEgressNicCount]"
     }
   }
 }
