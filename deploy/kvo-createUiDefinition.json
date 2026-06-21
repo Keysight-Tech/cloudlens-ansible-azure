@@ -53,6 +53,15 @@
             }
           },
           {
+            "name": "passwordInfoBox",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "Heads-up: the password below is for **OS-level SSH** on the underlying Linux VM (only used for advanced troubleshooting). The KVO **web UI** uses its own admin account that you'll set during first-login EULA acceptance. These are two separate accounts."
+            }
+          },
+          {
             "name": "adminPassword",
             "type": "Microsoft.Compute.CredentialsCombo",
             "label": {
@@ -60,7 +69,7 @@
               "confirmPassword": "Confirm password"
             },
             "toolTip": {
-              "password": "12+ characters with uppercase, lowercase, a digit, and a symbol. This is the OS-level password, not the KVO web UI password."
+              "password": "OS-level SSH password. 12+ chars with uppercase, lowercase, a digit, and a symbol. NOT the web UI password."
             },
             "osPlatform": "Linux",
             "constraints": {

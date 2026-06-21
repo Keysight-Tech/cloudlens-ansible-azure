@@ -53,6 +53,15 @@
             }
           },
           {
+            "name": "passwordInfoBox",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "Heads-up: the password below is for **OS-level access** on the underlying VM (only used for low-level troubleshooting). The vPB **CLI** runs inside a Kubernetes pod and uses a separate set of credentials configured during initialization. See the OPERATIONS doc."
+            }
+          },
+          {
             "name": "adminPassword",
             "type": "Microsoft.Compute.CredentialsCombo",
             "label": {
@@ -60,7 +69,7 @@
               "confirmPassword": "Confirm password"
             },
             "toolTip": {
-              "password": "12+ characters with uppercase, lowercase, a digit, and a symbol. This is the OS-level password, not the vPB CLI password."
+              "password": "OS-level SSH password. 12+ chars with uppercase, lowercase, a digit, and a symbol. NOT the web UI password."
             },
             "osPlatform": "Linux",
             "constraints": {
