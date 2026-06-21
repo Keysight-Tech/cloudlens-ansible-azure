@@ -378,6 +378,29 @@
           }
         }
       }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "apiVersion": "2024-11-01",
+      "name": "[concat(parameters('vmName'), '/bootstrapVpb')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Compute/virtualMachines', parameters('vmName'))]"
+      ],
+      "properties": {
+        "publisher": "Microsoft.Azure.Extensions",
+        "type": "CustomScript",
+        "typeHandlerVersion": "2.1",
+        "autoUpgradeMinorVersion": true,
+        "settings": {
+          "fileUris": [
+            "https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/scripts/bootstrap-vpb.sh"
+          ]
+        },
+        "protectedSettings": {
+          "commandToExecute": "bash bootstrap-vpb.sh > /var/log/cloudlens-bootstrap.log 2>&1"
+        }
+      }
     }
   ],
   "outputs": {
@@ -391,11 +414,11 @@
     },
     "vpbCliAccess": {
       "type": "string",
-      "value": "[concat('First-time setup (run once after first SSH): curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/scripts/bootstrap-vpb.sh | sudo bash. Then log out, ssh -p 9022 ', parameters('adminUsername'), '@', reference(variables('pipName')).ipAddress, ', and run: sudo vpb. See docs/OPERATIONS.md section 2.')]"
+      "value": "[concat('After deploy completes, just SSH in and use sudo vpb. The CustomScript extension auto-installed kubeconfig + the wrapper. Bootstrap log: /var/log/cloudlens-bootstrap.log on the VM.')]"
     },
     "nextStep": {
       "type": "string",
-      "value": "[concat('vPB is initializing (about 5-10 minutes). Step 1: SSH on port 9022 -> ssh -p 9022 ', parameters('adminUsername'), '@', reference(variables('pipName')).ipAddress, '. Step 2: run the one-time bootstrap (installs kubeconfig + sudo vpb wrapper) -> curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/scripts/bootstrap-vpb.sh | sudo bash. Step 3: log out, SSH back in, run: sudo kubectl get pods -A and sudo vpb.')]"
+      "value": "[concat('vPB is ready. Bootstrap ran automatically via VM extension during deploy. SSH in: ssh -p 9022 ', parameters('adminUsername'), '@', reference(variables('pipName')).ipAddress, '. Then: sudo kubectl get pods -A (cluster view), sudo vpb (vPB CLI). Bootstrap log at /var/log/cloudlens-bootstrap.log if anything looks off.')]"
     }
   }
 }

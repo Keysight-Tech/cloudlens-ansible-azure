@@ -249,8 +249,8 @@ docker build -t cloudlens-ansible-azure .</code></pre>
               <li>Version 3.15.0-1 from Azure Marketplace</li>
               <li>Three-NIC layout with accelerated networking</li>
               <li>SSH: <code>ssh -p 9022 azureuser@&lt;vpb-ip&gt;</code> (NOT port 22)</li>
-              <li>First-time setup (once per vPB): <code>curl -sSL .../bootstrap-vpb.sh | sudo bash</code></li>
-              <li>CLI access: <code>sudo vpb</code> after bootstrap</li>
+              <li>Bootstrap runs automatically during deploy (CustomScript extension)</li>
+              <li>CLI access: <code>sudo vpb</code> (works the moment you SSH in)</li>
             </ul>
             <a class="btn btn-secondary" href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fvpb-marketplace.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fvpb-createUiDefinition.json" target="_blank" rel="noopener">&#9654; Deploy vPB</a>
           </div>
