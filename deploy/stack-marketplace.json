@@ -73,6 +73,27 @@
       "metadata": {
         "description": "Base URI for the nested marketplace templates. Override only if you have forked the repo."
       }
+    },
+    "vcontrollerVmName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional. Override the vController VM name. Leave blank to use <namePrefix>-vcontroller."
+      }
+    },
+    "kvoVmName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional. Override the KVO VM name. Leave blank to use <namePrefix>-kvo."
+      }
+    },
+    "vpbVmName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional. Override the vPB VM name. Leave blank to use <namePrefix>-vpb."
+      }
     }
   },
   "variables": {
@@ -82,9 +103,9 @@
     "vpbMgmtSubnetName": "vpb-mgmt",
     "vpbIngressSubnetName": "vpb-ingress",
     "vpbEgressSubnetName": "vpb-egress",
-    "vcontrollerVmName": "[concat(parameters('namePrefix'), '-vcontroller')]",
-    "kvoVmName": "[concat(parameters('namePrefix'), '-kvo')]",
-    "vpbVmName": "[concat(parameters('namePrefix'), '-vpb')]"
+    "vcontrollerVmName": "[if(empty(parameters('vcontrollerVmName')), concat(parameters('namePrefix'), '-vcontroller'), parameters('vcontrollerVmName'))]",
+    "kvoVmName": "[if(empty(parameters('kvoVmName')), concat(parameters('namePrefix'), '-kvo'), parameters('kvoVmName'))]",
+    "vpbVmName": "[if(empty(parameters('vpbVmName')), concat(parameters('namePrefix'), '-vpb'), parameters('vpbVmName'))]"
   },
   "resources": [
     {
@@ -94,28 +115,40 @@
       "location": "[parameters('location')]",
       "properties": {
         "addressSpace": {
-          "addressPrefixes": ["[parameters('vnetAddressSpace')]"]
+          "addressPrefixes": [
+            "[parameters('vnetAddressSpace')]"
+          ]
         },
         "subnets": [
           {
             "name": "[variables('vcontrollerSubnetName')]",
-            "properties": { "addressPrefix": "10.50.1.0/24" }
+            "properties": {
+              "addressPrefix": "10.50.1.0/24"
+            }
           },
           {
             "name": "[variables('kvoSubnetName')]",
-            "properties": { "addressPrefix": "10.50.2.0/24" }
+            "properties": {
+              "addressPrefix": "10.50.2.0/24"
+            }
           },
           {
             "name": "[variables('vpbMgmtSubnetName')]",
-            "properties": { "addressPrefix": "10.50.10.0/24" }
+            "properties": {
+              "addressPrefix": "10.50.10.0/24"
+            }
           },
           {
             "name": "[variables('vpbIngressSubnetName')]",
-            "properties": { "addressPrefix": "10.50.11.0/24" }
+            "properties": {
+              "addressPrefix": "10.50.11.0/24"
+            }
           },
           {
             "name": "[variables('vpbEgressSubnetName')]",
-            "properties": { "addressPrefix": "10.50.12.0/24" }
+            "properties": {
+              "addressPrefix": "10.50.12.0/24"
+            }
           }
         ]
       }
@@ -134,13 +167,27 @@
           "contentVersion": "1.0.0.0"
         },
         "parameters": {
-          "vmName": { "value": "[variables('vcontrollerVmName')]" },
-          "adminUsername": { "value": "[parameters('adminUsername')]" },
-          "adminPassword": { "value": "[parameters('adminPassword')]" },
-          "vmSize": { "value": "[parameters('vcontrollerVmSize')]" },
-          "location": { "value": "[parameters('location')]" },
-          "vnetName": { "value": "[variables('sharedVnetName')]" },
-          "subnetName": { "value": "[variables('vcontrollerSubnetName')]" }
+          "vmName": {
+            "value": "[variables('vcontrollerVmName')]"
+          },
+          "adminUsername": {
+            "value": "[parameters('adminUsername')]"
+          },
+          "adminPassword": {
+            "value": "[parameters('adminPassword')]"
+          },
+          "vmSize": {
+            "value": "[parameters('vcontrollerVmSize')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "vnetName": {
+            "value": "[variables('sharedVnetName')]"
+          },
+          "subnetName": {
+            "value": "[variables('vcontrollerSubnetName')]"
+          }
         }
       }
     },
@@ -158,13 +205,27 @@
           "contentVersion": "1.0.0.0"
         },
         "parameters": {
-          "vmName": { "value": "[variables('kvoVmName')]" },
-          "adminUsername": { "value": "[parameters('adminUsername')]" },
-          "adminPassword": { "value": "[parameters('adminPassword')]" },
-          "vmSize": { "value": "[parameters('kvoVmSize')]" },
-          "location": { "value": "[parameters('location')]" },
-          "vnetName": { "value": "[variables('sharedVnetName')]" },
-          "subnetName": { "value": "[variables('kvoSubnetName')]" }
+          "vmName": {
+            "value": "[variables('kvoVmName')]"
+          },
+          "adminUsername": {
+            "value": "[parameters('adminUsername')]"
+          },
+          "adminPassword": {
+            "value": "[parameters('adminPassword')]"
+          },
+          "vmSize": {
+            "value": "[parameters('kvoVmSize')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "vnetName": {
+            "value": "[variables('sharedVnetName')]"
+          },
+          "subnetName": {
+            "value": "[variables('kvoSubnetName')]"
+          }
         }
       }
     },
@@ -182,12 +243,24 @@
           "contentVersion": "1.0.0.0"
         },
         "parameters": {
-          "vmName": { "value": "[variables('vpbVmName')]" },
-          "adminUsername": { "value": "[parameters('adminUsername')]" },
-          "adminPassword": { "value": "[parameters('adminPassword')]" },
-          "vmSize": { "value": "[parameters('vpbVmSize')]" },
-          "location": { "value": "[parameters('location')]" },
-          "vnetName": { "value": "[variables('sharedVnetName')]" }
+          "vmName": {
+            "value": "[variables('vpbVmName')]"
+          },
+          "adminUsername": {
+            "value": "[parameters('adminUsername')]"
+          },
+          "adminPassword": {
+            "value": "[parameters('adminPassword')]"
+          },
+          "vmSize": {
+            "value": "[parameters('vpbVmSize')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "vnetName": {
+            "value": "[variables('sharedVnetName')]"
+          }
         }
       }
     }

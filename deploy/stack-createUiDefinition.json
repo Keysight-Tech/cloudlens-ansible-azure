@@ -50,6 +50,52 @@
             }
           },
           {
+            "name": "customizeVmNames",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Override individual VM names (optional)",
+            "defaultValue": false,
+            "toolTip": "By default the three VMs are named <prefix>-vcontroller, <prefix>-kvo, <prefix>-vpb. Tick this box to set custom names per product (useful when matching existing naming conventions)."
+          },
+          {
+            "name": "vcontrollerVmName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "vController VM name",
+            "defaultValue": "",
+            "toolTip": "Leave blank to use <prefix>-vcontroller. 3 to 64 chars, lowercase letters, digits, hyphens.",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$",
+              "validationMessage": "Leave blank or use 3 to 64 lowercase letters, digits, hyphens. Must start and end with a letter or digit."
+            },
+            "visible": "[steps('stackConfig').customizeVmNames]"
+          },
+          {
+            "name": "kvoVmName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "KVO VM name",
+            "defaultValue": "",
+            "toolTip": "Leave blank to use <prefix>-kvo. 3 to 64 chars, lowercase letters, digits, hyphens.",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$",
+              "validationMessage": "Leave blank or use 3 to 64 lowercase letters, digits, hyphens. Must start and end with a letter or digit."
+            },
+            "visible": "[steps('stackConfig').customizeVmNames]"
+          },
+          {
+            "name": "vpbVmName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "vPB VM name",
+            "defaultValue": "",
+            "toolTip": "Leave blank to use <prefix>-vpb. 3 to 64 chars, lowercase letters, digits, hyphens.",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$",
+              "validationMessage": "Leave blank or use 3 to 64 lowercase letters, digits, hyphens. Must start and end with a letter or digit."
+            },
+            "visible": "[steps('stackConfig').customizeVmNames]"
+          },
+          {
             "name": "adminUsername",
             "type": "Microsoft.Compute.UserNameTextBox",
             "label": "Linux admin username",
@@ -101,10 +147,22 @@
                 "toolTip": "vController size. Standard_D4s_v5 is sized for most deployments. Scale up for thousands of sensors.",
                 "constraints": {
                   "allowedValues": [
-                    { "label": "Standard_D2s_v5 (2 vCPU, 8 GB, small dev/test)", "value": "Standard_D2s_v5" },
-                    { "label": "Standard_D4s_v5 (4 vCPU, 16 GB, recommended)", "value": "Standard_D4s_v5" },
-                    { "label": "Standard_D8s_v5 (8 vCPU, 32 GB, large fleets)", "value": "Standard_D8s_v5" },
-                    { "label": "Standard_D16s_v5 (16 vCPU, 64 GB, very large fleets)", "value": "Standard_D16s_v5" }
+                    {
+                      "label": "Standard_D2s_v5 (2 vCPU, 8 GB, small dev/test)",
+                      "value": "Standard_D2s_v5"
+                    },
+                    {
+                      "label": "Standard_D4s_v5 (4 vCPU, 16 GB, recommended)",
+                      "value": "Standard_D4s_v5"
+                    },
+                    {
+                      "label": "Standard_D8s_v5 (8 vCPU, 32 GB, large fleets)",
+                      "value": "Standard_D8s_v5"
+                    },
+                    {
+                      "label": "Standard_D16s_v5 (16 vCPU, 64 GB, very large fleets)",
+                      "value": "Standard_D16s_v5"
+                    }
                   ],
                   "required": true
                 }
@@ -117,9 +175,18 @@
                 "toolTip": "KVO size. Standard_D4s_v5 is sized for most deployments.",
                 "constraints": {
                   "allowedValues": [
-                    { "label": "Standard_D2s_v5 (2 vCPU, 8 GB, small dev/test)", "value": "Standard_D2s_v5" },
-                    { "label": "Standard_D4s_v5 (4 vCPU, 16 GB, recommended)", "value": "Standard_D4s_v5" },
-                    { "label": "Standard_D8s_v5 (8 vCPU, 32 GB, large fleets)", "value": "Standard_D8s_v5" }
+                    {
+                      "label": "Standard_D2s_v5 (2 vCPU, 8 GB, small dev/test)",
+                      "value": "Standard_D2s_v5"
+                    },
+                    {
+                      "label": "Standard_D4s_v5 (4 vCPU, 16 GB, recommended)",
+                      "value": "Standard_D4s_v5"
+                    },
+                    {
+                      "label": "Standard_D8s_v5 (8 vCPU, 32 GB, large fleets)",
+                      "value": "Standard_D8s_v5"
+                    }
                   ],
                   "required": true
                 }
@@ -132,9 +199,18 @@
                 "toolTip": "vPB size. Minimum Standard_D8s_v3 is required for three accelerated NICs.",
                 "constraints": {
                   "allowedValues": [
-                    { "label": "Standard_D8s_v3 (8 vCPU, 32 GB, minimum for 3 NICs)", "value": "Standard_D8s_v3" },
-                    { "label": "Standard_D16s_v3 (16 vCPU, 64 GB, higher mirror throughput)", "value": "Standard_D16s_v3" },
-                    { "label": "Standard_D32s_v3 (32 vCPU, 128 GB, max throughput)", "value": "Standard_D32s_v3" }
+                    {
+                      "label": "Standard_D8s_v3 (8 vCPU, 32 GB, minimum for 3 NICs)",
+                      "value": "Standard_D8s_v3"
+                    },
+                    {
+                      "label": "Standard_D16s_v3 (16 vCPU, 64 GB, higher mirror throughput)",
+                      "value": "Standard_D16s_v3"
+                    },
+                    {
+                      "label": "Standard_D32s_v3 (32 vCPU, 128 GB, max throughput)",
+                      "value": "Standard_D32s_v3"
+                    }
                   ],
                   "required": true
                 }
@@ -180,7 +256,10 @@
       "kvoVmSize": "[steps('stackConfig').sizesHeader.kvoVmSize]",
       "vpbVmSize": "[steps('stackConfig').sizesHeader.vpbVmSize]",
       "location": "[location()]",
-      "vnetAddressSpace": "[steps('stackConfig').networkHeader.vnetAddressSpace]"
+      "vnetAddressSpace": "[steps('stackConfig').networkHeader.vnetAddressSpace]",
+      "vcontrollerVmName": "[steps('stackConfig').vcontrollerVmName]",
+      "kvoVmName": "[steps('stackConfig').kvoVmName]",
+      "vpbVmName": "[steps('stackConfig').vpbVmName]"
     }
   }
 }
