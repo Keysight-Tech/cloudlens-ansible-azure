@@ -47,14 +47,28 @@ VPB_PUBLISHER="keysight-technologies-cloudlens"
 VPB_OFFER="keysight-cloudlens-virtual-packet-broker"
 VPB_PLAN="cloudlens-virtual-packet-broker-3-15-0_1"
 
-DEFAULT_RG="cloudlens-rg"
-DEFAULT_LOCATION="eastus2"
-DEFAULT_CLMS_NAME="clms"
-DEFAULT_KVO_NAME="kvo"
-DEFAULT_VPB_NAME="vpb"
-CLMS_VM_SIZE="Standard_D4s_v5"
-KVO_VM_SIZE="Standard_D4s_v5"
-VPB_VM_SIZE="Standard_D8s_v3"
+# All defaults below are env-var overridable. Customer can:
+#   - Just paste the curl line: gets the defaults below
+#   - Set env vars first: CLOUDLENS_RG=my-rg CLOUDLENS_REGION=westeu curl ... | bash
+#   - Pass flags:  bash deploy-stack.sh --location westeu --vcontroller-size Standard_D8s_v5
+# No values are baked in. Every knob can be changed without editing the file.
+DEFAULT_RG="${CLOUDLENS_RG:-cloudlens-rg}"
+DEFAULT_LOCATION="${CLOUDLENS_REGION:-eastus2}"
+DEFAULT_CLMS_NAME="${CLOUDLENS_VCONTROLLER_NAME:-vcontroller}"
+DEFAULT_KVO_NAME="${CLOUDLENS_KVO_NAME:-kvo}"
+DEFAULT_VPB_NAME="${CLOUDLENS_VPB_NAME:-vpb}"
+DEFAULT_ADMIN_USER="${CLOUDLENS_ADMIN_USER:-azureuser}"
+
+CLMS_VM_SIZE="${CLOUDLENS_VCONTROLLER_SIZE:-Standard_D4s_v5}"
+KVO_VM_SIZE="${CLOUDLENS_KVO_SIZE:-Standard_D4s_v5}"
+VPB_VM_SIZE="${CLOUDLENS_VPB_SIZE:-Standard_D8s_v3}"
+
+# Per-product instance counts and vPB NIC counts (1 each by default)
+CLMS_COUNT="${CLOUDLENS_VCONTROLLER_COUNT:-1}"
+KVO_COUNT="${CLOUDLENS_KVO_COUNT:-1}"
+VPB_COUNT="${CLOUDLENS_VPB_COUNT:-1}"
+VPB_INGRESS_NICS="${CLOUDLENS_VPB_INGRESS_NICS:-1}"
+VPB_EGRESS_NICS="${CLOUDLENS_VPB_EGRESS_NICS:-1}"
 
 SUMMARY_FILE="cloudlens-deploy-summary.txt"
 LOG_FILE="cloudlens-deploy-stack.log"
@@ -123,13 +137,49 @@ Usage:
 Options:
   --dry-run                 Walk through prompts and print would-be az commands
                             without touching Azure. Safe to run anywhere.
-  --resource-group NAME     Override default resource group (cloudlens-rg)
-  --location REGION         Override default Azure region (eastus2)
-  --no-kvo                  Skip KVO deployment (Keysight Vision Orchestrator)
+
+Naming + region (all have sensible defaults, all overridable):
+  --resource-group NAME     Resource group           (default: cloudlens-rg)
+  --location REGION         Azure region             (default: eastus2)
+  --admin-user NAME         OS admin username        (default: azureuser)
+  --vcontroller-name NAME   vController VM prefix    (default: vcontroller)
+  --kvo-name NAME           KVO VM prefix            (default: kvo)
+  --vpb-name NAME           vPB VM prefix            (default: vpb)
+
+VM sizes (override if your prod workload is bigger):
+  --vcontroller-size SKU    vController VM size      (default: Standard_D4s_v5)
+  --kvo-size SKU            KVO VM size              (default: Standard_D4s_v5)
+  --vpb-size SKU            vPB VM size              (default: Standard_D8s_v3)
+
+Per-product instance counts (HA / multi-region / scale-out):
+  --vcontroller-count N     Number of vControllers   (1-3, default: 1)
+  --kvo-count N             Number of KVOs           (1-2, default: 1)
+  --vpb-count N             Number of vPBs           (1-5, default: 1)
+
+vPB multi-NIC (fan-in / fan-out for prod):
+  --vpb-ingress-nics N      Number of ingress NICs   (1-3, default: 1)
+  --vpb-egress-nics N       Number of egress NICs    (1-3, default: 1)
+
+Toggles:
+  --no-kvo                  Skip KVO deployment
   --with-kvo                Deploy KVO (skip interactive prompt)
   --no-vpb                  Skip vPB deployment
   --no-sensors              Skip sensor playbook chain at the end
   -h, --help                Show this help
+
+Env-var overrides (alternative to flags, useful for curl | bash):
+  CLOUDLENS_RG, CLOUDLENS_REGION, CLOUDLENS_ADMIN_USER,
+  CLOUDLENS_VCONTROLLER_NAME / _SIZE / _COUNT,
+  CLOUDLENS_KVO_NAME / _SIZE / _COUNT,
+  CLOUDLENS_VPB_NAME / _SIZE / _COUNT,
+  CLOUDLENS_VPB_INGRESS_NICS, CLOUDLENS_VPB_EGRESS_NICS
+
+Example (full prod-style invocation):
+  CLOUDLENS_RG=prod-cloudlens-rg CLOUDLENS_REGION=westeurope \\
+  curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/deploy/deploy-stack.sh \\
+  | bash -s -- --vcontroller-count 2 --kvo-count 2 --vpb-count 3 \\
+                --vpb-ingress-nics 2 --vpb-egress-nics 3 \\
+                --vpb-size Standard_D16s_v3
 
 What it does (phases):
   1. Banner + environment detection (Cloud Shell vs local)
@@ -150,16 +200,51 @@ HLP
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN=true; shift ;;
+
+    # Toggles
     --no-kvo) DEPLOY_KVO=false; shift ;;
     --with-kvo) DEPLOY_KVO=true; shift ;;
     --no-vpb) DEPLOY_VPB=false; shift ;;
     --no-sensors) CHAIN_SENSORS=false; shift ;;
+
+    # Naming + region
     --resource-group) ARG_RG="$2"; shift 2 ;;
     --location) ARG_LOCATION="$2"; shift 2 ;;
+    --admin-user) DEFAULT_ADMIN_USER="$2"; shift 2 ;;
+    --vcontroller-name) DEFAULT_CLMS_NAME="$2"; shift 2 ;;
+    --kvo-name) DEFAULT_KVO_NAME="$2"; shift 2 ;;
+    --vpb-name) DEFAULT_VPB_NAME="$2"; shift 2 ;;
+
+    # VM sizes
+    --vcontroller-size) CLMS_VM_SIZE="$2"; shift 2 ;;
+    --kvo-size) KVO_VM_SIZE="$2"; shift 2 ;;
+    --vpb-size) VPB_VM_SIZE="$2"; shift 2 ;;
+
+    # Per-product counts
+    --vcontroller-count) CLMS_COUNT="$2"; shift 2 ;;
+    --kvo-count) KVO_COUNT="$2"; shift 2 ;;
+    --vpb-count) VPB_COUNT="$2"; shift 2 ;;
+
+    # vPB multi-NIC
+    --vpb-ingress-nics) VPB_INGRESS_NICS="$2"; shift 2 ;;
+    --vpb-egress-nics) VPB_EGRESS_NICS="$2"; shift 2 ;;
+
     -h|--help) show_help; exit 0 ;;
     *) warn "Unknown argument: $1"; show_help; exit 1 ;;
   esac
 done
+
+# Validate count bounds (matches ARM template allowedValues)
+for v in CLMS_COUNT:1:3 KVO_COUNT:1:2 VPB_COUNT:1:5 VPB_INGRESS_NICS:1:3 VPB_EGRESS_NICS:1:3; do
+  name="${v%%:*}"; rest="${v#*:}"; lo="${rest%%:*}"; hi="${rest##*:}"
+  val="${!name}"
+  if ! [[ "$val" =~ ^[0-9]+$ ]] || (( val < lo || val > hi )); then
+    fail "$name must be an integer between $lo and $hi (got '$val'). Run with -h for usage."
+  fi
+done
+
+# Use ADMIN_USERNAME (already declared) for the OS admin user from now on
+ADMIN_USERNAME="$DEFAULT_ADMIN_USER"
 
 # ---------------------------------------------------------------------
 # Run az (or echo it in dry-run)
@@ -234,6 +319,17 @@ if [[ -n "${AZUREPS_HOST_ENVIRONMENT:-}" ]] \
 else
   ok "Detected: Local machine ($(uname -s))"
 fi
+
+echo
+echo "${C_BOLD}Resolved configuration (override via flags or CLOUDLENS_* env vars):${C_RESET}"
+printf "  %-22s %s\n" "Resource group:" "${ARG_RG:-$DEFAULT_RG}"
+printf "  %-22s %s\n" "Location:" "${ARG_LOCATION:-$DEFAULT_LOCATION}"
+printf "  %-22s %s\n" "Admin username:" "$DEFAULT_ADMIN_USER"
+printf "  %-22s %s (count: %d, size: %s)\n" "vController:" "$DEFAULT_CLMS_NAME" "$CLMS_COUNT" "$CLMS_VM_SIZE"
+printf "  %-22s %s (count: %d, size: %s)\n" "KVO:" "$DEFAULT_KVO_NAME" "$KVO_COUNT" "$KVO_VM_SIZE"
+printf "  %-22s %s (count: %d, size: %s, ingress NICs: %d, egress NICs: %d)\n" \
+  "vPB:" "$DEFAULT_VPB_NAME" "$VPB_COUNT" "$VPB_VM_SIZE" "$VPB_INGRESS_NICS" "$VPB_EGRESS_NICS"
+echo
 
 # =====================================================================
 # Phase 2: Pre-flight checks
@@ -442,43 +538,48 @@ fi
 # =====================================================================
 step "Phase 6: Deploy vController (formerly CLMS)"
 
-clms_exists() {
-  [[ "$DRY_RUN" == "true" ]] && return 1
-  az vm show -g "$RESOURCE_GROUP" -n "$DEFAULT_CLMS_NAME" >/dev/null 2>&1
+# Per-instance VM name: unsuffixed when count=1 (back-compat), -N when count>1
+clms_vm_name_at() {
+  if (( CLMS_COUNT == 1 )); then echo "$DEFAULT_CLMS_NAME"
+  else echo "${DEFAULT_CLMS_NAME}-${1}"; fi
 }
 
-if clms_exists; then
-  warn "vController VM '${DEFAULT_CLMS_NAME}' already exists in ${RESOURCE_GROUP}"
-  read -rp "Reuse existing vController? [Y/n]: " yn
-  yn_lc=$(to_lower "$yn")
-  if [[ "$yn_lc" == "n" ]] || [[ "$yn_lc" == "no" ]]; then
-    fail "Refusing to overwrite existing vController. Delete it first or pick a different RG."
+CLMS_PUBLIC_IPS=()
+for i in $(seq 1 "$CLMS_COUNT"); do
+  vm_name=$(clms_vm_name_at "$i")
+  if (( CLMS_COUNT > 1 )); then
+    step "  vController $i of $CLMS_COUNT: $vm_name"
   fi
-  CLMS_PUBLIC_IP=$(run_az_capture network public-ip show \
-    -g "$RESOURCE_GROUP" -n "${DEFAULT_CLMS_NAME}-pip" --query ipAddress -o tsv 2>/dev/null \
-    || echo "unknown")
-  ok "Reusing vController at ${CLMS_PUBLIC_IP}"
-else
-  note "Deploying ARM template: ${CLMS_TEMPLATE_URL}"
-  if [[ "$DRY_RUN" == "true" ]]; then
-    dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-uri ${CLMS_TEMPLATE_URL} --parameters adminPassword=<hidden> vmSize=${CLMS_VM_SIZE}"
-    CLMS_PUBLIC_IP="203.0.113.10"
+
+  if [[ "$DRY_RUN" != "true" ]] && az vm show -g "$RESOURCE_GROUP" -n "$vm_name" >/dev/null 2>&1; then
+    warn "$vm_name already exists in ${RESOURCE_GROUP} (reusing)"
+    pip=$(run_az_capture network public-ip show -g "$RESOURCE_GROUP" -n "${vm_name}-pip" --query ipAddress -o tsv 2>/dev/null || echo "unknown")
   else
-    az deployment group create \
-      -g "$RESOURCE_GROUP" \
-      -n "vcontroller-stack-$(date +%s)" \
-      --template-uri "$CLMS_TEMPLATE_URL" \
-      --parameters \
-          vmName="$DEFAULT_CLMS_NAME" \
-          adminUsername="$ADMIN_USERNAME" \
-          adminPassword="$ADMIN_PASSWORD" \
-          vmSize="$CLMS_VM_SIZE" \
-      --query 'properties.outputs' -o json > /tmp/clms-outputs.json
-    CLMS_PUBLIC_IP=$(python3 -c "import json; print(json.load(open('/tmp/clms-outputs.json'))['clmsPublicIp']['value'])" 2>/dev/null || echo "unknown")
+    note "Deploying ARM template: ${CLMS_TEMPLATE_URL} (instance $vm_name)"
+    if [[ "$DRY_RUN" == "true" ]]; then
+      dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-uri ${CLMS_TEMPLATE_URL} --parameters vmName=${vm_name} adminPassword=<hidden> vmSize=${CLMS_VM_SIZE}"
+      pip="203.0.113.$((10+i))"
+    else
+      az deployment group create \
+        -g "$RESOURCE_GROUP" \
+        -n "vcontroller-${vm_name}-$(date +%s)" \
+        --template-uri "$CLMS_TEMPLATE_URL" \
+        --parameters \
+            vmName="$vm_name" \
+            adminUsername="$ADMIN_USERNAME" \
+            adminPassword="$ADMIN_PASSWORD" \
+            vmSize="$CLMS_VM_SIZE" \
+        --query 'properties.outputs' -o json > /tmp/clms-outputs.json
+      pip=$(python3 -c "import json,sys; d=json.load(open('/tmp/clms-outputs.json')); print(d.get('vcontrollerPublicIp', d.get('clmsPublicIp', {})).get('value', 'unknown'))" 2>/dev/null || echo "unknown")
+    fi
+    DEPLOYED_CLMS=true
   fi
-  DEPLOYED_CLMS=true
-  ok "vController deployed at ${CLMS_PUBLIC_IP}"
-fi
+  CLMS_PUBLIC_IPS+=("$pip")
+  ok "vController ${vm_name} at ${pip}"
+done
+# Keep the singleton var pointing at the first instance for back-compat with
+# later phases (sensor wait, summary write, manual project-key prompt).
+CLMS_PUBLIC_IP="${CLMS_PUBLIC_IPS[0]:-unknown}"
 
 # =====================================================================
 # Phase 7: Wait for vController init
@@ -518,41 +619,48 @@ fi
 if [[ "$DEPLOY_KVO" == "true" ]]; then
   step "Phase 8: Deploy KVO (Keysight Vision Orchestrator)"
 
-  kvo_exists() {
-    [[ "$DRY_RUN" == "true" ]] && return 1
-    az vm show -g "$RESOURCE_GROUP" -n "$DEFAULT_KVO_NAME" >/dev/null 2>&1
+  kvo_vm_name_at() {
+    if (( KVO_COUNT == 1 )); then echo "$DEFAULT_KVO_NAME"
+    else echo "${DEFAULT_KVO_NAME}-${1}"; fi
   }
 
-  if kvo_exists; then
-    warn "KVO VM '${DEFAULT_KVO_NAME}' already exists, reusing"
-    KVO_PUBLIC_IP=$(run_az_capture network public-ip show \
-      -g "$RESOURCE_GROUP" -n "${DEFAULT_KVO_NAME}-pip" --query ipAddress -o tsv 2>/dev/null \
-      || echo "unknown")
-    ok "Reusing KVO at ${KVO_PUBLIC_IP}"
-  else
-    note "Deploying ARM template: ${KVO_TEMPLATE_URL}"
-    if [[ "$DRY_RUN" == "true" ]]; then
-      dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-uri ${KVO_TEMPLATE_URL} --parameters adminPassword=<hidden> vmSize=${KVO_VM_SIZE}"
-      KVO_PUBLIC_IP="203.0.113.15"
-    else
-      az deployment group create \
-        -g "$RESOURCE_GROUP" \
-        -n "kvo-stack-$(date +%s)" \
-        --template-uri "$KVO_TEMPLATE_URL" \
-        --parameters \
-            vmName="$DEFAULT_KVO_NAME" \
-            adminUsername="$ADMIN_USERNAME" \
-            adminPassword="$ADMIN_PASSWORD" \
-            vmSize="$KVO_VM_SIZE" \
-        --query 'properties.outputs' -o json > /tmp/kvo-outputs.json
-      KVO_PUBLIC_IP=$(python3 -c "import json; print(json.load(open('/tmp/kvo-outputs.json'))['kvoPublicIp']['value'])" 2>/dev/null || echo "unknown")
+  KVO_PUBLIC_IPS=()
+  for i in $(seq 1 "$KVO_COUNT"); do
+    vm_name=$(kvo_vm_name_at "$i")
+    if (( KVO_COUNT > 1 )); then
+      step "  KVO $i of $KVO_COUNT: $vm_name"
     fi
-    DEPLOYED_KVO=true
-    ok "KVO deployed at ${KVO_PUBLIC_IP}"
-  fi
+
+    if [[ "$DRY_RUN" != "true" ]] && az vm show -g "$RESOURCE_GROUP" -n "$vm_name" >/dev/null 2>&1; then
+      warn "$vm_name already exists, reusing"
+      pip=$(run_az_capture network public-ip show -g "$RESOURCE_GROUP" -n "${vm_name}-pip" --query ipAddress -o tsv 2>/dev/null || echo "unknown")
+    else
+      note "Deploying ARM template: ${KVO_TEMPLATE_URL} (instance $vm_name)"
+      if [[ "$DRY_RUN" == "true" ]]; then
+        dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-uri ${KVO_TEMPLATE_URL} --parameters vmName=${vm_name} adminPassword=<hidden> vmSize=${KVO_VM_SIZE}"
+        pip="203.0.113.$((15+i))"
+      else
+        az deployment group create \
+          -g "$RESOURCE_GROUP" \
+          -n "kvo-${vm_name}-$(date +%s)" \
+          --template-uri "$KVO_TEMPLATE_URL" \
+          --parameters \
+              vmName="$vm_name" \
+              adminUsername="$ADMIN_USERNAME" \
+              adminPassword="$ADMIN_PASSWORD" \
+              vmSize="$KVO_VM_SIZE" \
+          --query 'properties.outputs' -o json > /tmp/kvo-outputs.json
+        pip=$(python3 -c "import json; print(json.load(open('/tmp/kvo-outputs.json'))['kvoPublicIp']['value'])" 2>/dev/null || echo "unknown")
+      fi
+      DEPLOYED_KVO=true
+    fi
+    KVO_PUBLIC_IPS+=("$pip")
+    ok "KVO ${vm_name} at ${pip}"
+  done
+  KVO_PUBLIC_IP="${KVO_PUBLIC_IPS[0]:-unknown}"
 
   note "KVO web UI is reachable in about 60 seconds; full init ~15 minutes."
-  note "Refer to Keysight KVO documentation for default UI credentials."
+  note "Default UI login: admin / admin (change on first login)"
 else
   step "Phase 8: KVO deployment (skipped)"
 fi
@@ -561,41 +669,53 @@ fi
 # Phase 9: vPB deployment (optional)
 # =====================================================================
 if [[ "$DEPLOY_VPB" == "true" ]]; then
-  step "Phase 9: Deploy vPB"
+  step "Phase 9: Deploy vPB (${VPB_INGRESS_NICS} ingress + ${VPB_EGRESS_NICS} egress NIC(s) per instance)"
 
-  vpb_exists() {
-    [[ "$DRY_RUN" == "true" ]] && return 1
-    az vm show -g "$RESOURCE_GROUP" -n "$DEFAULT_VPB_NAME" >/dev/null 2>&1
+  vpb_vm_name_at() {
+    if (( VPB_COUNT == 1 )); then echo "$DEFAULT_VPB_NAME"
+    else echo "${DEFAULT_VPB_NAME}-${1}"; fi
   }
 
-  if vpb_exists; then
-    warn "vPB VM already exists, reusing"
-    VPB_PUBLIC_IP=$(run_az_capture network public-ip show \
-      -g "$RESOURCE_GROUP" -n "${DEFAULT_VPB_NAME}-mgmt-pip" --query ipAddress -o tsv 2>/dev/null \
-      || echo "unknown")
-  else
-    note "Deploying ARM template: ${VPB_TEMPLATE_URL}"
-    if [[ "$DRY_RUN" == "true" ]]; then
-      dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-uri ${VPB_TEMPLATE_URL} --parameters adminPassword=<hidden> vmSize=${VPB_VM_SIZE}"
-      VPB_PUBLIC_IP="203.0.113.20"
-    else
-      az deployment group create \
-        -g "$RESOURCE_GROUP" \
-        -n "vpb-stack-$(date +%s)" \
-        --template-uri "$VPB_TEMPLATE_URL" \
-        --parameters \
-            vmName="$DEFAULT_VPB_NAME" \
-            adminUsername="$ADMIN_USERNAME" \
-            adminPassword="$ADMIN_PASSWORD" \
-            vmSize="$VPB_VM_SIZE" \
-        --query 'properties.outputs' -o json > /tmp/vpb-outputs.json
-      VPB_PUBLIC_IP=$(python3 -c "import json; print(json.load(open('/tmp/vpb-outputs.json'))['vpbPublicIp']['value'])" 2>/dev/null || echo "unknown")
+  VPB_PUBLIC_IPS=()
+  for i in $(seq 1 "$VPB_COUNT"); do
+    vm_name=$(vpb_vm_name_at "$i")
+    if (( VPB_COUNT > 1 )); then
+      step "  vPB $i of $VPB_COUNT: $vm_name"
     fi
-    DEPLOYED_VPB=true
-    ok "vPB deployed at ${VPB_PUBLIC_IP}"
-  fi
 
-  note "vPB management SSH is reachable 10 to 15 minutes after deploy."
+    if [[ "$DRY_RUN" != "true" ]] && az vm show -g "$RESOURCE_GROUP" -n "$vm_name" >/dev/null 2>&1; then
+      warn "$vm_name already exists, reusing"
+      pip=$(run_az_capture network public-ip show -g "$RESOURCE_GROUP" -n "${vm_name}-mgmt-pip" --query ipAddress -o tsv 2>/dev/null || echo "unknown")
+    else
+      note "Deploying ARM template: ${VPB_TEMPLATE_URL} (instance $vm_name)"
+      if [[ "$DRY_RUN" == "true" ]]; then
+        dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-uri ${VPB_TEMPLATE_URL} --parameters vmName=${vm_name} adminPassword=<hidden> vmSize=${VPB_VM_SIZE} ingressNicCount=${VPB_INGRESS_NICS} egressNicCount=${VPB_EGRESS_NICS}"
+        pip="203.0.113.$((20+i))"
+      else
+        az deployment group create \
+          -g "$RESOURCE_GROUP" \
+          -n "vpb-${vm_name}-$(date +%s)" \
+          --template-uri "$VPB_TEMPLATE_URL" \
+          --parameters \
+              vmName="$vm_name" \
+              adminUsername="$ADMIN_USERNAME" \
+              adminPassword="$ADMIN_PASSWORD" \
+              vmSize="$VPB_VM_SIZE" \
+              ingressNicCount="$VPB_INGRESS_NICS" \
+              egressNicCount="$VPB_EGRESS_NICS" \
+          --query 'properties.outputs' -o json > /tmp/vpb-outputs.json
+        pip=$(python3 -c "import json; print(json.load(open('/tmp/vpb-outputs.json'))['vpbPublicIp']['value'])" 2>/dev/null || echo "unknown")
+      fi
+      DEPLOYED_VPB=true
+    fi
+    VPB_PUBLIC_IPS+=("$pip")
+    ok "vPB ${vm_name} at ${pip} (SSH on port 9022)"
+  done
+  VPB_PUBLIC_IP="${VPB_PUBLIC_IPS[0]:-unknown}"
+
+  note "vPB management SSH is reachable on port 9022 within ~5 minutes."
+  note "Auto-bootstrap runs during deploy (CustomScript extension)."
+  note "After deploy: ssh -p 9022 ${ADMIN_USERNAME}@<vpb-ip>, then 'sudo vpb' for the CLI."
 else
   step "Phase 9: vPB deployment (skipped)"
 fi
