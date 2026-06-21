@@ -23,6 +23,15 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------
+# Re-attach stdin to the terminal when invoked via `curl ... | bash`.
+# Without this, every `read` would try to consume bytes from the curl
+# pipe (which is the script itself), so the very first prompt fails.
+# ---------------------------------------------------------------------
+if [[ ! -t 0 ]] && [[ -e /dev/tty ]]; then
+  exec < /dev/tty
+fi
+
+# ---------------------------------------------------------------------
 # Config + globals
 # ---------------------------------------------------------------------
 REPO_OWNER="Keysight-Tech"
@@ -321,7 +330,9 @@ else
 fi
 
 echo
-echo "${C_BOLD}Resolved configuration (override via flags or CLOUDLENS_* env vars):${C_RESET}"
+# Use printf (not echo) so the C_BOLD escape code is interpreted, not
+# printed literally. `echo` without -e would emit \033[1m as text.
+printf "${C_BOLD}Resolved configuration (override via flags or CLOUDLENS_* env vars):${C_RESET}\n"
 printf "  %-22s %s\n" "Resource group:" "${ARG_RG:-$DEFAULT_RG}"
 printf "  %-22s %s\n" "Location:" "${ARG_LOCATION:-$DEFAULT_LOCATION}"
 printf "  %-22s %s\n" "Admin username:" "$DEFAULT_ADMIN_USER"
@@ -336,11 +347,62 @@ echo
 # =====================================================================
 step "Phase 2: Pre-flight checks"
 
+# Auto-install Azure CLI if missing. Customers running this curl|bash
+# in a fresh Cloud Shell already have az. Customers running on a fresh
+# laptop or VM may not. Detect OS and install the official package.
+install_az_cli() {
+  local os; os="$(uname -s)"
+  echo "Detecting OS to install Azure CLI..."
+  if [[ "$os" == "Darwin" ]]; then
+    if command -v brew >/dev/null 2>&1; then
+      note "Installing via Homebrew: brew install azure-cli (this takes 2-5 min)"
+      brew install azure-cli
+    else
+      fail "Homebrew not found on macOS. Install brew from https://brew.sh, or install Azure CLI manually from https://learn.microsoft.com/cli/azure/install-azure-cli-macos, then re-run this script."
+    fi
+  elif [[ "$os" == "Linux" ]]; then
+    if [[ -f /etc/debian_version ]] || command -v apt-get >/dev/null 2>&1; then
+      note "Installing via Microsoft's official Debian/Ubuntu installer..."
+      curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+    elif [[ -f /etc/redhat-release ]] || command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
+      note "Installing via Microsoft's official RPM repo..."
+      sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
+      cat <<RPM | sudo tee /etc/yum.repos.d/azure-cli.repo >/dev/null
+[azure-cli]
+name=Azure CLI
+baseurl=https://packages.microsoft.com/yumrepos/azure-cli
+enabled=1
+gpgcheck=1
+gpgkey=https://packages.microsoft.com/keys/microsoft.asc
+RPM
+      if command -v dnf >/dev/null 2>&1; then
+        sudo dnf install -y azure-cli
+      else
+        sudo yum install -y azure-cli
+      fi
+    else
+      fail "Could not detect Linux package manager. Install Azure CLI manually from https://learn.microsoft.com/cli/azure/install-azure-cli-linux then re-run."
+    fi
+  else
+    fail "Unsupported OS ($os). Install Azure CLI manually from https://learn.microsoft.com/cli/azure/install-azure-cli then re-run."
+  fi
+}
+
 if ! command -v az >/dev/null 2>&1; then
   if [[ "$DRY_RUN" == "true" ]]; then
     warn "az CLI not installed (dry-run continues)"
   else
-    fail "Azure CLI not installed. https://learn.microsoft.com/cli/azure/install-azure-cli"
+    warn "Azure CLI not installed."
+    read -rp "Install it now? Pulls the official package for your OS. [Y/n]: " yn
+    yn_lc=$(to_lower "${yn:-y}")
+    if [[ "$yn_lc" == "n" ]] || [[ "$yn_lc" == "no" ]]; then
+      fail "Azure CLI required. Install it from https://learn.microsoft.com/cli/azure/install-azure-cli then re-run."
+    fi
+    install_az_cli
+    if ! command -v az >/dev/null 2>&1; then
+      fail "Azure CLI installation did not succeed. Check the output above and install manually."
+    fi
+    ok "Azure CLI installed"
   fi
 else
   ok "Azure CLI present ($(az version --query \"\\\"azure-cli\\\"\" -o tsv 2>/dev/null || echo unknown))"
