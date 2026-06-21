@@ -633,6 +633,48 @@ if [[ -z "$DEPLOY_VPB" ]]; then
 fi
 ok "Deploy vPB: ${DEPLOY_VPB}"
 
+# Instance counts. Only prompt if customer did NOT already specify via
+# flags or env vars (i.e. the values are still at their hardcoded
+# defaults of 1). Skip the entire block if they answer N to keep the
+# simple-case flow short.
+counts_already_set() {
+  # Returns 0 (true) if any count is non-default OR was set via env var.
+  [[ -n "${CLOUDLENS_VCONTROLLER_COUNT:-}" ]] && return 0
+  [[ -n "${CLOUDLENS_KVO_COUNT:-}" ]]         && return 0
+  [[ -n "${CLOUDLENS_VPB_COUNT:-}" ]]         && return 0
+  (( CLMS_COUNT != 1 || KVO_COUNT != 1 || VPB_COUNT != 1 )) && return 0
+  return 1
+}
+if ! counts_already_set; then
+  echo
+  echo "Instance counts: default is 1 of each product (simple demo / single-region)."
+  echo "For HA, multi-region, or scale-out, you can deploy multiple of each."
+  read -rp "Deploy multiple instances of any product? [y/N]: " yn
+  yn_lc=$(to_lower "$yn")
+  if [[ "$yn_lc" == "y" ]] || [[ "$yn_lc" == "yes" ]]; then
+    read -rp "  vController count [1-3, default 1]: " n; CLMS_COUNT="${n:-1}"
+    if [[ "$DEPLOY_KVO" == "true" ]]; then
+      read -rp "  KVO count          [1-2, default 1]: " n; KVO_COUNT="${n:-1}"
+    fi
+    if [[ "$DEPLOY_VPB" == "true" ]]; then
+      read -rp "  vPB count          [1-5, default 1]: " n; VPB_COUNT="${n:-1}"
+      read -rp "  vPB ingress NICs   [1-3, default 1]: " n; VPB_INGRESS_NICS="${n:-1}"
+      read -rp "  vPB egress NICs    [1-3, default 1]: " n; VPB_EGRESS_NICS="${n:-1}"
+    fi
+    # Re-validate against bounds now that values may have changed
+    for v in "CLMS_COUNT:1:3" "KVO_COUNT:1:2" "VPB_COUNT:1:5" "VPB_INGRESS_NICS:1:3" "VPB_EGRESS_NICS:1:3"; do
+      name="${v%%:*}"; rest="${v#*:}"; lo="${rest%%:*}"; hi="${rest##*:}"
+      val="${!name}"
+      if ! [[ "$val" =~ ^[0-9]+$ ]] || (( val < lo || val > hi )); then
+        fail "$name must be an integer between $lo and $hi (got '$val')."
+      fi
+    done
+    ok "Counts: vCtrl=${CLMS_COUNT} KVO=${KVO_COUNT} vPB=${VPB_COUNT} ingress=${VPB_INGRESS_NICS} egress=${VPB_EGRESS_NICS}"
+  else
+    ok "Using default: 1 of each."
+  fi
+fi
+
 # Chain to sensor deployment?
 if [[ -z "$CHAIN_SENSORS" ]]; then
   read -rp "Chain to sensor deployment after stack is up? [y/N]: " yn
