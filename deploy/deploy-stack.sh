@@ -3,6 +3,14 @@
 # CloudLens Stack Deployment: vController + KVO + vPB + Sensors
 # (vController is the new name for what used to be called CLMS)
 # =====================================================================
+# IMPORTANT: the entire script is wrapped in a { ... } brace block so
+# bash buffers the WHOLE thing from stdin before executing any of it.
+# Without this, when invoked via `curl ... | bash`, bash would start
+# executing partially-read content. The first `exec < /dev/tty` would
+# then close the pipe while curl was still writing to it, producing:
+#   curl: (56) Failure writing output to destination, passed N returned 0
+# The closing brace lives on the last line of the file.
+{
 # One paste, full stack. Detects Azure Cloud Shell vs local, accepts
 # Marketplace terms, deploys CLMS, waits for init, optionally adds vPB,
 # and chains into the sensor playbook via quickstart.sh.
@@ -941,3 +949,5 @@ echo
 ok "Done."
 trap - ERR
 exit 0
+
+} # End of curl|bash brace-wrap (see top of file)
