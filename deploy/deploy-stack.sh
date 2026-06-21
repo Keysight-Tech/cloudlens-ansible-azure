@@ -500,21 +500,31 @@ check_quota_family() {
 step "Phase 3: Customer input"
 
 # Resource group
+echo
+echo "Where to deploy:"
+echo "  - Resource group is the Azure container for all VMs + NICs + VNet."
+echo "  - Type a new name to create it, OR type an existing RG name to reuse it."
+echo "  - Press Enter to take the default."
 if [[ -n "$ARG_RG" ]]; then
   RESOURCE_GROUP="$ARG_RG"
   ok "Resource group: ${RESOURCE_GROUP} (from --resource-group)"
 else
-  read -rp "Resource group name [${DEFAULT_RG}]: " input_rg
+  read -rp "Resource group name [${DEFAULT_RG}]: " input_rg; echo
   RESOURCE_GROUP="${input_rg:-$DEFAULT_RG}"
+  ok "Resource group: ${RESOURCE_GROUP}"
 fi
 
 # Location
+echo
+echo "Azure region (e.g. eastus, eastus2, westeurope, southeastasia, etc.):"
+echo "  - Press Enter to take the default."
 if [[ -n "$ARG_LOCATION" ]]; then
   LOCATION="$ARG_LOCATION"
   ok "Region: ${LOCATION} (from --location)"
 else
-  read -rp "Azure region [${DEFAULT_LOCATION}]: " input_loc
+  read -rp "Azure region [${DEFAULT_LOCATION}]: " input_loc; echo
   LOCATION="${input_loc:-$DEFAULT_LOCATION}"
+  ok "Region: ${LOCATION}"
 fi
 
 # Admin password: auto-generate or prompt

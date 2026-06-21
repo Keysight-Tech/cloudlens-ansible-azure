@@ -130,12 +130,12 @@
     "imageOffer": "keysight-cloudlens-virtual-packet-broker",
     "imageSku": "cloudlens-virtual-packet-broker-3-15-0_1",
     "mgmtNicArr": "[array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', variables('mgmtNicName')),'\",\"properties\":{\"primary\":true}}')))]",
-    "ingressNic1Arr": "[if(greaterOrEquals(parameters('ingressNicCount'), 1), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-ingress-1')),'\",\"properties\":{\"primary\":false}}'))), array())]",
-    "ingressNic2Arr": "[if(greaterOrEquals(parameters('ingressNicCount'), 2), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-ingress-2')),'\",\"properties\":{\"primary\":false}}'))), array())]",
-    "ingressNic3Arr": "[if(greaterOrEquals(parameters('ingressNicCount'), 3), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-ingress-3')),'\",\"properties\":{\"primary\":false}}'))), array())]",
-    "egressNic1Arr": "[if(greaterOrEquals(parameters('egressNicCount'), 1), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-egress-1')),'\",\"properties\":{\"primary\":false}}'))), array())]",
-    "egressNic2Arr": "[if(greaterOrEquals(parameters('egressNicCount'), 2), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-egress-2')),'\",\"properties\":{\"primary\":false}}'))), array())]",
-    "egressNic3Arr": "[if(greaterOrEquals(parameters('egressNicCount'), 3), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-egress-3')),'\",\"properties\":{\"primary\":false}}'))), array())]",
+    "ingressNic1Arr": "[if(greaterOrEquals(parameters('ingressNicCount'), 1), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-ingress-1')),'\",\"properties\":{\"primary\":false}}'))), json('[]'))]",
+    "ingressNic2Arr": "[if(greaterOrEquals(parameters('ingressNicCount'), 2), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-ingress-2')),'\",\"properties\":{\"primary\":false}}'))), json('[]'))]",
+    "ingressNic3Arr": "[if(greaterOrEquals(parameters('ingressNicCount'), 3), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-ingress-3')),'\",\"properties\":{\"primary\":false}}'))), json('[]'))]",
+    "egressNic1Arr": "[if(greaterOrEquals(parameters('egressNicCount'), 1), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-egress-1')),'\",\"properties\":{\"primary\":false}}'))), json('[]'))]",
+    "egressNic2Arr": "[if(greaterOrEquals(parameters('egressNicCount'), 2), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-egress-2')),'\",\"properties\":{\"primary\":false}}'))), json('[]'))]",
+    "egressNic3Arr": "[if(greaterOrEquals(parameters('egressNicCount'), 3), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-egress-3')),'\",\"properties\":{\"primary\":false}}'))), json('[]'))]",
     "allNicsArr": "[concat(variables('mgmtNicArr'),variables('ingressNic1Arr'),variables('ingressNic2Arr'),variables('ingressNic3Arr'),variables('egressNic1Arr'),variables('egressNic2Arr'),variables('egressNic3Arr'))]"
   },
   "resources": [
