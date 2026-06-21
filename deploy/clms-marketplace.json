@@ -9,29 +9,29 @@
   "parameters": {
     "vmName": {
       "type": "string",
-      "defaultValue": "clms",
+      "defaultValue": "vcontroller",
       "metadata": {
-        "description": "Name of the CloudLens Manager VM. Used as the computer name and as a prefix for the public IP, NSG, NIC, and (when creating one) the VNet. Lowercase letters, digits, and hyphens are recommended."
+        "description": "Name of the vController VM. Used as the computer name and as a prefix for the public IP, NSG, NIC, and (when creating one) the VNet. Lowercase letters, digits, and hyphens are recommended."
       }
     },
     "adminUsername": {
       "type": "string",
       "defaultValue": "azureuser",
       "metadata": {
-        "description": "Linux admin username used for SSH access to the underlying VM. This is the OS-level account; the CLMS web UI uses its own separate admin account (admin / Cl0udLens@dm!n)."
+        "description": "Linux admin username used for SSH access to the underlying VM. This is the OS-level account; the vController web UI uses its own separate admin account (admin / Cl0udLens@dm!n)."
       }
     },
     "adminPassword": {
       "type": "securestring",
       "metadata": {
-        "description": "Linux admin password for SSH access. Must be 12+ characters and include uppercase, lowercase, a digit, and a symbol. This is the OS-level password, not the CLMS web UI password."
+        "description": "Linux admin password for SSH access. Must be 12+ characters and include uppercase, lowercase, a digit, and a symbol. This is the OS-level password, not the vController web UI password."
       }
     },
     "vmSize": {
       "type": "string",
       "defaultValue": "Standard_D4s_v5",
       "metadata": {
-        "description": "VM size for the CloudLens Manager. Standard_D4s_v5 (4 vCPU, 16 GB RAM) is recommended for most deployments. Recommended values: Standard_D2s_v5, Standard_D4s_v5, Standard_D8s_v5, Standard_D16s_v5. Scale up for environments managing thousands of sensors."
+        "description": "VM size for the vController. Standard_D4s_v5 (4 vCPU, 16 GB RAM) is recommended for most deployments. Recommended values: Standard_D2s_v5, Standard_D4s_v5, Standard_D8s_v5, Standard_D16s_v5. Scale up for environments managing thousands of sensors."
       }
     },
     "location": {
@@ -59,7 +59,7 @@
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Existing subnet name to attach the CLMS NIC to (required when deploying into an existing VNet). Leave blank to create a new subnet named clms-subnet."
+        "description": "Existing subnet name to attach the vController NIC to (required when deploying into an existing VNet). Leave blank to create a new subnet named vcontroller-subnet."
       }
     },
     "addressSpace": {
@@ -81,7 +81,7 @@
     "createNewVnet": "[empty(parameters('vnetName'))]",
     "vnetResourceGroup": "[if(empty(parameters('existingVnetResourceGroup')), resourceGroup().name, parameters('existingVnetResourceGroup'))]",
     "effectiveVnetName": "[if(variables('createNewVnet'), concat(parameters('vmName'), '-vnet'), parameters('vnetName'))]",
-    "effectiveSubnetName": "[if(empty(parameters('subnetName')), 'clms-subnet', parameters('subnetName'))]",
+    "effectiveSubnetName": "[if(empty(parameters('subnetName')), 'vcontroller-subnet', parameters('subnetName'))]",
     "subnetId": "[if(variables('createNewVnet'), resourceId('Microsoft.Network/virtualNetworks/subnets', variables('effectiveVnetName'), variables('effectiveSubnetName')), resourceId(variables('vnetResourceGroup'), 'Microsoft.Network/virtualNetworks/subnets', variables('effectiveVnetName'), variables('effectiveSubnetName')))]",
     "pipName": "[concat(parameters('vmName'), '-pip')]",
     "nsgName": "[concat(parameters('vmName'), '-nsg')]",
@@ -96,7 +96,9 @@
       "apiVersion": "2024-05-01",
       "name": "[variables('pipName')]",
       "location": "[parameters('location')]",
-      "sku": { "name": "Standard" },
+      "sku": {
+        "name": "Standard"
+      },
       "properties": {
         "publicIPAllocationMethod": "Static",
         "dnsSettings": {
@@ -147,11 +149,17 @@
       "name": "[variables('effectiveVnetName')]",
       "location": "[parameters('location')]",
       "properties": {
-        "addressSpace": { "addressPrefixes": ["[parameters('addressSpace')]"] },
+        "addressSpace": {
+          "addressPrefixes": [
+            "[parameters('addressSpace')]"
+          ]
+        },
         "subnets": [
           {
             "name": "[variables('effectiveSubnetName')]",
-            "properties": { "addressPrefix": "[parameters('subnetPrefix')]" }
+            "properties": {
+              "addressPrefix": "[parameters('subnetPrefix')]"
+            }
           }
         ]
       }
@@ -171,13 +179,19 @@
           {
             "name": "ipconfig1",
             "properties": {
-              "subnet": { "id": "[variables('subnetId')]" },
-              "publicIPAddress": { "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]" },
+              "subnet": {
+                "id": "[variables('subnetId')]"
+              },
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]"
+              },
               "privateIPAllocationMethod": "Dynamic"
             }
           }
         ],
-        "networkSecurityGroup": { "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]" }
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+        }
       }
     },
     {
@@ -194,7 +208,9 @@
         "product": "keysight-cloudlens-vcontroller"
       },
       "properties": {
-        "hardwareProfile": { "vmSize": "[parameters('vmSize')]" },
+        "hardwareProfile": {
+          "vmSize": "[parameters('vmSize')]"
+        },
         "osProfile": {
           "computerName": "[parameters('vmName')]",
           "adminUsername": "[parameters('adminUsername')]",
@@ -209,36 +225,42 @@
           },
           "osDisk": {
             "createOption": "FromImage",
-            "managedDisk": { "storageAccountType": "Premium_LRS" }
+            "managedDisk": {
+              "storageAccountType": "Premium_LRS"
+            }
           }
         },
         "networkProfile": {
           "networkInterfaces": [
-            { "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]" }
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
+            }
           ]
         },
         "diagnosticsProfile": {
-          "bootDiagnostics": { "enabled": true }
+          "bootDiagnostics": {
+            "enabled": true
+          }
         }
       }
     }
   ],
   "outputs": {
-    "clmsPublicIp": {
-      "type": "string",
-      "value": "[reference(variables('pipName')).ipAddress]"
-    },
-    "clmsUiUrl": {
-      "type": "string",
-      "value": "[concat('https://', reference(variables('pipName')).ipAddress)]"
-    },
     "defaultCredentials": {
       "type": "string",
       "value": "admin / Cl0udLens@dm!n (change on first login)"
     },
     "nextStep": {
       "type": "string",
-      "value": "[concat('vController (formerly CLMS) is initializing. The web UI will be reachable at https://', reference(variables('pipName')).ipAddress, ' within about 60 seconds; full system initialization takes around 15 minutes. Log in with admin / Cl0udLens@dm!n, create a Project, copy the project key, then return to https://keysight-tech.github.io/cloudlens-ansible-azure/ to deploy sensors.')]"
+      "value": "[concat('vController is initializing. The web UI will be reachable at https://', reference(variables('pipName')).ipAddress, ' within about 60 seconds; full system initialization takes around 15 minutes. Log in with admin / Cl0udLens@dm!n, create a Project, copy the project key, then return to https://keysight-tech.github.io/cloudlens-ansible-azure/ to deploy sensors.')]"
+    },
+    "vcontrollerPublicIp": {
+      "type": "string",
+      "value": "[reference(variables('pipName')).ipAddress]"
+    },
+    "vcontrollerUiUrl": {
+      "type": "string",
+      "value": "[concat('https://', reference(variables('pipName')).ipAddress)]"
     }
   }
 }
