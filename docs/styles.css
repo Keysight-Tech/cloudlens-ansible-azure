@@ -327,7 +327,7 @@ h1 .lg, h1 strong {
 .btn::before {
   content: ""; position: absolute; inset: 1px 1px 50% 1px; border-radius: calc(var(--radius) - 1px);
   background: linear-gradient(180deg, var(--top-gloss), transparent);
-  pointer-events: none; z-index: 2; opacity: .55;
+  pointer-events: none; z-index: 0; opacity: .55;
   transition: opacity .35s var(--spring);
 }
 /* Primary (pigmented) buttons get a subtler gloss so white text stays crisp */
