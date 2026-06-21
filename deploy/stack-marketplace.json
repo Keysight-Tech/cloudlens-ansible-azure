@@ -134,6 +134,27 @@
       "metadata": {
         "description": "Number of vPB VMs (1-5). Default 1. Use 2-5 for data-plane scale-out (higher mirror throughput, fan-out to multiple tool clusters). Each instance becomes <prefix>-vpb-1, -2, -3, -4, -5 - each with its own mgmt + ingress + egress NICs."
       }
+    },
+    "vcontrollerVmName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional. Custom base name for vcontroller. Blank = use <namePrefix>-vcontroller. When vcontrollerCount > 1 the suffix -1, -2, -3 is appended automatically."
+      }
+    },
+    "kvoVmName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional. Custom base name for kvo. Blank = use <namePrefix>-kvo. When kvoCount > 1 the suffix -1, -2, -3 is appended automatically."
+      }
+    },
+    "vpbVmName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional. Custom base name for vpb. Blank = use <namePrefix>-vpb. When vpbCount > 1 the suffix -1, -2, -3 is appended automatically."
+      }
     }
   },
   "variables": {
@@ -142,7 +163,10 @@
     "kvoSubnetName": "kvo-subnet",
     "vpbMgmtSubnetName": "vpb-mgmt",
     "vpbIngressSubnetName": "vpb-ingress",
-    "vpbEgressSubnetName": "vpb-egress"
+    "vpbEgressSubnetName": "vpb-egress",
+    "vcontrollerBaseName": "[if(empty(parameters('vcontrollerVmName')), concat(parameters('namePrefix'), '-vcontroller'), parameters('vcontrollerVmName'))]",
+    "kvoBaseName": "[if(empty(parameters('kvoVmName')), concat(parameters('namePrefix'), '-kvo'), parameters('kvoVmName'))]",
+    "vpbBaseName": "[if(empty(parameters('vpbVmName')), concat(parameters('namePrefix'), '-vpb'), parameters('vpbVmName'))]"
   },
   "resources": [
     {
@@ -209,7 +233,7 @@
         },
         "parameters": {
           "vmName": {
-            "value": "[concat(parameters('namePrefix'), '-vcontroller-', copyIndex(1))]"
+            "value": "[if(equals(parameters('vcontrollerCount'), 1), variables('vcontrollerBaseName'), concat(variables('vcontrollerBaseName'), '-', copyIndex(1)))]"
           },
           "adminUsername": {
             "value": "[parameters('adminUsername')]"
@@ -251,7 +275,7 @@
         },
         "parameters": {
           "vmName": {
-            "value": "[concat(parameters('namePrefix'), '-kvo-', copyIndex(1))]"
+            "value": "[if(equals(parameters('kvoCount'), 1), variables('kvoBaseName'), concat(variables('kvoBaseName'), '-', copyIndex(1)))]"
           },
           "adminUsername": {
             "value": "[parameters('adminUsername')]"
@@ -293,7 +317,7 @@
         },
         "parameters": {
           "vmName": {
-            "value": "[concat(parameters('namePrefix'), '-vpb-', copyIndex(1))]"
+            "value": "[if(equals(parameters('vpbCount'), 1), variables('vpbBaseName'), concat(variables('vpbBaseName'), '-', copyIndex(1)))]"
           },
           "adminUsername": {
             "value": "[parameters('adminUsername')]"

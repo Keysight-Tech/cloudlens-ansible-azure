@@ -1,4 +1,4 @@
-# CloudLens Ansible for Azure
+# CloudLens Autopilot for Azure
 
 **Deploy CloudLens sensors to any Azure VM in under 60 seconds. Works on Linux, Windows, and at scale.**
 

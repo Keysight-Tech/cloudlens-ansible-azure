@@ -142,6 +142,52 @@
             ]
           },
           {
+            "name": "customizeVmNames",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Override individual VM names (optional)",
+            "defaultValue": false,
+            "toolTip": "By default the VMs are named <prefix>-vcontroller, <prefix>-kvo, <prefix>-vpb (with -1, -2, -3 appended when count > 1). Tick this box to set custom base names per product. When count > 1 the custom name still gets the -N suffix appended."
+          },
+          {
+            "name": "vcontrollerVmName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "vController VM name (base)",
+            "defaultValue": "",
+            "toolTip": "Custom base name for vController. Blank = use <prefix>-vcontroller. With count > 1 the suffix -1, -2, -3 is appended automatically.",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[a-z0-9][a-z0-9-]{1,40}[a-z0-9]$",
+              "validationMessage": "Blank, or 3-42 chars lowercase / digits / hyphens. Must start and end with a letter or digit."
+            },
+            "visible": "[steps('stackConfig').customizeVmNames]"
+          },
+          {
+            "name": "kvoVmName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "KVO VM name (base)",
+            "defaultValue": "",
+            "toolTip": "Custom base name for KVO. Blank = use <prefix>-kvo.",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[a-z0-9][a-z0-9-]{1,40}[a-z0-9]$",
+              "validationMessage": "Blank, or 3-42 chars lowercase / digits / hyphens."
+            },
+            "visible": "[steps('stackConfig').customizeVmNames]"
+          },
+          {
+            "name": "vpbVmName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "vPB VM name (base)",
+            "defaultValue": "",
+            "toolTip": "Custom base name for vPB. Blank = use <prefix>-vpb.",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[a-z0-9][a-z0-9-]{1,40}[a-z0-9]$",
+              "validationMessage": "Blank, or 3-42 chars lowercase / digits / hyphens."
+            },
+            "visible": "[steps('stackConfig').customizeVmNames]"
+          },
+          {
             "name": "adminUsername",
             "type": "Microsoft.Compute.UserNameTextBox",
             "label": "Linux admin username",
@@ -364,7 +410,10 @@
       "vpbEgressNicCount": "[steps('stackConfig').sizesHeader.vpbEgressNicCount]",
       "vcontrollerCount": "[steps('stackConfig').countsHeader.vcontrollerCount]",
       "kvoCount": "[steps('stackConfig').countsHeader.kvoCount]",
-      "vpbCount": "[steps('stackConfig').countsHeader.vpbCount]"
+      "vpbCount": "[steps('stackConfig').countsHeader.vpbCount]",
+      "vcontrollerVmName": "[steps('stackConfig').vcontrollerVmName]",
+      "kvoVmName": "[steps('stackConfig').kvoVmName]",
+      "vpbVmName": "[steps('stackConfig').vpbVmName]"
     }
   }
 }
