@@ -381,7 +381,7 @@
           }
         },
         "networkProfile": {
-          "networkInterfaces": "[concat(array(createObject('id', resourceId('Microsoft.Network/networkInterfaces', variables('mgmtNicName')), 'properties', createObject('primary', true))),map(range(1, parameters('ingressNicCount')), lambda('i', createObject('id', resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-ingress-', string(lambdaVariables('i')))), 'properties', createObject('primary', false)))),map(range(1, parameters('egressNicCount')), lambda('i', createObject('id', resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-egress-', string(lambdaVariables('i')))), 'properties', createObject('primary', false)))))]"
+          "networkInterfaces": "[concat(array(createObject('id', resourceId('Microsoft.Network/networkInterfaces', variables('mgmtNicName')), 'properties', createObject('primary', true))),map(range(1, parameters('ingressNicCount')), lambda('i', createObject('id', concat(resourceGroup().id, '/providers/Microsoft.Network/networkInterfaces/', parameters('vmName'), '-ingress-', string(lambdaVariables('i'))), 'properties', createObject('primary', false)))),map(range(1, parameters('egressNicCount')), lambda('i', createObject('id', concat(resourceGroup().id, '/providers/Microsoft.Network/networkInterfaces/', parameters('vmName'), '-egress-', string(lambdaVariables('i'))), 'properties', createObject('primary', false)))))]"
         },
         "diagnosticsProfile": {
           "bootDiagnostics": {
