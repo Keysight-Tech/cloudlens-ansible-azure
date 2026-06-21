@@ -351,15 +351,24 @@
     },
     "vcontrollerUrls": {
       "type": "array",
-      "value": "[map(range(1, parameters('vcontrollerCount')), lambda('i', reference(concat('deploy-vcontroller-', string(lambdaVariables('i'))), '2022-09-01').outputs.vcontrollerUiUrl.value))]"
+      "copy": {
+        "count": "[parameters('vcontrollerCount')]",
+        "input": "[reference(concat('deploy-vcontroller-', add(copyIndex(), 1))).outputs.vcontrollerUiUrl.value]"
+      }
     },
     "kvoUrls": {
       "type": "array",
-      "value": "[map(range(1, parameters('kvoCount')), lambda('i', reference(concat('deploy-kvo-', string(lambdaVariables('i'))), '2022-09-01').outputs.kvoUiUrl.value))]"
+      "copy": {
+        "count": "[parameters('kvoCount')]",
+        "input": "[reference(concat('deploy-kvo-', add(copyIndex(), 1))).outputs.kvoUiUrl.value]"
+      }
     },
     "vpbPublicIps": {
       "type": "array",
-      "value": "[map(range(1, parameters('vpbCount')), lambda('i', reference(concat('deploy-vpb-', string(lambdaVariables('i'))), '2022-09-01').outputs.vpbPublicIp.value))]"
+      "copy": {
+        "count": "[parameters('vpbCount')]",
+        "input": "[reference(concat('deploy-vpb-', add(copyIndex(), 1))).outputs.vpbPublicIp.value]"
+      }
     },
     "sensorInstallCommand": {
       "type": "string",
