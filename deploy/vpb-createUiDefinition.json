@@ -64,9 +64,7 @@
             },
             "osPlatform": "Linux",
             "constraints": {
-              "required": true,
-              "customPasswordRegex": "^(?=.*[A-Z])(?=.*[a-z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{12,}$",
-              "customValidationMessage": "Password must be 12+ characters with uppercase, lowercase, a digit, and a symbol."
+              "required": true
             },
             "options": {
               "hideConfirmation": false,
@@ -81,9 +79,18 @@
             "toolTip": "Minimum Standard_D8s_v3 required: vPB needs three NICs with accelerated networking, and smaller D-series sizes do not support 3+ NICs.",
             "constraints": {
               "allowedValues": [
-                { "label": "Standard_D8s_v3 (8 vCPU, 32 GB, minimum recommended)", "value": "Standard_D8s_v3" },
-                { "label": "Standard_D16s_v3 (16 vCPU, 64 GB, higher throughput)", "value": "Standard_D16s_v3" },
-                { "label": "Standard_D32s_v3 (32 vCPU, 128 GB, highest throughput)", "value": "Standard_D32s_v3" }
+                {
+                  "label": "Standard_D8s_v3 (8 vCPU, 32 GB, minimum recommended)",
+                  "value": "Standard_D8s_v3"
+                },
+                {
+                  "label": "Standard_D16s_v3 (16 vCPU, 64 GB, higher throughput)",
+                  "value": "Standard_D16s_v3"
+                },
+                {
+                  "label": "Standard_D32s_v3 (32 vCPU, 128 GB, highest throughput)",
+                  "value": "Standard_D32s_v3"
+                }
               ],
               "required": true
             }
@@ -107,8 +114,14 @@
             "toolTip": "Create a new VNet with three subnets (mgmt, ingress, egress), or attach to a VNet you already own that already has those three subnets.",
             "constraints": {
               "allowedValues": [
-                { "label": "Create new (3 subnets)", "value": "new" },
-                { "label": "Use existing", "value": "existing" }
+                {
+                  "label": "Create new (3 subnets)",
+                  "value": "new"
+                },
+                {
+                  "label": "Use existing",
+                  "value": "existing"
+                }
               ],
               "required": true
             }

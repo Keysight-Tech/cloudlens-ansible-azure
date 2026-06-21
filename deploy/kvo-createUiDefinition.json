@@ -64,9 +64,7 @@
             },
             "osPlatform": "Linux",
             "constraints": {
-              "required": true,
-              "customPasswordRegex": "^(?=.*[A-Z])(?=.*[a-z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{12,}$",
-              "customValidationMessage": "Password must be 12+ characters with uppercase, lowercase, a digit, and a symbol."
+              "required": true
             },
             "options": {
               "hideConfirmation": false,
@@ -81,10 +79,22 @@
             "toolTip": "Standard_D4s_v5 (4 vCPU, 16 GB) is recommended for most deployments. Scale up for environments orchestrating many vPB fleets.",
             "constraints": {
               "allowedValues": [
-                { "label": "Standard_D2s_v5 (2 vCPU, 8 GB, small dev/test)", "value": "Standard_D2s_v5" },
-                { "label": "Standard_D4s_v5 (4 vCPU, 16 GB, recommended)", "value": "Standard_D4s_v5" },
-                { "label": "Standard_D8s_v5 (8 vCPU, 32 GB, large fleets)", "value": "Standard_D8s_v5" },
-                { "label": "Standard_D16s_v5 (16 vCPU, 64 GB, very large fleets)", "value": "Standard_D16s_v5" }
+                {
+                  "label": "Standard_D2s_v5 (2 vCPU, 8 GB, small dev/test)",
+                  "value": "Standard_D2s_v5"
+                },
+                {
+                  "label": "Standard_D4s_v5 (4 vCPU, 16 GB, recommended)",
+                  "value": "Standard_D4s_v5"
+                },
+                {
+                  "label": "Standard_D8s_v5 (8 vCPU, 32 GB, large fleets)",
+                  "value": "Standard_D8s_v5"
+                },
+                {
+                  "label": "Standard_D16s_v5 (16 vCPU, 64 GB, very large fleets)",
+                  "value": "Standard_D16s_v5"
+                }
               ],
               "required": true
             }
@@ -108,8 +118,14 @@
             "toolTip": "Create a new VNet sized below, or attach to a VNet you already own.",
             "constraints": {
               "allowedValues": [
-                { "label": "Create new", "value": "new" },
-                { "label": "Use existing", "value": "existing" }
+                {
+                  "label": "Create new",
+                  "value": "new"
+                },
+                {
+                  "label": "Use existing",
+                  "value": "existing"
+                }
               ],
               "required": true
             }
