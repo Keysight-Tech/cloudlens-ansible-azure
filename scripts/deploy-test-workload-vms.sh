@@ -98,7 +98,8 @@ echo "  Windows VM size:   $WIN_VM_SIZE"
 echo "  VMs to create:     $UBUNTU_VM (Ubuntu 22.04), $RHEL_VM (RHEL 9), $WIN_VM (Win Server 2022)"
 echo
 read -rp "Proceed? [y/N]: " yn
-[[ "${yn,,}" == "y" || "${yn,,}" == "yes" ]] || { warn "Aborted"; exit 0; }
+yn_lc=$(echo "$yn" | tr '[:upper:]' '[:lower:]')
+[[ "$yn_lc" == "y" || "$yn_lc" == "yes" ]] || { warn "Aborted"; exit 0; }
 
 # ---- create resources ----
 step "Resource group"
