@@ -1,9 +1,8 @@
 ---
-# RHEL-specific connection vars
+# Linux-specific connection vars.
+# Auth priority: linux.ansible_password (from customer_input.yaml) wins
+# if set, else falls back to linux.ssh_key_file (default ~/.ssh/id_rsa).
 ansible_user: "{{ linux.ansible_user | default('azureuser') }}"
-ansible_ssh_private_key_file: "{{ linux.ssh_key_file | default('~/.ssh/id_rsa') }}"
-ansible_python_interpreter: /usr/libexec/platform-python
-
-# Runtime preferences
-podman_command: podman
-ca_cert_dir: "/etc/pki/ca-trust/source/anchors"
+ansible_ssh_pass: "{{ linux.ansible_password if (linux.ansible_password is defined) else omit }}"
+ansible_ssh_private_key_file: "{{ linux.ssh_key_file if (linux.ssh_key_file is defined and linux.ansible_password is not defined) else omit }}"
+ansible_python_interpreter: /usr/bin/python3
