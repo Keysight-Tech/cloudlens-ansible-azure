@@ -31,6 +31,28 @@ Three ways to deploy vController + KVO (optional) + vPB + sensors end to end. Sa
 curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/deploy/deploy-stack.sh | bash
 ```
 
+**Prerequisites the script handles for you:**
+- Azure CLI (`az`): auto-installed if missing (macOS via Homebrew, Debian via apt, RHEL via dnf)
+- Python 3 + venv + Ansible + Azure SDK: installed into a venv during Phase 11 (sensor install)
+- Git: used to auto-clone the repo for Phase 11 if not already present
+
+**Prerequisites you need:**
+- A bash shell (built-in on macOS / Linux / WSL / Azure Cloud Shell)
+- Python 3 (built-in on macOS, default on Linux, in Cloud Shell, in WSL)
+- An Azure subscription you have Contributor on
+
+#### Windows users
+
+Ansible's control node does **not** run natively on Windows. Three supported paths, easiest first:
+
+| Path | What it is | Setup time |
+|---|---|---|
+| **Azure Cloud Shell** (best) | Open https://shell.azure.com in your browser, paste the curl line. Pre-authenticated, Ansible-ready, zero local install. | 0 min |
+| **WSL** | Windows Subsystem for Linux: `wsl --install` then run the curl line from WSL. | 5 min |
+| **Linux jumpbox VM** | A small VM you SSH into. Useful if your security policy blocks Cloud Shell. | 10 min |
+
+The deploy-stack.sh detects Git Bash / Cygwin / MSYS and warns you before trying to install sensors, so you do not lose product progress if you start in the wrong shell.
+
 ### Terraform stack module
 
 ```bash

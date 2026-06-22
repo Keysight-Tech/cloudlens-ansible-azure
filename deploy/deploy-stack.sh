@@ -364,13 +364,39 @@ echo
 echo
 
 IN_CLOUD_SHELL=false
+IN_WSL=false
+IS_NATIVE_WINDOWS=false
+KERNEL="$(uname -s 2>/dev/null || echo unknown)"
+
 if [[ -n "${AZUREPS_HOST_ENVIRONMENT:-}" ]] \
    || [[ "${ACC_CLOUD:-}" == "PROD" ]] \
    || [[ -d /usr/cloudshell ]]; then
   IN_CLOUD_SHELL=true
-  ok "Detected: Azure Cloud Shell (pre-authenticated)"
+  ok "Detected: Azure Cloud Shell (pre-authenticated, Ansible-ready)"
+elif [[ "$KERNEL" == "Linux" ]] && grep -qiE "microsoft|wsl" /proc/version 2>/dev/null; then
+  IN_WSL=true
+  ok "Detected: WSL on Windows ($(grep -oE 'Microsoft|WSL' /proc/version | head -1))"
+elif [[ "$KERNEL" == MINGW* ]] || [[ "$KERNEL" == MSYS* ]] || [[ "$KERNEL" == CYGWIN* ]]; then
+  IS_NATIVE_WINDOWS=true
+  warn "Detected: Windows shell ($KERNEL) - not fully supported"
+  echo
+  echo "  This script's product-deploy phases (1-10) MAY work in Git Bash/Cygwin"
+  echo "  but Phase 11 (sensor install via Ansible) does NOT - Ansible's control"
+  echo "  node cannot run natively on Windows."
+  echo
+  echo "  Three better paths for Windows users:"
+  echo "    1. Azure Cloud Shell    (browser, https://shell.azure.com, fully supported)"
+  echo "    2. WSL                  (Windows Subsystem for Linux: 'wsl --install')"
+  echo "    3. Linux jumpbox VM     (small Azure VM you SSH into)"
+  echo
+  read -rp "Continue anyway in this Windows shell? [y/N]: " yn
+  yn_lc=$(echo "${yn:-n}" | tr '[:upper:]' '[:lower:]')
+  if [[ "$yn_lc" != "y" ]] && [[ "$yn_lc" != "yes" ]]; then
+    fail "Aborted. Open Azure Cloud Shell (https://shell.azure.com) and rerun the curl line there for the smoothest experience."
+  fi
+  warn "Continuing on Windows. Expect Phase 11 to fail; products will still deploy."
 else
-  ok "Detected: Local machine ($(uname -s))"
+  ok "Detected: Local machine ($KERNEL)"
 fi
 
 echo
@@ -1148,7 +1174,16 @@ fi
 # =====================================================================
 # Phase 11: Sensor chain (optional)
 # =====================================================================
-if [[ "$CHAIN_SENSORS" == "true" ]]; then
+if [[ "$CHAIN_SENSORS" == "true" ]] && [[ "$IS_NATIVE_WINDOWS" == "true" ]]; then
+  warn "Sensor chain disabled: Ansible cannot run on Windows shells (Git Bash/Cygwin)."
+  warn "Run sensors from Azure Cloud Shell, WSL, or a Linux VM with this command:"
+  warn "  curl -sSL ${REPO_RAW}/quickstart.sh | bash"
+  warn "(customer_input.yaml was still generated below for reuse)"
+  # Still generate the yaml so the customer has it for later
+  CHAIN_SENSORS=write_yaml_only
+fi
+
+if [[ "$CHAIN_SENSORS" == "true" ]] || [[ "$CHAIN_SENSORS" == "write_yaml_only" ]]; then
   step "Phase 11: Chain into sensor deployment"
 
   if [[ "$DRY_RUN" == "true" ]]; then
@@ -1226,6 +1261,14 @@ YAML
         warn "                    cd cloudlens-ansible-azure && bash quickstart.sh"
         REPO_DIR=""
       fi
+    fi
+
+    # On Windows shells, skip the actual quickstart.sh launch - it would
+    # fail trying to install ansible. Customer keeps the yaml for use
+    # in Cloud Shell / WSL later.
+    if [[ "$CHAIN_SENSORS" == "write_yaml_only" ]]; then
+      ok "Saved customer_input.yaml for later use from Cloud Shell or WSL."
+      REPO_DIR=""
     fi
 
     if [[ -n "$REPO_DIR" ]]; then
