@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 560" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" role="img" aria-labelledby="dd-title dd-desc">
-  <title id="dd-title">CloudLens Ansible Azure Deployment - Animated Terminal Demo</title>
-  <desc id="dd-desc">An animated terminal window showing a one-line curl command that bootstraps the CloudLens Ansible quickstart, detects the environment, authenticates, discovers three Azure VMs, and reports a successful PLAY RECAP with three sensors registered to CLMS in eight minutes. The animation loops every thirty seconds.</desc>
+  <title id="dd-title">CloudLens Autopilot for Azure Deployment - Animated Terminal Demo</title>
+  <desc id="dd-desc">An animated terminal window showing a one-line curl command that bootstraps the CloudLens Autopilot quickstart, detects the environment, authenticates, discovers three Azure VMs, and reports a successful PLAY RECAP with three sensors registered to CLMS in eight minutes. The animation loops every thirty seconds.</desc>
   <defs>
     <style>
       .term-glow { transition: filter 0.3s ease; }
@@ -45,7 +45,7 @@
     <circle class="light-green" cx="62" cy="18" r="6.5" fill="#28C840"/>
 
     <!-- Title -->
-    <text x="450" y="22" text-anchor="middle" font-size="11" font-weight="500" fill="#E5E7EB" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">CloudLens Ansible — Azure Deployment</text>
+    <text x="450" y="22" text-anchor="middle" font-size="11" font-weight="500" fill="#E5E7EB" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">CloudLens Autopilot for Azure Deployment</text>
 
     <!-- Terminal text -->
     <g font-family="SF Mono, Menlo, Consolas, 'Liberation Mono', monospace" font-size="11.5">
@@ -69,7 +69,7 @@
           <text x="20" y="118">║</text>
           <text x="20" y="134">╚═══════════════════════════════════════════════════════════════════════════╝</text>
         </g>
-        <text x="40" y="102" fill="#FCD34D" font-weight="600">CloudLens Ansible — Azure Deployment Quickstart</text>
+        <text x="40" y="102" fill="#FCD34D" font-weight="600">CloudLens Autopilot for Azure Deployment Quickstart</text>
         <text x="40" y="118" fill="#9CA3AF">v1.0.0  ·  Keysight Technologies</text>
         <text x="858" y="102" fill="#60A5FA">║</text>
         <text x="858" y="118" fill="#60A5FA">║</text>
