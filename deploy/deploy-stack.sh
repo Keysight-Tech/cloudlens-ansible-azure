@@ -1447,14 +1447,44 @@ YAML
       # line to use whatever the customer asked for.
       INV="$REPO_DIR/inventory/azure_rm.yaml"
       if [[ -f "$INV" ]]; then
-        python3 - "$INV" "$DISCOVERY_TAG_KEY" "$DISCOVERY_TAG_VALUE" <<'PY'
+        # Detect whether the operator is running from inside Azure (Cloud
+        # Shell, or a VM peered to the workload VNet) or from the public
+        # internet (laptop, jumpbox over public IP, etc). The shipped
+        # inventory uses PRIVATE IPs for Linux which only works from
+        # inside Azure. From the public internet we need PUBLIC IPs.
+        # Cloud Shell + Azure VMs have access to the IMDS endpoint at
+        # 169.254.169.254 which is NOT reachable from a laptop, so that
+        # is the canonical detection.
+        FROM_INSIDE_AZURE=false
+        if curl -sf --max-time 2 -H "Metadata:true" \
+             "http://169.254.169.254/metadata/instance?api-version=2021-02-01" \
+             >/dev/null 2>&1; then
+          FROM_INSIDE_AZURE=true
+        fi
+
+        python3 - "$INV" "$DISCOVERY_TAG_KEY" "$DISCOVERY_TAG_VALUE" "$FROM_INSIDE_AZURE" <<'PY'
 import sys, pathlib, re
 inv = pathlib.Path(sys.argv[1])
-key, val = sys.argv[2], sys.argv[3]
+key, val, from_inside = sys.argv[2], sys.argv[3], sys.argv[4] == "true"
 t = inv.read_text()
+
+# 1. Swap discovery tag
 new_filter = f"  - tags['{key}'] is not defined or tags['{key}'] != '{val}'"
 t = re.sub(r"  - tags\['\w+'\] is not defined or tags\['\w+'\] != '[^']+'",
            new_filter, t, count=1)
+
+# 2. If operator is on the public internet, force ansible_host = public
+# IP for ALL VMs (not just Windows). Linux on private IP fails with
+# "ssh connect timeout" from a laptop. From inside Azure (Cloud Shell)
+# the shipped behavior is correct and we leave it alone.
+if not from_inside:
+    old_host = re.compile(
+        r"ansible_host:.*?private_ipv4_addresses\[0\]", re.DOTALL
+    )
+    new_host = ("ansible_host: (public_ipv4_address | default([], true) | first) "
+                "if (public_ipv4_address | default([], true) | length) > 0 "
+                "else private_ipv4_addresses[0]")
+    t = old_host.sub(new_host, t, count=1)
 inv.write_text(t)
 PY
         ok "Updated $INV with discovery tag ${DISCOVERY_TAG_KEY}=${DISCOVERY_TAG_VALUE}"
