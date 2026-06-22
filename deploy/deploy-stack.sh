@@ -1019,14 +1019,48 @@ if [[ "$DRY_RUN" != "true" ]]; then
     -o tsv 2>/dev/null || echo "")
 
   if [[ -n "$EXISTING_VCTRL$EXISTING_KVO$EXISTING_VPB" ]]; then
+    # Resolve the public IPs so we can show them in the explanation - SEs
+    # and operators want to see what they would actually be reusing.
+    if [[ -n "$EXISTING_VCTRL" ]]; then
+      EXISTING_VCTRL_IP=$(az network public-ip show -g "$RESOURCE_GROUP" \
+        -n "${EXISTING_VCTRL}-pip" --query ipAddress -o tsv 2>/dev/null || echo "unknown")
+    fi
+    if [[ -n "$EXISTING_KVO" ]]; then
+      EXISTING_KVO_IP=$(az network public-ip show -g "$RESOURCE_GROUP" \
+        -n "${EXISTING_KVO}-pip" --query ipAddress -o tsv 2>/dev/null || echo "unknown")
+    fi
+    if [[ -n "$EXISTING_VPB" ]]; then
+      EXISTING_VPB_IP=$(az network public-ip show -g "$RESOURCE_GROUP" \
+        -n "${EXISTING_VPB}-mgmt-pip" --query ipAddress -o tsv 2>/dev/null || echo "unknown")
+    fi
+
     echo
-    note "Found existing CloudLens products in ${RESOURCE_GROUP} (detected by Marketplace plan, not name):"
-    [[ -n "$EXISTING_VCTRL" ]] && note "  - vController: $EXISTING_VCTRL"
-    [[ -n "$EXISTING_KVO" ]]   && note "  - KVO:         $EXISTING_KVO"
-    [[ -n "$EXISTING_VPB" ]]   && note "  - vPB:         $EXISTING_VPB"
+    echo "================================================================"
+    echo "  Existing CloudLens products detected in ${RESOURCE_GROUP}"
+    echo "================================================================"
     echo
-    echo "  Y = reuse these (skip Phase 6-9, go straight to Phase 10 sensor install)"
-    echo "  N = deploy fresh ones (will create NEW VMs alongside the existing - duplicates)"
+    echo "  How we found them: looked at every VM in this RG and matched"
+    echo "  the Azure Marketplace plan ID. This works even if you (or a"
+    echo "  prior SE / customer) used custom VM names instead of the"
+    echo "  defaults - the plan ID is fixed."
+    echo
+    [[ -n "$EXISTING_VCTRL" ]] && printf "    %-13s %-32s reachable at https://%s\n" "vController:" "$EXISTING_VCTRL" "${EXISTING_VCTRL_IP:-unknown}"
+    [[ -n "$EXISTING_KVO" ]]   && printf "    %-13s %-32s reachable at https://%s\n" "KVO:"         "$EXISTING_KVO"   "${EXISTING_KVO_IP:-unknown}"
+    [[ -n "$EXISTING_VPB" ]]   && printf "    %-13s %-32s SSH at ssh -p 9022 %s@%s\n" "vPB:"        "$EXISTING_VPB"   "$ADMIN_USERNAME" "${EXISTING_VPB_IP:-unknown}"
+    echo
+    echo "  Most customers re-running the script want to REUSE these:"
+    echo
+    echo "    Y (default) = Reuse them. The script skips Phase 6-9 (saves"
+    echo "                  ~15 min and avoids ~\$30 of duplicate VM cost),"
+    echo "                  goes straight to Phase 10 so you can install"
+    echo "                  or re-install sensors against the existing"
+    echo "                  vController."
+    echo
+    echo "    N           = Deploy a SECOND set alongside the existing."
+    echo "                  Use only if you intentionally want a second"
+    echo "                  vController + KVO + vPB in the same RG (rare;"
+    echo "                  usually for HA testing or A/B comparisons)."
+    echo
     read -rp "Reuse existing products? [Y/n]: " yn
     yn_lc=$(echo "${yn:-y}" | tr '[:upper:]' '[:lower:]')
     if [[ "$yn_lc" == "y" ]] || [[ "$yn_lc" == "yes" ]]; then
