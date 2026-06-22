@@ -24,6 +24,10 @@ Most common knobs:
 | vPB ingress NICs | `1` | `CLOUDLENS_VPB_INGRESS_NICS` | `--vpb-ingress-nics` |
 | vPB egress NICs | `1` | `CLOUDLENS_VPB_EGRESS_NICS` | `--vpb-egress-nics` |
 | Rollback on failure | `false` | `CLOUDLENS_ROLLBACK_ON_FAIL` | `--rollback` |
+| Discovery tag key | `cloudlens` | `CLOUDLENS_DISCOVERY_TAG_KEY` | `--discovery-tag-key` |
+| Discovery tag value | `yes` | `CLOUDLENS_DISCOVERY_TAG_VALUE` | `--discovery-tag-value` |
+
+For end-to-end verification with a custom discovery tag, run `scripts/deploy-test-workload-vms.sh` first - it stands up Ubuntu + RHEL + Windows VMs tagged with your chosen pair, ready for a sensor-install test pass.
 
 ---
 

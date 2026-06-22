@@ -92,6 +92,8 @@ Every default is overridable three ways: **CLI flag wins over env var wins over 
 | (toggle) | `--no-sensors` | n/a | Skip sensor playbook chain |
 | `false` | `--rollback` / `--no-rollback` | `CLOUDLENS_ROLLBACK_ON_FAIL` | On failure: delete RG we created. Never touches pre-existing RGs. |
 | `false` | `--dry-run` | n/a | Print every az command, touch nothing |
+| `cloudlens` | `--discovery-tag-key <key>` | `CLOUDLENS_DISCOVERY_TAG_KEY` | Azure tag key that marks "install sensor here" (override if your team uses a different tagging convention) |
+| `yes` | `--discovery-tag-value <value>` | `CLOUDLENS_DISCOVERY_TAG_VALUE` | Azure tag value paired with the key above. Default pair: `cloudlens=yes` |
 
 **Three patterns customers use:**
 
@@ -107,8 +109,26 @@ bash deploy-stack.sh \
   --resource-group prod-rg --location westeurope \
   --vcontroller-count 2 --kvo-count 2 --vpb-count 3 \
   --vpb-ingress-nics 2 --vpb-egress-nics 3 --vpb-size Standard_D16s_v3 \
+  --discovery-tag-key monitoring --discovery-tag-value enabled \
   --rollback
 ```
+
+### Verify the install end-to-end (test fixture)
+
+`scripts/deploy-test-workload-vms.sh` stands up 3 disposable VMs (Ubuntu 22.04 + RHEL 9 + Windows Server 2022) tagged with a custom discovery tag so you can prove sensors install on every supported OS in one pass.
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/scripts/deploy-test-workload-vms.sh | bash
+
+# Then run the stack with the matching tag flags:
+curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/deploy/deploy-stack.sh | \
+  bash -s -- --discovery-tag-key monitoring --discovery-tag-value enabled
+
+# Cleanup:
+az group delete -n cloudlens-test-vms-rg --yes --no-wait
+```
+
+Phase 10 will print `Workload VMs tagged monitoring=enabled: 3` and Phase 11 will install sensors on all three. Useful for SE demos, CI validation, or proving the dynamic-tag plumbing on a customer's first call.
 
 ---
 
