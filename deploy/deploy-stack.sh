@@ -80,6 +80,15 @@ CLMS_VM_SIZE="${CLOUDLENS_VCONTROLLER_SIZE:-Standard_D4s_v5}"
 KVO_VM_SIZE="${CLOUDLENS_KVO_SIZE:-Standard_D4s_v5}"
 VPB_VM_SIZE="${CLOUDLENS_VPB_SIZE:-Standard_D8s_v3}"
 
+# Workload discovery tag: which Azure tag marks VMs that should get the
+# CloudLens sensor. Default is cloudlens=yes (the canonical convention).
+# Customers with existing tagging conventions can override:
+#   --discovery-tag-key monitoring --discovery-tag-value enabled
+#   OR
+#   CLOUDLENS_DISCOVERY_TAG_KEY=monitoring CLOUDLENS_DISCOVERY_TAG_VALUE=enabled
+DISCOVERY_TAG_KEY="${CLOUDLENS_DISCOVERY_TAG_KEY:-cloudlens}"
+DISCOVERY_TAG_VALUE="${CLOUDLENS_DISCOVERY_TAG_VALUE:-yes}"
+
 # Rollback behavior: when ROLLBACK_ON_FAIL=true, the on_error trap will
 # delete the resource group on failure - BUT only if we created it ourselves
 # this run (CREATED_RG=true). Pre-existing RGs supplied via --resource-group
@@ -239,6 +248,10 @@ while [[ $# -gt 0 ]]; do
     # Rollback control
     --rollback) ROLLBACK_ON_FAIL=true; shift ;;
     --no-rollback) ROLLBACK_ON_FAIL=false; shift ;;
+
+    # Workload discovery tag (which tag marks "install sensor here")
+    --discovery-tag-key) DISCOVERY_TAG_KEY="$2"; shift 2 ;;
+    --discovery-tag-value) DISCOVERY_TAG_VALUE="$2"; shift 2 ;;
 
     # Naming + region
     --resource-group) ARG_RG="$2"; shift 2 ;;
@@ -885,6 +898,36 @@ if [[ -z "$CHAIN_SENSORS" ]]; then
 fi
 ok "Chain sensors: ${CHAIN_SENSORS}"
 
+# Workload-discovery tag: only ask if customer wants sensors AND has
+# not pre-set the tag via flag/env. Default is cloudlens=yes which is
+# what we document everywhere. Custom tags let customers match
+# existing tagging conventions (monitoring=enabled, agent=cloudlens,
+# team=secops, etc.).
+discovery_tag_already_set() {
+  [[ -n "${CLOUDLENS_DISCOVERY_TAG_KEY:-}" ]]   && return 0
+  [[ -n "${CLOUDLENS_DISCOVERY_TAG_VALUE:-}" ]] && return 0
+  [[ "$DISCOVERY_TAG_KEY" != "cloudlens" ]]     && return 0
+  [[ "$DISCOVERY_TAG_VALUE" != "yes" ]]         && return 0
+  return 1
+}
+if [[ "$CHAIN_SENSORS" == "true" ]] && ! discovery_tag_already_set; then
+  echo
+  echo "Workload discovery tag: which Azure tag marks the VMs that should get the"
+  echo "CloudLens sensor installed? Default is cloudlens=yes. If your team already"
+  echo "uses a different tagging convention (e.g. monitoring=enabled), enter it"
+  echo "here as key=value. Otherwise press Enter."
+  read -rp "Discovery tag [cloudlens=yes]: " tag_input
+  if [[ -n "$tag_input" ]]; then
+    if [[ "$tag_input" =~ ^([A-Za-z][A-Za-z0-9_-]*)=([A-Za-z0-9._-]+)$ ]]; then
+      DISCOVERY_TAG_KEY="${BASH_REMATCH[1]}"
+      DISCOVERY_TAG_VALUE="${BASH_REMATCH[2]}"
+    else
+      warn "  '$tag_input' is not a valid key=value pair. Falling back to cloudlens=yes."
+    fi
+  fi
+fi
+ok "Discovery tag: ${DISCOVERY_TAG_KEY}=${DISCOVERY_TAG_VALUE}"
+
 # Now we know enough to probe quotas
 # vController = 4 vCPU; KVO = +4 vCPU; both in DSv5 family
 kvo_vcpu=0
@@ -1162,6 +1205,33 @@ vController is now reachable. To deploy sensors, you need a project key.
 
 EOM
 
+# Phase 10 pre-flight: scan for already-tagged VMs using the chosen
+# discovery tag. Tells the customer exactly how many sensors will be
+# installed BEFORE they paste the project key.
+if [[ "$CHAIN_SENSORS" == "true" ]] && [[ "$DRY_RUN" != "true" ]]; then
+  TAGGED_COUNT=$(az vm list \
+    --query "length([?tags.\"${DISCOVERY_TAG_KEY}\"=='${DISCOVERY_TAG_VALUE}'])" \
+    -o tsv 2>/dev/null || echo "?")
+  if [[ "$TAGGED_COUNT" == "0" ]]; then
+    echo "  Workload VMs tagged ${DISCOVERY_TAG_KEY}=${DISCOVERY_TAG_VALUE}: 0"
+    echo
+    echo "  To tag a VM so the sensor installs on it, run:"
+    echo "    az vm update -g <RG> -n <VM> --set \\"
+    echo "        tags.${DISCOVERY_TAG_KEY}=${DISCOVERY_TAG_VALUE} \\"
+    echo "        tags.os=ubuntu \\"
+    echo "        tags.env=prod"
+    echo "  (Tag os = ubuntu | rhel | windows ; env = prod | dev)"
+    echo
+    echo "  You can finish Phase 11 later by tagging VMs and running"
+    echo "  bash ~/cloudlens-ansible-azure/quickstart.sh from any bash shell."
+    echo
+  else
+    echo "  Workload VMs tagged ${DISCOVERY_TAG_KEY}=${DISCOVERY_TAG_VALUE}: ${TAGGED_COUNT}"
+    echo "  Phase 11 will install the sensor on those ${TAGGED_COUNT} VMs."
+    echo
+  fi
+fi
+
 PROJECT_KEY=""
 if [[ "$CHAIN_SENSORS" == "true" ]]; then
   read -rp "Paste project key (or press Enter to skip sensor deployment): " PROJECT_KEY
@@ -1214,7 +1284,7 @@ azure:
   subscription_id: "${SUB_ID}"
   tenant_id: "${TENANT_ID}"
   tag_filters:
-    cloudlens: "yes"
+    ${DISCOVERY_TAG_KEY}: "${DISCOVERY_TAG_VALUE}"
 
 cloudlens:
   manager_ip_or_fqdn: "${CLMS_PUBLIC_IP}"
@@ -1275,6 +1345,25 @@ YAML
       # Move the freshly-generated yaml into the repo so quickstart.sh sees it
       cp customer_input.yaml "$REPO_DIR/customer_input.yaml"
       ok "Copied customer_input.yaml -> $REPO_DIR/"
+
+      # Rewrite inventory/azure_rm.yaml so the Ansible azure_rm plugin
+      # honors the customer's chosen discovery tag. The shipped default
+      # is hardcoded to cloudlens=yes; we overwrite the exclude_host_filters
+      # line to use whatever the customer asked for.
+      INV="$REPO_DIR/inventory/azure_rm.yaml"
+      if [[ -f "$INV" ]]; then
+        python3 - "$INV" "$DISCOVERY_TAG_KEY" "$DISCOVERY_TAG_VALUE" <<'PY'
+import sys, pathlib, re
+inv = pathlib.Path(sys.argv[1])
+key, val = sys.argv[2], sys.argv[3]
+t = inv.read_text()
+new_filter = f"  - tags['{key}'] is not defined or tags['{key}'] != '{val}'"
+t = re.sub(r"  - tags\['\w+'\] is not defined or tags\['\w+'\] != '[^']+'",
+           new_filter, t, count=1)
+inv.write_text(t)
+PY
+        ok "Updated $INV with discovery tag ${DISCOVERY_TAG_KEY}=${DISCOVERY_TAG_VALUE}"
+      fi
       ok "Launching quickstart.sh from $REPO_DIR"
       ( cd "$REPO_DIR" && bash quickstart.sh ) \
         || warn "quickstart.sh exited non-zero (see $REPO_DIR for logs)"
