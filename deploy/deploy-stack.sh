@@ -1313,23 +1313,42 @@ YAML
     # If we are already inside the repo, use it. Otherwise clone to a temp
     # location and chain from there. Customer gets sensors deployed without
     # needing to manually git clone.
-    if [[ -x quickstart.sh ]]; then
+    TARGET_DIR="$HOME/cloudlens-ansible-azure"
+    REPO_DIR=""
+    # Lookup tiers, most preferred first. Falls through gracefully when
+    # earlier runs left a partial directory (e.g. previously cloned but
+    # quickstart.sh moved, or a stale dir with only .git).
+    if [[ -f quickstart.sh ]]; then
       REPO_DIR="$(pwd)"
+      chmod +x "$REPO_DIR/quickstart.sh" 2>/dev/null || true
       ok "Found quickstart.sh in current directory"
-    elif [[ -x "$HOME/cloudlens-ansible-azure/quickstart.sh" ]]; then
-      REPO_DIR="$HOME/cloudlens-ansible-azure"
-      ok "Found existing repo at $REPO_DIR"
-    else
-      note "quickstart.sh not found locally - cloning repo to $HOME/cloudlens-ansible-azure"
-      if git clone -q https://github.com/Keysight-Tech/cloudlens-ansible-azure.git "$HOME/cloudlens-ansible-azure" 2>/dev/null; then
-        REPO_DIR="$HOME/cloudlens-ansible-azure"
+    elif [[ -f "$TARGET_DIR/quickstart.sh" ]]; then
+      REPO_DIR="$TARGET_DIR"
+      chmod +x "$TARGET_DIR/quickstart.sh" 2>/dev/null || true
+      # Pull the latest while we are here so the customer gets today's fixes
+      ( cd "$TARGET_DIR" && git pull -q origin main 2>/dev/null ) || true
+      ok "Found existing repo at $REPO_DIR (pulled latest)"
+    elif [[ -d "$TARGET_DIR" ]]; then
+      # Dir exists but no quickstart.sh - probably a partial / broken
+      # state from an earlier run. Move it aside and try a fresh clone.
+      BACKUP="${TARGET_DIR}.bak.$(date +%s)"
+      mv "$TARGET_DIR" "$BACKUP" 2>/dev/null && warn "Renamed broken $TARGET_DIR -> $BACKUP"
+    fi
+
+    if [[ -z "$REPO_DIR" ]]; then
+      note "Cloning repo to $TARGET_DIR"
+      if git clone -q https://github.com/Keysight-Tech/cloudlens-ansible-azure.git "$TARGET_DIR" 2>/dev/null \
+         && [[ -f "$TARGET_DIR/quickstart.sh" ]]; then
+        REPO_DIR="$TARGET_DIR"
+        chmod +x "$TARGET_DIR/quickstart.sh" 2>/dev/null || true
         ok "Cloned to $REPO_DIR"
       else
-        warn "Could not clone the repo (no git? offline?). Skipping sensor chain."
-        warn "To finish manually: git clone https://github.com/Keysight-Tech/cloudlens-ansible-azure.git"
-        warn "                    cp customer_input.yaml cloudlens-ansible-azure/"
-        warn "                    cd cloudlens-ansible-azure && bash quickstart.sh"
-        REPO_DIR=""
+        warn "Could not clone the repo (no git, offline, or pre-existing dir conflict)."
+        warn "To finish manually:"
+        warn "  cd $TARGET_DIR 2>/dev/null || git clone https://github.com/Keysight-Tech/cloudlens-ansible-azure.git $TARGET_DIR && cd $TARGET_DIR"
+        warn "  git pull"
+        warn "  cp $(pwd)/customer_input.yaml ."
+        warn "  bash quickstart.sh"
       fi
     fi
 
