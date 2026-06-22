@@ -1001,6 +1001,48 @@ else
   ok "Created resource group ${RESOURCE_GROUP} in ${LOCATION}"
 fi
 
+# After RG is settled, scan for existing CloudLens products in it. The
+# script's per-phase reuse check is by VM NAME, so if the customer typed
+# "vcontroller" as the default but the existing VM is "old-clms-prod",
+# Phase 6 would deploy a SECOND vController. Detect by marketplace plan
+# (which is fixed regardless of VM name) and offer one-click reuse so
+# the customer never pays for a duplicate.
+if [[ "$DRY_RUN" != "true" ]]; then
+  EXISTING_VCTRL=$(az vm list -g "$RESOURCE_GROUP" \
+    --query "[?plan.product=='keysight-cloudlens-vcontroller'].name | [0]" \
+    -o tsv 2>/dev/null || echo "")
+  EXISTING_KVO=$(az vm list -g "$RESOURCE_GROUP" \
+    --query "[?plan.product=='keysight-vision-orchestrator'].name | [0]" \
+    -o tsv 2>/dev/null || echo "")
+  EXISTING_VPB=$(az vm list -g "$RESOURCE_GROUP" \
+    --query "[?plan.product=='keysight-cloudlens-virtual-packet-broker'].name | [0]" \
+    -o tsv 2>/dev/null || echo "")
+
+  if [[ -n "$EXISTING_VCTRL$EXISTING_KVO$EXISTING_VPB" ]]; then
+    echo
+    note "Found existing CloudLens products in ${RESOURCE_GROUP} (detected by Marketplace plan, not name):"
+    [[ -n "$EXISTING_VCTRL" ]] && note "  - vController: $EXISTING_VCTRL"
+    [[ -n "$EXISTING_KVO" ]]   && note "  - KVO:         $EXISTING_KVO"
+    [[ -n "$EXISTING_VPB" ]]   && note "  - vPB:         $EXISTING_VPB"
+    echo
+    echo "  Y = reuse these (skip Phase 6-9, go straight to Phase 10 sensor install)"
+    echo "  N = deploy fresh ones (will create NEW VMs alongside the existing - duplicates)"
+    read -rp "Reuse existing products? [Y/n]: " yn
+    yn_lc=$(echo "${yn:-y}" | tr '[:upper:]' '[:lower:]')
+    if [[ "$yn_lc" == "y" ]] || [[ "$yn_lc" == "yes" ]]; then
+      # Adopt the existing VM names so Phase 6/8/9 reuse-by-name checks
+      # find them on the first try and skip the deploy.
+      [[ -n "$EXISTING_VCTRL" ]] && DEFAULT_CLMS_NAME="$EXISTING_VCTRL"
+      [[ -n "$EXISTING_KVO" ]]   && DEFAULT_KVO_NAME="$EXISTING_KVO"
+      [[ -n "$EXISTING_VPB" ]]   && DEFAULT_VPB_NAME="$EXISTING_VPB"
+      ok "Reusing existing VM names: vCtrl=$DEFAULT_CLMS_NAME KVO=$DEFAULT_KVO_NAME vPB=$DEFAULT_VPB_NAME"
+    else
+      warn "Deploying fresh - you will end up with both old and new VMs in $RESOURCE_GROUP."
+      warn "Consider --resource-group <new-rg> if you want a clean slate."
+    fi
+  fi
+fi
+
 # =====================================================================
 # Phase 6: vController deployment (formerly CLMS)
 # =====================================================================
