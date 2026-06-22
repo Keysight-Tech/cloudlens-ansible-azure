@@ -49,6 +49,7 @@
       </a>
       <nav class="primary-nav" aria-label="Primary">
         <a href="#full-stack">Full Stack</a>
+        <a href="#test-fixture">Test Fixture</a>
         <a href="#prereq-deploys">Deploy vController / KVO / vPB</a>
         <a href="#start-here">Get Started</a>
         <a href="#why">Why</a>
@@ -231,6 +232,29 @@ terraform init &amp;&amp; terraform apply</code></pre>
             <a class="btn btn-primary" href="https://github.com/Keysight-Tech/cloudlens-ansible-azure/blob/main/docs/CloudLens_Stack_Deployment_Runbook.pdf" target="_blank" rel="noopener">Download Runbook</a>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- 1.15 TEST FIXTURE: 3 disposable workload VMs for SE demos / verification -->
+    <section id="test-fixture" class="full-stack-section">
+      <div class="container">
+        <h2>Verify it end-to-end on disposable VMs</h2>
+        <p class="lede">For SE demos or first-call verification: stand up 3 throwaway workload VMs (Ubuntu 22.04 + RHEL 9 + Windows Server 2022) tagged with a custom discovery tag, then run the stack with the matching tag flags. Proves sensors install on every supported OS in one pass.</p>
+
+        <div class="full-stack-cmd-wrap">
+          <pre><code id="test-fixture-cmd"># 1. Stand up the 3 test workload VMs (default tag: monitoring=enabled)
+curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/scripts/deploy-test-workload-vms.sh | bash
+
+# 2. Deploy the CloudLens stack with the matching tag flags
+curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/deploy/deploy-stack.sh | \
+  bash -s -- --discovery-tag-key monitoring --discovery-tag-value enabled
+
+# 3. Cleanup when done
+az group delete -n cloudlens-test-vms-rg --yes --no-wait</code></pre>
+          <button type="button" class="copy-btn" data-target="test-fixture-cmd" aria-label="Copy command">Copy</button>
+        </div>
+
+        <p class="full-stack-note">Phase 10 will print <code>Workload VMs tagged monitoring=enabled: 3</code>; Phase 11 installs sensors on all three and they register with vController. Total round trip: 25-30 minutes. Override the tag pair with <code>TESTVMS_TAG_KEY</code> / <code>TESTVMS_TAG_VALUE</code> env vars if you want to mirror a customer's existing convention.</p>
       </div>
     </section>
 
