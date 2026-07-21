@@ -21,6 +21,12 @@
   --ok: oklch(var(--ok-l) var(--ok-c) var(--ok-h));
   --ok-glow: oklch(var(--ok-l) var(--ok-c) var(--ok-h) / .35);
 
+  /* Layout width. The site capped content at 1180px, which left large empty
+     gutters on modern displays and made everything look clustered in the
+     middle. Wider shell, with prose blocks still capped for readability. */
+  --maxw: 1560px;
+  --header-h: 68px;
+
   --radius: 22px;
   --radius-sm: 14px;
   --radius-lg: 30px;
@@ -99,7 +105,7 @@ html[data-theme="dark"] a:hover { color: oklch(85% 0.08 235); }
 
 ::selection { background: var(--accent-glow); }
 
-.container { max-width: 1180px; margin: 0 auto; padding: 0 clamp(20px, 4vw, 32px); }
+.container { max-width: var(--maxw); margin: 0 auto; padding: 0 clamp(20px, 3.5vw, 56px); }
 
 .skip-link {
   position: absolute; top: -100px; left: 14px; padding: 10px 16px;
@@ -112,70 +118,82 @@ html[data-theme="dark"] a:hover { color: oklch(85% 0.08 235); }
 /* ============================================================
    KEYSIGHT BRAND BAR - bold red strip with white wordmark, pinned at top
    ============================================================ */
-.internal-banner {
-  position: relative; z-index: 60;
-  background: linear-gradient(180deg,
-    oklch(60% 0.22 25),
-    oklch(46% 0.23 25));
-  border-bottom: 2px solid oklch(36% 0.20 25);
-  box-shadow:
-    inset 0 -1px 0 oklch(0% 0 0 / .18),
-    inset 0 1px 0 oklch(100% 0 0 / .22),
-    0 2px 8px oklch(50% 0.22 25 / .25);
-  padding: 16px 0;
-  color: #fff;
+/* ---------- Partner strip: Keysight far left, Azure far right ----------
+   Deliberately a light bar. Both official marks are dark-on-white lockups
+   (grey KEYSIGHT wordmark, blue Azure wordmark), so a dark band would mean
+   recolouring them, which neither brand permits. White is how both companies
+   specify their logos are presented. */
+.brand-strip {
+  width: 100%;
+  background: #fff;
+  border-bottom: 1px solid oklch(0% 0 0 / .10);
+  box-shadow: 0 1px 3px oklch(0% 0 0 / .06);
+  position: relative; z-index: 61;
 }
-html[data-theme="dark"] .internal-banner {
-  background: linear-gradient(180deg,
-    oklch(54% 0.23 25),
-    oklch(40% 0.22 25));
-  border-bottom-color: oklch(30% 0.20 25);
+html[data-theme="dark"] .brand-strip {
+  background: oklch(96% 0.004 250);   /* stays light so the marks stay legal */
+  border-bottom-color: oklch(0% 0 0 / .22);
 }
-.internal-banner-inner {
-  display: flex; align-items: center; justify-content: center;
-  text-align: center;
+.brand-strip__inner {
+  max-width: var(--maxw, 1560px); margin: 0 auto;
+  padding: 10px clamp(20px, 3.5vw, 56px);
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
 }
-.internal-banner .ib-mark {
+.brand-strip__logo {
+  display: inline-flex; align-items: center; text-decoration: none;
+  opacity: .92; transition: opacity .2s ease, transform .2s ease;
+}
+.brand-strip__logo:hover { opacity: 1; transform: translateY(-1px); }
+.brand-strip__logo img { height: 38px; width: auto; display: block; }
+/* Azure lockup is very wide (3.46 aspect), so trim it hard for optical balance. */
+.brand-strip__logo--azure img { height: 26px; }
+
+.brand-strip__tag {
   font-family: var(--font);
-  font-size: 22px;
-  font-weight: 900;
-  letter-spacing: .32em;
+  font-size: 12px; font-weight: 700; letter-spacing: .22em;
   text-transform: uppercase;
-  color: #fff;
-  text-shadow:
-    0 1px 0 oklch(0% 0 0 / .35),
-    0 2px 4px oklch(0% 0 0 / .25);
+  color: oklch(52% 0.015 260);
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .brand-strip__inner { padding: 8px 16px; gap: 12px; }
+  .brand-strip__logo img { height: 30px; }
+  .brand-strip__logo--azure img { height: 21px; }
+  .brand-strip__tag { display: none; }   /* logos keep the edges, tag drops */
 }
 @media (max-width: 760px) {
-  .internal-banner { padding: 13px 0; }
-  .internal-banner .ib-mark { font-size: 17px; letter-spacing: .28em; }
-}
+  }
 @media (max-width: 480px) {
-  .internal-banner { padding: 11px 0; }
-  .internal-banner .ib-mark { font-size: 14px; letter-spacing: .22em; }
-}
+  }
 
 /* ============================================================
    SITE HEADER - floating glass island
    ============================================================ */
 .site-header {
-  position: sticky; top: 14px; z-index: 50;
-  margin: 14px auto 0; max-width: 1180px;
-  padding: 0 clamp(12px, 2vw, 20px);
+  position: sticky; top: 0; z-index: 50;
+  margin: 0; max-width: none; padding: 0;
+  background: color-mix(in oklab, var(--surface) 82%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(1.8);
+  backdrop-filter: blur(22px) saturate(1.8);
+  border-bottom: 1px solid color-mix(in oklab, var(--ink) 10%, transparent);
+  box-shadow: 0 1px 0 oklch(100% 0 0 / .5) inset, 0 8px 24px -20px oklch(0% 0 0 / .5);
+}
+/* Keysight signature: thin accent rule across the very top edge. */
+.site-header::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 3px;
+  background: linear-gradient(90deg, var(--accent-deep), var(--accent), var(--accent-bright) 55%, var(--accent));
 }
 .site-header .nav {
-  display: flex; align-items: center; gap: 18px;
-  padding: 10px 16px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, color-mix(in oklab, var(--surface) 92%, white), var(--surface));
-  -webkit-backdrop-filter: blur(20px) saturate(1.7);
-  backdrop-filter: blur(20px) saturate(1.7);
-  border: 1px solid var(--hair);
-  box-shadow:
-    inset 0 1px 0 oklch(100% 0 0 / .6),
-    0 12px 28px -14px oklch(0% 0 0 / .35),
-    0 1px 2px var(--neu-dark);
+  display: flex; align-items: center; gap: clamp(16px, 2vw, 40px);
+  max-width: var(--maxw); margin: 0 auto;
+  padding: 0 clamp(20px, 3.5vw, 56px);
+  min-height: var(--header-h);
+  border-radius: 0; border: 0; background: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  box-shadow: none;
 }
+.site-header .primary-nav { margin-left: auto; }
 .site-header .brand {
   display: inline-flex; align-items: center; gap: 10px; color: var(--ink);
   text-decoration: none; padding-right: 6px;
@@ -197,8 +215,9 @@ html[data-theme="dark"] .internal-banner {
 .brand-text strong { font-size: 14px; font-weight: 700; letter-spacing: -.01em; }
 .brand-sub { font-size: 10px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .08em; font-weight: 500; }
 
-.primary-nav { display: flex; gap: 4px; margin-left: auto; }
+.primary-nav { display: flex; gap: 2px; margin-left: auto; align-items: center; }
 .primary-nav a {
+  white-space: nowrap;          /* keep every label on one line */
   color: var(--ink-soft); font-size: 13px; font-weight: 600;
   padding: 7px 12px; border-radius: 999px;
   transition: background .25s var(--spring), color .2s ease;
@@ -1595,7 +1614,7 @@ html[data-theme="dark"] .pill.ok { color: oklch(80% 0.16 150); }
     inset 0 1px 0 oklch(100% 0 0 / .7),
     0 26px 56px -28px oklch(0% 0 0 / .42);
   overflow: hidden;
-  max-width: 1180px; margin-left: auto; margin-right: auto;
+  max-width: var(--maxw); margin-left: auto; margin-right: auto;
 }
 .site-footer::before {
   content: ""; position: absolute; inset: 1px 1px auto 1px; height: 26%; border-radius: 29px 29px 40% 40%; pointer-events: none;
@@ -1653,6 +1672,16 @@ button:focus-visible, a.btn:focus-visible, .icon-btn:focus-visible {
 /* ============================================================
    RESPONSIVE
    ============================================================ */
+/* Between the nav hiding at 960px and a comfortable wide layout, tighten the
+   nav so the links stay on one line instead of overflowing the bar. */
+@media (max-width: 1400px) {
+  .site-header .nav { gap: 14px; }
+  .primary-nav a { padding: 7px 9px; font-size: 12.5px; }
+}
+@media (max-width: 1180px) {
+  .primary-nav a { padding: 6px 7px; font-size: 12px; }
+}
+
 @media (max-width: 960px) {
   .hero-grid { grid-template-columns: 1fr; gap: 36px; }
   .cta-row { flex-direction: column; align-items: stretch; }
@@ -1670,8 +1699,8 @@ button:focus-visible, a.btn:focus-visible, .icon-btn:focus-visible {
   .prereq-cards { grid-template-columns: 1fr; }
 }
 @media (max-width: 560px) {
-  .site-header { top: 8px; margin-top: 8px; padding: 0 10px; }
-  .site-header .nav { padding: 8px 12px; gap: 8px; flex-wrap: wrap; }
+  .site-header { top: 0; margin-top: 0; padding: 0; }
+  .site-header .nav { padding: 0 16px; gap: 10px; min-height: 58px; }
   .brand-mark { width: 30px; height: 30px; }
   .brand-text strong { font-size: 13px; }
   .container { padding: 0 16px; }
