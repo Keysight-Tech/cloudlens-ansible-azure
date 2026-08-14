@@ -6,3 +6,11 @@ ansible_user: "{{ linux.ansible_user | default('azureuser') }}"
 ansible_ssh_pass: "{{ linux.ansible_password if (linux.ansible_password is defined) else omit }}"
 ansible_ssh_private_key_file: "{{ linux.ssh_key_file if (linux.ssh_key_file is defined and linux.ansible_password is not defined) else omit }}"
 ansible_python_interpreter: /usr/bin/python3
+
+# Restored per OS. Both playbooks reference ca_cert_dir when registry_type is
+# 'secure' (redhat.yaml:203, ubuntu.yaml:128), and it was dropped when these two
+# files were unified, leaving 'ca_cert_dir' is undefined on any secure-registry
+# deploy. The default insecure path hid it because the tasks are guarded by a
+# when: condition. Note vars/cloudlens.yaml defines redhat_ca_cert_dir under a
+# DIFFERENT name, so it never satisfied this reference.
+ca_cert_dir: "/usr/local/share/ca-certificates"

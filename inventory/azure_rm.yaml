@@ -2,7 +2,7 @@ plugin: azure.azcollection.azure_rm
 plain_host_names: yes
 include_extended_facts: yes
 exclude_host_filters:
-  - tags['cloudlens'] is not defined or tags['cloudlens'] != 'yes'
+  - tags['monitoring'] is not defined or tags['monitoring'] != 'enabled'
 keyed_groups:
   - prefix: os
     key: tags['os'] | default('untagged')
@@ -20,7 +20,7 @@ conditional_groups:
 hostvar_expressions:
   # Windows VMs → use public IP (WinRM directly, no jumpbox)
   # Linux VMs   → use private IP (jumpbox/Bastion required)
-  ansible_host: (public_ipv4_address | default([], true) | first) if (tags['os'] | default('') == 'windows' and (public_ipv4_address | default([], true) | length) > 0) else private_ipv4_addresses[0]
+  ansible_host: (public_ipv4_address | default([], true) | first) if (public_ipv4_address | default([], true) | length) > 0 else private_ipv4_addresses[0]
   azure_resource_group: resource_group
   azure_private_ip: private_ipv4_addresses[0]
   azure_public_ip: (public_ipv4_address | default([], true) | first) if (public_ipv4_address | default([], true) | length) > 0 else ''

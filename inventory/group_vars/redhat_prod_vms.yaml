@@ -6,3 +6,13 @@ ansible_user: "{{ linux.ansible_user | default('azureuser') }}"
 ansible_ssh_pass: "{{ linux.ansible_password if (linux.ansible_password is defined) else omit }}"
 ansible_ssh_private_key_file: "{{ linux.ssh_key_file if (linux.ssh_key_file is defined and linux.ansible_password is not defined) else omit }}"
 ansible_python_interpreter: /usr/bin/python3
+
+# Per-OS, and it must stay per-OS. redhat.yaml:203 and the two docker -v mounts
+# reference ca_cert_dir whenever registry_type is 'secure'. all.yaml does define
+# a fallback now, but it is /etc/ssl/certs, which is the DEBIAN location: on
+# RHEL the trust anchors live here, so inheriting the fallback would write the
+# CA to a directory update-ca-trust never reads and the secure registry would
+# fail to verify. Ubuntu carries its own value for the same reason.
+# Note vars/cloudlens.yaml defines redhat_ca_cert_dir under a DIFFERENT name,
+# so it has never satisfied this reference.
+ca_cert_dir: "/etc/pki/ca-trust/source/anchors"
