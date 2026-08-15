@@ -61,6 +61,7 @@
         <a href="#why">Why</a>
         <a href="#wizard">Wizard</a>
         <a href="#architecture">Architecture</a>
+        <a href="#tapping">Tapping on Azure</a>
         <a href="#scaling">Scaling</a>
         <a href="#faq">Common issues</a>
         <a href="#docs">Docs</a>
@@ -260,7 +261,7 @@ az group delete -n cloudlens-test-vms-rg --yes --no-wait</code></pre>
           <button type="button" class="copy-btn" data-target="test-fixture-cmd" aria-label="Copy command">Copy</button>
         </div>
 
-        <p class="full-stack-note">Phase 10 will print <code>Workload VMs tagged monitoring=enabled: 3</code>; Phase 11 installs sensors on all three and they register with vController. Total round trip: 25-30 minutes. Override the tag pair with <code>TESTVMS_TAG_KEY</code> / <code>TESTVMS_TAG_VALUE</code> env vars if you want to mirror a customer's existing convention.</p>
+        <p class="full-stack-note">Phase 10 will print <code>Workload VMs tagged monitoring=enabled: 3</code>; Phase 11 installs sensors on all three and they register with vController. Phases 12&ndash;15 then licence KVO, adopt the vController and the vPB into it, and wire the vPB traffic path and monitoring policy. Total round trip: 25-30 minutes. Override the tag pair with <code>TESTVMS_TAG_KEY</code> / <code>TESTVMS_TAG_VALUE</code> env vars if you want to mirror a customer's existing convention.</p>
       </div>
     </section>
 
@@ -563,6 +564,30 @@ done</code></pre>
           <object data="assets/architecture-diagram.svg" type="image/svg+xml" aria-label="CloudLens Ansible Azure architecture diagram"></object>
         </div>
         <p class="caption">Hover any block above to highlight the path. The dotted line shows sensor registration traffic back to vController.</p>
+      </div>
+    </section>
+
+    <!-- 4b. WHAT AZURE CAN AND CANNOT TAP -->
+    <section id="tapping" class="section">
+      <div class="container">
+        <header class="section-head">
+          <h2>How traffic actually reaches the vPB on Azure</h2>
+          <p>Azure and AWS are not the same here, and the difference decides what you can promise a customer. Read this before reusing an AWS deck.</p>
+        </header>
+        <div class="diagram-frame" style="padding:1.25rem">
+          <h3 style="margin-top:0">Gateway Load Balancer &mdash; the Azure-native path, generally available</h3>
+          <pre><code>internet &rarr; Standard LB &rarr; GWLB &rarr; vPB (VXLAN hairpin) &rarr; back to GWLB &rarr; backend
+                                  &rarr; mirrored copy &rarr; tool</code></pre>
+          <p>Documented in the vPB User Guide chapter 3 and in the Azure GWLB deployment guide. This is GA, not a preview, and it is the path to lead with.</p>
+          <p><strong>It is inline, not a mirror.</strong> On AWS the tap is out of band, so a failed vPB costs you visibility. Behind a GWLB the vPB sits in the service chain, so a failed vPB costs you the application. Alarm on vPB licence expiry in production: an expired licence stops the device forwarding and takes the data path with it.</p>
+
+          <h3>Sensor-based &mdash; what this site automates</h3>
+          <p>The sensor taps inside the guest and everything downstream is identical to AWS. The honest trade is software on each monitored VM. Say so rather than letting a customer assume otherwise.</p>
+
+          <h3>Azure vTAP &mdash; the out-of-band equivalent, not available yet</h3>
+          <p>Azure Virtual Network TAP is the true counterpart to AWS VPC Traffic Mirroring, and it is a gated Microsoft preview limited to EUAP regions. On a subscription that has not been onboarded the <code>virtualNetworkTaps</code> resource type is not exposed at all, so there is nothing to automate against. Do not scope work against it until it appears in the provider.</p>
+          <p class="caption">Full detail, with the commands used to verify each claim: <a href="https://github.com/Keysight-Tech/cloudlens-ansible-azure/blob/main/docs/AZURE_TAPPING_ARCHITECTURE.md">AZURE_TAPPING_ARCHITECTURE.md</a></p>
+        </div>
       </div>
     </section>
 
