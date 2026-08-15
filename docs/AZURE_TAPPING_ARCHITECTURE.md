@@ -1,8 +1,12 @@
 # Azure tapping: what is possible, and what is not
 
 Read this before promising a customer an "AWS-equivalent" Azure deployment.
-Azure has no drop-in equivalent of the AWS agentless path, and the difference is
-a Microsoft platform limitation, not a CloudLens one.
+
+Short version: **Azure's native answer is Gateway Load Balancer service
+chaining, and it is GA.** What Azure lacks is an out-of-band MIRROR equivalent
+to AWS VPC Traffic Mirroring; its vTAP is a gated preview. So the visibility
+story ports, but it changes shape from out-of-band to inline, and that changes
+the failure mode. Do not present the AWS deck unchanged.
 
 ## The AWS path, for comparison
 
@@ -13,9 +17,38 @@ cuts one mirror session per tagged workload with no software on the workload at
 all. That is what makes the AWS demo strong: Windows hosts are tapped with
 nothing installed on them.
 
-## Azure has two different mechanisms, and only one is usable today
+## Azure has THREE mechanisms. The Azure-native one is GWLB, and it is GA.
 
-### 1. Azure vTAP: the true agentless equivalent. NOT AVAILABLE.
+### 0. Azure Gateway Load Balancer service chaining: THE Azure-native answer
+
+    internet -> Standard LB -> GWLB -> vPB (VXLAN hairpin) -> back to GWLB -> backend
+                                    \-> mirrored copy -> tool
+
+Documented by Keysight in **vPB User Guide chapter 3, "Azure Gateway Load
+Balancer"** (CloudLens_vPB_UG_v3.16, 913-3000-01 Rev. ZG, pp. 42-47) and in
+`CloudLens_vPB_Azure_GWLB_Deployment_Guide.docx`. The UG names three components:
+CloudLens vPacketStack, the Azure GWLB, and a Virtual Machine Network Interface
+(VMNI). GWLB distributes traffic across the vPBs by 5-tuple hash.
+
+**This is generally available, not a preview**, and it is deployed and proven in
+the CloudLensGwLB-rg resource group: dual vPB Active-Active across zones, GWLB
+with VXLAN External VNI 900/port 10800 and Internal VNI 901/port 10801, a
+Standard LB chained to it, two NGINX backends, a tool VM and a vLM.
+
+**The critical difference from AWS, and say it to every customer: this is
+INLINE, not a mirror.** AWS traffic mirroring is out of band, so a dead vPB
+costs you visibility. On Azure GWLB the vPB sits in the service chain, so a
+dead vPB costs you **the application**. Verified live on 2026-08-14: both vPBs
+had a licence that expired 2026-08-05 23:59, their counters were frozen at
+1,677 packets, and HTTP through the Standard LB timed out completely. The
+architecture was intact; an expired licence took the customer path down.
+
+Operational consequence: **monitor vPB licence expiry as a production alarm on
+Azure**, and size the HA pair for the failure you actually have.
+
+## The other two mechanisms
+
+### 1. Azure vTAP: the out-of-band agentless equivalent. NOT AVAILABLE.
 
     workload -> Azure Virtual Network TAP -> vPB ingress -> vPB -> VXLAN -> tool
 
@@ -35,7 +68,7 @@ are Microsoft canary regions. Onboarding goes through VTAP-Support@microsoft.com
 **So do not scope work against vTAP until a subscription is onboarded.** The
 resource type has to appear in the provider before any of it can be automated.
 
-### 2. Sensor-based tapping: available now, and what this repo builds
+### 2. Sensor-based tapping: available now, and what this Ansible repo builds
 
     workload + CloudLens sensor -> vController -> collector/vHub -> vPB -> tool
 
