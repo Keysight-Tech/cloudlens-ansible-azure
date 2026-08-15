@@ -1609,10 +1609,36 @@ if [[ "$DEPLOYED_KVO" == "true" && -n "${KVO_PUBLIC_IP:-}" && "$KVO_PUBLIC_IP" !
     elif [[ -z "$VPB_ADOPT_SCRIPT" ]] || ! py_ready; then
       warn "scripts/vpb_kvo_adopt.py unavailable; skipping vPB adoption."
     else
-      python3 "$VPB_ADOPT_SCRIPT" --kvo "$KVO_PUBLIC_IP" --vpb "$VPB_PUBLIC_IP" \
-        --device-name "$VPB_DEVICE_NAME" --accept-eula --insecure \
-        && ok "vPB adopted as ${VPB_DEVICE_NAME}." \
-        || warn "vPB adoption did not complete; see above."
+      # --key and --kvo-internal-ip are REQUIRED by the script: without them it
+      # exits on an argparse error before doing anything. Adoption drives the
+      # vPB CLI over SSH, and KVO must be given the address the DEVICE can reach
+      # it on, which is the private IP, not the public one.
+      #
+      # The user differs from AWS. vPB UG v3.16 login matrix:
+      #   AWS Marketplace    port 9022, user admin
+      #   Azure Marketplace  port 9022, user keysight
+      # There is no universal vPB login; getting this wrong looks like the
+      # device being unreachable.
+      VPB_SSH_KEY="${CLOUDLENS_KEY_PEM:-$HOME/.ssh/${DEFAULT_VPB_NAME}.pem}"
+      VPB_SSH_USER="${CLOUDLENS_VPB_SSH_USER:-keysight}"
+      VPB_PRIVATE_IP="$(az vm list-ip-addresses -g "$RESOURCE_GROUP" -n "$DEFAULT_VPB_NAME" \
+                          --query 'virtualMachine.network.privateIpAddresses[0]' -o tsv 2>/dev/null)"
+      KVO_PRIVATE_IP="$(az vm list-ip-addresses -g "$RESOURCE_GROUP" -n "$DEFAULT_KVO_NAME" \
+                          --query 'virtualMachine.network.privateIpAddresses[0]' -o tsv 2>/dev/null)"
+      if [[ ! -f "$VPB_SSH_KEY" ]]; then
+        warn "No SSH key at ${VPB_SSH_KEY}, and adoption drives the vPB CLI over SSH."
+        note "Point CLOUDLENS_KEY_PEM at the key used for this deployment, then re-run."
+      elif [[ -z "$KVO_PRIVATE_IP" ]]; then
+        warn "Could not resolve the KVO private IP from Azure; skipping vPB adoption."
+        note "KVO must be registered on the address the vPB can reach, not its public IP."
+      else
+        python3 "$VPB_ADOPT_SCRIPT" --kvo "$KVO_PUBLIC_IP" --vpb "$VPB_PUBLIC_IP" \
+          --key "$VPB_SSH_KEY" --vpb-user "$VPB_SSH_USER" \
+          --kvo-internal-ip "$KVO_PRIVATE_IP" --vpb-mgmt-ip "$VPB_PRIVATE_IP" \
+          --device-name "$VPB_DEVICE_NAME" --accept-eula --insecure \
+          && ok "vPB adopted as ${VPB_DEVICE_NAME}." \
+          || warn "vPB adoption did not complete; see above."
+      fi
     fi
 
     # --- Phase 15: the traffic path ----------------------------------------
