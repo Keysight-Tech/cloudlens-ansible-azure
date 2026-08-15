@@ -35,9 +35,25 @@ set -euo pipefail
 # Without this, every `read` would try to consume bytes from the curl
 # pipe (which is the script itself), so the very first prompt fails.
 # ---------------------------------------------------------------------
-if [[ ! -t 0 ]] && [[ -e /dev/tty ]]; then
-  exec < /dev/tty
+if [[ ! -t 0 ]] && [[ -r /dev/tty ]]; then
+  # Non-fatal, and it has to be. In a headless environment (CI, cron, a
+  # container, a `bash <(curl ...)` with no controlling terminal) /dev/tty
+  # EXISTS but cannot be opened, and `exec < /dev/tty` then aborts the whole
+  # script on line 39 with "Device not configured" before a single check runs.
+  # Probe it on a spare fd with stderr silenced, and only reattach if that
+  # worked; otherwise fall through and let reads come from the original stdin,
+  # which is exactly right for a fully non-interactive run.
+  if { exec 3</dev/tty; } 2>/dev/null; then
+    exec <&3 3<&-
+  fi
 fi
+
+# Every prompt below is written `read ... || true` and falls back to the
+# default shown in its own text. That is what keeps `curl | bash`, CI and
+# cron runs working: with no terminal a read hits EOF, and without the
+# `|| true` set -e turns that into a bare "exit code: 1" in Phase 3 with
+# nothing to tell you a prompt was the cause.
+INTERACTIVE=false; [[ -t 0 ]] && INTERACTIVE=true
 
 # ---------------------------------------------------------------------
 # Config + globals
@@ -231,7 +247,18 @@ What it does (phases):
   9. vPB deployment (optional)
  10. Manual project key step (from vController UI)
  11. Sensor chain (optional, runs quickstart.sh)
- 12. Final summary written to cloudlens-deploy-summary.txt
+ 12. KVO product licensing (an unlicensed KVO refuses every write)
+ 13. Adopt the vController into KVO + create its Cloud Config
+ 14. Adopt the vPB into KVO
+ 15. vPB traffic path + monitoring policy
+ 16. Final summary written to cloudlens-deploy-summary.txt
+
+Phases 12-15 need KVO (--with-kvo); 14-15 also need the vPB (--with-vpb).
+They are cloud-agnostic and share their scripts with the AWS repo verbatim.
+
+Azure agentless tapping: read docs/AZURE_TAPPING_ARCHITECTURE.md FIRST. Azure
+has no generally-available equivalent of AWS VPC Traffic Mirroring, so the
+agentless demo does NOT carry over without a vTAP-onboarded subscription.
 HLP
 }
 
@@ -243,6 +270,7 @@ while [[ $# -gt 0 ]]; do
     --no-kvo) DEPLOY_KVO=false; shift ;;
     --with-kvo) DEPLOY_KVO=true; shift ;;
     --no-vpb) DEPLOY_VPB=false; shift ;;
+    --with-vpb) DEPLOY_VPB=true; shift ;;
     --no-sensors) CHAIN_SENSORS=false; shift ;;
 
     # Rollback control
@@ -402,7 +430,7 @@ elif [[ "$KERNEL" == MINGW* ]] || [[ "$KERNEL" == MSYS* ]] || [[ "$KERNEL" == CY
   echo "    2. WSL                  (Windows Subsystem for Linux: 'wsl --install')"
   echo "    3. Linux jumpbox VM     (small Azure VM you SSH into)"
   echo
-  read -rp "Continue anyway in this Windows shell? [y/N]: " yn
+  read -rp "Continue anyway in this Windows shell? [y/N]: " yn || true
   yn_lc=$(echo "${yn:-n}" | tr '[:upper:]' '[:lower:]')
   if [[ "$yn_lc" != "y" ]] && [[ "$yn_lc" != "yes" ]]; then
     fail "Aborted. Open Azure Cloud Shell (https://shell.azure.com) and rerun the curl line there for the smoothest experience."
@@ -495,7 +523,7 @@ if ! command -v az >/dev/null 2>&1; then
     warn "az CLI not installed (dry-run continues)"
   else
     warn "Azure CLI not installed."
-    read -rp "Install it now? Pulls the official package for your OS. [Y/n]: " yn
+    read -rp "Install it now? Pulls the official package for your OS. [Y/n]: " yn || true
     yn_lc=$(to_lower "${yn:-y}")
     if [[ "$yn_lc" == "n" ]] || [[ "$yn_lc" == "no" ]]; then
       fail "Azure CLI required. Install it from https://learn.microsoft.com/cli/azure/install-azure-cli then re-run."
@@ -526,7 +554,7 @@ if [[ "$DRY_RUN" == "false" ]]; then
   # API calls in later phases then dead-end on AADSTS70043. Catch it now.
   if ! az account get-access-token --query expiresOn -o tsv >/dev/null 2>&1; then
     warn "Azure refresh token expired (conditional access policy)."
-    read -rp "Run 'az login --use-device-code' to refresh now? [Y/n]: " yn
+    read -rp "Run 'az login --use-device-code' to refresh now? [Y/n]: " yn || true
     yn_lc=$(to_lower "${yn:-y}")
     if [[ "$yn_lc" == "n" ]] || [[ "$yn_lc" == "no" ]]; then
       fail "Cannot proceed without a fresh Azure token. Run 'az login --use-device-code' and re-run this script."
@@ -585,7 +613,7 @@ if [[ -n "$ARG_RG" ]]; then
   RESOURCE_GROUP="$ARG_RG"
   ok "Resource group: ${RESOURCE_GROUP} (from --resource-group)"
 else
-  read -rp "Resource group name [${DEFAULT_RG}]: " input_rg; echo
+  read -rp "Resource group name [${DEFAULT_RG}]: " input_rg || true; echo
   RESOURCE_GROUP="${input_rg:-$DEFAULT_RG}"
   ok "Resource group: ${RESOURCE_GROUP}"
 fi
@@ -598,7 +626,7 @@ if [[ -n "$ARG_LOCATION" ]]; then
   LOCATION="$ARG_LOCATION"
   ok "Region: ${LOCATION} (from --location)"
 else
-  read -rp "Azure region [${DEFAULT_LOCATION}]: " input_loc; echo
+  read -rp "Azure region [${DEFAULT_LOCATION}]: " input_loc || true; echo
   LOCATION="${input_loc:-$DEFAULT_LOCATION}"
   ok "Region: ${LOCATION}"
 fi
@@ -639,7 +667,7 @@ just press Enter and the script will generate one (saved to the deploy
 summary file).
 
 PWHELP
-read -rsp "OS-level SSH password (Enter to auto-generate): " input_pw; echo
+read -rsp "OS-level SSH password (Enter to auto-generate): " input_pw || true; echo
 if [[ -z "$input_pw" ]]; then
   ADMIN_PASSWORD=$(gen_password)
   ok "Generated 16-char password (saved in ${SUMMARY_FILE})"
@@ -650,7 +678,7 @@ fi
 
 # Deploy KVO?
 if [[ -z "$DEPLOY_KVO" ]]; then
-  read -rp "Deploy KVO (Keysight Vision Orchestrator) alongside vController? [y/N]: " yn
+  read -rp "Deploy KVO (Keysight Vision Orchestrator) alongside vController? [y/N]: " yn || true
   yn_lc=$(to_lower "$yn")
   if [[ "$yn_lc" == "y" ]] || [[ "$yn_lc" == "yes" ]]; then
     DEPLOY_KVO=true
@@ -662,7 +690,7 @@ ok "Deploy KVO: ${DEPLOY_KVO}"
 
 # Deploy vPB?
 if [[ -z "$DEPLOY_VPB" ]]; then
-  read -rp "Deploy vPB alongside vController? [y/N]: " yn
+  read -rp "Deploy vPB alongside vController? [y/N]: " yn || true
   yn_lc=$(to_lower "$yn")
   if [[ "$yn_lc" == "y" ]] || [[ "$yn_lc" == "yes" ]]; then
     DEPLOY_VPB=true
@@ -688,17 +716,17 @@ if ! counts_already_set; then
   echo
   echo "Instance counts: default is 1 of each product (simple demo / single-region)."
   echo "For HA, multi-region, or scale-out, you can deploy multiple of each."
-  read -rp "Deploy multiple instances of any product? [y/N]: " yn
+  read -rp "Deploy multiple instances of any product? [y/N]: " yn || true
   yn_lc=$(to_lower "$yn")
   if [[ "$yn_lc" == "y" ]] || [[ "$yn_lc" == "yes" ]]; then
-    read -rp "  vController count [1-3, default 1]: " n; CLMS_COUNT="${n:-1}"
+    read -rp "  vController count [1-3, default 1]: " n; CLMS_COUNT="${n:-1}" || true
     if [[ "$DEPLOY_KVO" == "true" ]]; then
-      read -rp "  KVO count          [1-2, default 1]: " n; KVO_COUNT="${n:-1}"
+      read -rp "  KVO count          [1-2, default 1]: " n; KVO_COUNT="${n:-1}" || true
     fi
     if [[ "$DEPLOY_VPB" == "true" ]]; then
-      read -rp "  vPB count          [1-5, default 1]: " n; VPB_COUNT="${n:-1}"
-      read -rp "  vPB ingress NICs   [1-3, default 1]: " n; VPB_INGRESS_NICS="${n:-1}"
-      read -rp "  vPB egress NICs    [1-3, default 1]: " n; VPB_EGRESS_NICS="${n:-1}"
+      read -rp "  vPB count          [1-5, default 1]: " n; VPB_COUNT="${n:-1}" || true
+      read -rp "  vPB ingress NICs   [1-3, default 1]: " n; VPB_INGRESS_NICS="${n:-1}" || true
+      read -rp "  vPB egress NICs    [1-3, default 1]: " n; VPB_EGRESS_NICS="${n:-1}" || true
     fi
     # Re-validate against bounds now that values may have changed
     for v in "CLMS_COUNT:1:3" "KVO_COUNT:1:2" "VPB_COUNT:1:5" "VPB_INGRESS_NICS:1:3" "VPB_EGRESS_NICS:1:3"; do
@@ -732,7 +760,7 @@ if ! names_already_set; then
   echo "appended when count > 1). You can override the base name per"
   echo "product to match your existing naming convention."
   echo "  Valid: 3-42 lowercase letters, digits, hyphens. No spaces or uppercase."
-  read -rp "Customize VM names? [y/N]: " yn
+  read -rp "Customize VM names? [y/N]: " yn || true
   yn_lc=$(to_lower "$yn")
   if [[ "$yn_lc" == "y" ]] || [[ "$yn_lc" == "yes" ]]; then
     # prompt_name PROMPT_LABEL DEFAULT_VALUE
@@ -742,7 +770,7 @@ if ! names_already_set; then
     prompt_name() {
       local label="$1" default="$2" raw normalized
       while :; do
-        read -rp "$label" raw
+        read -rp "$label" raw || true
         raw="${raw:-$default}"
         # Auto-lowercase (so "MarketplaceNew" -> "marketplacenew", etc)
         normalized="$(echo "$raw" | tr '[:upper:]' '[:lower:]')"
@@ -797,7 +825,7 @@ prompt_size() {
       printf "  %d) %s\n" "$((idx+1))" "${options[$idx]}"
     done
     echo "  Or type a custom SKU like Standard_D32s_v3."
-    read -rp "Pick a number, or paste an SKU, or Enter to keep current: " raw
+    read -rp "Pick a number, or paste an SKU, or Enter to keep current: " raw || true
     raw="${raw// /}"  # strip spaces
 
     if [[ -z "$raw" ]]; then
@@ -827,7 +855,7 @@ if ! sizes_already_set; then
   echo
   echo "VM sizes: default is Standard_D4s_v5 for vController and KVO,"
   echo "Standard_D8s_v3 for vPB (minimum size that supports 3+ NICs)."
-  read -rp "Customize VM sizes? [y/N]: " yn
+  read -rp "Customize VM sizes? [y/N]: " yn || true
   yn_lc=$(to_lower "$yn")
   if [[ "$yn_lc" == "y" ]] || [[ "$yn_lc" == "yes" ]]; then
     CLMS_VM_SIZE=$(prompt_size "vController VM size" "$CLMS_VM_SIZE" \
@@ -888,7 +916,7 @@ fi
 
 # Chain to sensor deployment?
 if [[ -z "$CHAIN_SENSORS" ]]; then
-  read -rp "Chain to sensor deployment after stack is up? [y/N]: " yn
+  read -rp "Chain to sensor deployment after stack is up? [y/N]: " yn || true
   yn_lc=$(to_lower "$yn")
   if [[ "$yn_lc" == "y" ]] || [[ "$yn_lc" == "yes" ]]; then
     CHAIN_SENSORS=true
@@ -916,7 +944,7 @@ if [[ "$CHAIN_SENSORS" == "true" ]] && ! discovery_tag_already_set; then
   echo "CloudLens sensor installed? Default is cloudlens=yes. If your team already"
   echo "uses a different tagging convention (e.g. monitoring=enabled), enter it"
   echo "here as key=value. Otherwise press Enter."
-  read -rp "Discovery tag [cloudlens=yes]: " tag_input
+  read -rp "Discovery tag [cloudlens=yes]: " tag_input || true
   if [[ -n "$tag_input" ]]; then
     if [[ "$tag_input" =~ ^([A-Za-z][A-Za-z0-9_-]*)=([A-Za-z0-9._-]+)$ ]]; then
       DISCOVERY_TAG_KEY="${BASH_REMATCH[1]}"
@@ -1061,7 +1089,7 @@ if [[ "$DRY_RUN" != "true" ]]; then
     echo "                  vController + KVO + vPB in the same RG (rare;"
     echo "                  usually for HA testing or A/B comparisons)."
     echo
-    read -rp "Reuse existing products? [Y/n]: " yn
+    read -rp "Reuse existing products? [Y/n]: " yn || true
     yn_lc=$(echo "${yn:-y}" | tr '[:upper:]' '[:lower:]')
     if [[ "$yn_lc" == "y" ]] || [[ "$yn_lc" == "yes" ]]; then
       # Adopt the existing VM names so Phase 6/8/9 reuse-by-name checks
@@ -1310,7 +1338,7 @@ fi
 
 PROJECT_KEY=""
 if [[ "$CHAIN_SENSORS" == "true" ]]; then
-  read -rp "Paste project key (or press Enter to skip sensor deployment): " PROJECT_KEY
+  read -rp "Paste project key (or press Enter to skip sensor deployment): " PROJECT_KEY || true
   if [[ -z "$PROJECT_KEY" ]]; then
     warn "No project key supplied. Skipping sensor chain."
     CHAIN_SENSORS=false
@@ -1499,9 +1527,122 @@ else
 fi
 
 # =====================================================================
-# Phase 12: Final summary
+# Phases 12-15: the KVO chain.
 # =====================================================================
-step "Phase 12: Final summary"
+# These four steps are CLOUD-AGNOSTIC. They talk to KVO's API, which does not
+# care whether the device sits in AWS or Azure, so the scripts are kept
+# byte-identical to the AWS repo's copies on purpose. Do not fork them: the vPB
+# egress fix (REMOTE tool + an IP on the egress port) lives in vpb_wire_path.py
+# and a divergent Azure copy would silently lose it.
+#
+# What does NOT port is the agentless mirror phase. AWS VPC Traffic Mirroring is
+# generally available; Azure's equivalent (Virtual Network TAP) is a gated
+# Microsoft preview and the virtualNetworkTaps resource type is not even exposed
+# on a non-onboarded subscription. See docs/AZURE_TAPPING_ARCHITECTURE.md before
+# promising a customer an AWS-equivalent agentless deployment on Azure.
+find_script() {
+  local rel="$1" d
+  # BASH_SOURCE, not SCRIPT_DIR: this script is routinely run via
+  # `bash <(curl ...)`, where there is no script directory at all, so every
+  # candidate has to be tried and missing ones simply skipped.
+  local here=""
+  [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]] && here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  for d in "${here:+$here/..}" "${REPO_DIR:-}" "$PWD" "$HOME/cloudlens-ansible-azure"; do
+    [[ -n "$d" && -r "$d/$rel" ]] && { printf '%s' "$d/$rel"; return 0; }
+  done
+  return 1
+}
+
+py_ready() {
+  command -v python3 >/dev/null 2>&1 || return 1
+  python3 -c 'import requests' >/dev/null 2>&1
+}
+
+if [[ "$DEPLOYED_KVO" == "true" && -n "${KVO_PUBLIC_IP:-}" && "$KVO_PUBLIC_IP" != "unknown" ]]; then
+
+  # --- Phase 12: licensing. Everything else in KVO is gated behind this. -----
+  # An unlicensed KVO refuses EVERY write mutation with "Not Authorised!",
+  # including createChangeRequest, so a missing licence looks like a dozen
+  # unrelated failures downstream rather than one clear cause.
+  step "Phase 12: KVO product licensing"
+  LICENSE_SCRIPT="$(find_script scripts/kvo_license.py || true)"
+  if [[ "$DRY_RUN" == "true" ]]; then
+    dryrun_say "would activate licence codes on https://${KVO_PUBLIC_IP}"
+  elif [[ -z "$LICENSE_SCRIPT" ]] || ! py_ready; then
+    warn "scripts/kvo_license.py or python3+requests unavailable; skipping licensing."
+    note "Without a licence KVO refuses every write. Activate in the UI:"
+    note "  https://${KVO_PUBLIC_IP}  >  Settings > Product Licensing"
+  elif [[ -z "${CLOUDLENS_LICENSE_CODES:-}" ]]; then
+    note "No CLOUDLENS_LICENSE_CODES set, so nothing to activate automatically."
+    note "Activate in the UI, or re-run with:"
+    note "  CLOUDLENS_LICENSE_CODES=XXXX-XXXX-XXXX-XXXX,YYYY-... $0 --resume"
+  else
+    python3 "$LICENSE_SCRIPT" --kvo "$KVO_PUBLIC_IP" \
+      --codes "$CLOUDLENS_LICENSE_CODES" --accept-eula --insecure \
+      && ok "KVO licensed." || warn "Licensing did not complete; see above."
+  fi
+
+  # --- Phase 13: adopt the vController + create its Cloud Config ------------
+  step "Phase 13: Adopt the vController into KVO"
+  ADOPT_SCRIPT="$(find_script scripts/kvo_adopt_clms.py || true)"
+  KVO_CLM_NAME="${CLOUDLENS_CLM_NAME:-cloudlens-vcontroller}"
+  KVO_CLOUD_CONFIG="${CLOUDLENS_CLOUD_CONFIG:-cloudlens-azure}"
+  if [[ "$DRY_RUN" == "true" ]]; then
+    dryrun_say "would adopt vController ${CLMS_PUBLIC_IP} into KVO as ${KVO_CLM_NAME}"
+  elif [[ -z "$ADOPT_SCRIPT" ]] || ! py_ready; then
+    warn "scripts/kvo_adopt_clms.py unavailable; skipping adoption."
+  else
+    python3 "$ADOPT_SCRIPT" --kvo "$KVO_PUBLIC_IP" --clms "$CLMS_PUBLIC_IP" \
+      --clms-admin-pass "$ADMIN_PASSWORD" --name "$KVO_CLM_NAME" \
+      --cloud-config "$KVO_CLOUD_CONFIG" --accept-eula --insecure \
+      && ok "vController adopted as ${KVO_CLM_NAME}." \
+      || warn "vController adoption did not complete; see above."
+  fi
+
+  # --- Phase 14: adopt the vPB ---------------------------------------------
+  if [[ "$DEPLOYED_VPB" == "true" && -n "${VPB_PUBLIC_IP:-}" && "$VPB_PUBLIC_IP" != "unknown" ]]; then
+    step "Phase 14: Adopt the vPB into KVO"
+    VPB_ADOPT_SCRIPT="$(find_script scripts/vpb_kvo_adopt.py || true)"
+    VPB_DEVICE_NAME="${CLOUDLENS_VPB_DEVICE_NAME:-cloudlens-vpb}"
+    if [[ "$DRY_RUN" == "true" ]]; then
+      dryrun_say "would adopt vPB ${VPB_PUBLIC_IP} into KVO as ${VPB_DEVICE_NAME}"
+    elif [[ -z "$VPB_ADOPT_SCRIPT" ]] || ! py_ready; then
+      warn "scripts/vpb_kvo_adopt.py unavailable; skipping vPB adoption."
+    else
+      python3 "$VPB_ADOPT_SCRIPT" --kvo "$KVO_PUBLIC_IP" --vpb "$VPB_PUBLIC_IP" \
+        --device-name "$VPB_DEVICE_NAME" --accept-eula --insecure \
+        && ok "vPB adopted as ${VPB_DEVICE_NAME}." \
+        || warn "vPB adoption did not complete; see above."
+    fi
+
+    # --- Phase 15: the traffic path ----------------------------------------
+    # HONEST WARNING, do not soften it: this cannot complete on a fresh vPB.
+    # The device config has no ports until eth1/eth2 are up as DPDK data ports
+    # ON the vPB, and that bring-up is not automated anywhere in this repo.
+    step "Phase 15: vPB traffic path + monitoring policy"
+    WIRE_SCRIPT="$(find_script scripts/vpb_wire_path.py || true)"
+    if [[ "$DRY_RUN" == "true" ]]; then
+      dryrun_say "would wire C2DL -> vPB ingress -> vPB -> egress -> tool"
+    elif [[ -z "$WIRE_SCRIPT" ]] || ! py_ready; then
+      warn "scripts/vpb_wire_path.py unavailable; skipping the traffic path."
+    else
+      note "This needs eth1/eth2 up as DPDK data ports on the vPB itself."
+      note "On a fresh vPB the port bind has nothing to bind and will say so."
+      note "Run it directly once the data ports are up:"
+      note "  python3 scripts/vpb_wire_path.py --kvo ${KVO_PUBLIC_IP} \\"
+      note "    --device ${VPB_DEVICE_NAME} --collection ${KVO_CLOUD_CONFIG} \\"
+      note "    --cloud-config ${KVO_CLOUD_CONFIG} --ingress-ip <vpb-eth1-ip> \\"
+      note "    --egress-ip <vpb-eth2-ip> --capture-ip <tool-ip> --insecure"
+      note "The egress arguments are NOT optional: an egress port with no IP"
+      note "forwards nothing, and the counters read Inspected N / Passed 0."
+    fi
+  fi
+fi
+
+# =====================================================================
+# Phase 16: Final summary
+# =====================================================================
+step "Phase 16: Final summary"
 
 write_summary() {
   cat <<SUMMARY

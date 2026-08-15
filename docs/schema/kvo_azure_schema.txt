@@ -1,0 +1,75 @@
+### CloudConfigType
+  ENUM VDS
+  ENUM K8s
+  ENUM NSX
+  ENUM CustomCloudConfig
+  ENUM Aws
+  ENUM Azure
+  ENUM OpenStack
+
+### _AzurePresenceInput
+  cloudLensManagerId           String!
+  description                  String
+  clmsProjectId                String
+  clmsProjectApiKey            String
+  authenticationMethod         String!
+  clientId                     String
+  tenantId                     String
+  clientSecret                 String
+  subscriptionId               String!
+  location                     String!
+  virtualNetworkName           String!
+  virtualNetworkResourceGroup  String!
+
+### _AzureConfigurationInput
+  resourceGroup                String!
+  imageId                      String!
+  sshPublicKey                 String!
+  sshPublicKeyName             String!
+  virtualNetworkName           String!
+  virtualNetworkResourceGroup  String!
+  managementInterface          _AzureInterfaceInput!
+  egressInterface              _AzureInterfaceInput!
+  ingressInterfaces            !
+  cloudlensIp                  String!
+  tags                         !
+  availabilityZones            !
+
+### _AzureInterfaceInput
+  subnetName                   String!
+  securityGroupName            String!
+  securityGroupResourceGroup   String!
+
+### _AzureAvailabilityZoneInput
+  zone                         String!
+  instanceSize                 String!
+  minSize                      Int!
+  maxSize                      Int!
+
+### _CloudConfigInput
+  cloudConfigType              CloudConfigType!
+  cloudPresence                _NameReferenceInput!
+  deviceLinks                  _NameReferenceInput
+  vTAPConfiguration            _VmwareDatacenterInput!
+  tunnelOrigination            _TunnelOriginationInput
+  nsxConfiguration             _NsxConfigurationInput
+  awsConfiguration             _AwsConfigurationInput
+  azureConfiguration           _AzureConfigurationInput
+
+### _CloudCollectionInput
+  cloudConfig                  _NameReferenceInput!
+  tapType                      TapType!
+  resourceSelector             _ResourceSelectorInput!
+  interfaceSelector            _InterfaceSelectorInput!
+  metadataSelector             String!
+  additionalInfo               String
+
+### CloudPresenceImplementation
+  ENUM AwsPresence
+  ENUM AzurePresence
+  ENUM OpenStackPresence
+  ENUM KubernetesCluster
+  ENUM CustomCloud
+  ENUM VCenter
+  ENUM Nsx
+

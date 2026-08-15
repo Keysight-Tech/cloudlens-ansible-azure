@@ -1,0 +1,97 @@
+# Azure tapping: what is possible, and what is not
+
+Read this before promising a customer an "AWS-equivalent" Azure deployment.
+Azure has no drop-in equivalent of the AWS agentless path, and the difference is
+a Microsoft platform limitation, not a CloudLens one.
+
+## The AWS path, for comparison
+
+    workload -> AWS VPC Traffic Mirroring session -> collector SVM -> L2GRE -> vPB -> tool
+
+AWS exposes traffic mirroring as a first-class, generally-available API. KVO
+cuts one mirror session per tagged workload with no software on the workload at
+all. That is what makes the AWS demo strong: Windows hosts are tapped with
+nothing installed on them.
+
+## Azure has two different mechanisms, and only one is usable today
+
+### 1. Azure vTAP: the true agentless equivalent. NOT AVAILABLE.
+
+    workload -> Azure Virtual Network TAP -> vPB ingress -> vPB -> VXLAN -> tool
+
+Note there is **no collector SVM in this path**: Azure vTAP mirrors straight to
+the vPB's ingress interface. Keysight documents exactly this topology in
+`Azure_vTAP_vPB_Suricata_Demo_Guide.docx` (vTAP -> vPB -> VXLAN -> Suricata).
+
+**It is a Microsoft preview and it is gated.** Verified on the CloudLensPublic
+subscription:
+
+    az provider show -n Microsoft.Network --query "resourceTypes[].resourceType" | grep -i tap
+    -> nothing. The virtualNetworkTaps resource type is not exposed at all.
+
+Public-preview testing regions are `East US 2 EUAP` and `Central US EUAP`, which
+are Microsoft canary regions. Onboarding goes through VTAP-Support@microsoft.com.
+
+**So do not scope work against vTAP until a subscription is onboarded.** The
+resource type has to appear in the provider before any of it can be automated.
+
+### 2. Sensor-based tapping: available now, and what this repo builds
+
+    workload + CloudLens sensor -> vController -> collector/vHub -> vPB -> tool
+
+The sensor does the tapping in the guest. Everything downstream of the sensor is
+identical to AWS, because KVO's device-side objects are cloud-agnostic.
+
+**The honest trade:** it needs software on each monitored VM. Say so plainly to a
+customer rather than letting them assume the AWS agentless story carries over.
+
+## What this means for the automation
+
+KVO's schema DOES have `AzurePresence` and `AzureConfiguration`, verified live:
+
+    CloudConfigType:             VDS, K8s, NSX, CustomCloudConfig, Aws, Azure, OpenStack
+    CloudPresenceImplementation: AwsPresence, AzurePresence, OpenStackPresence, ...
+
+`_AzurePresenceInput` takes a service principal (`clientId`, `tenantId`,
+`clientSecret`), `subscriptionId`, `location`, and the vnet by name plus its
+resource group. `_AzureConfigurationInput` mirrors the AWS one: management,
+ingress and egress interfaces given as subnet + NSG names, a `cloudlensIp` the
+collectors register to, and availability zones carrying instance size and
+min/max. The full dump is in `docs/schema/kvo_azure_schema.txt`.
+
+So a KVO Azure Cloud Config CAN be built and a collector CAN be deployed. What
+it cannot do on a non-onboarded subscription is source traffic agentlessly,
+because there is no vTAP to feed it.
+
+### Phases that port unchanged (KVO API only, no cloud specifics)
+
+| Phase | Script | Ports as-is |
+|---|---|---|
+| KVO licensing | `scripts/kvo_license.py` | yes |
+| Adopt vController + Cloud Config | `scripts/kvo_adopt_clms.py` | yes |
+| Adopt the vPB | `scripts/vpb_kvo_adopt.py` | yes |
+| vPB traffic path + policy | `scripts/vpb_wire_path.py` | yes |
+
+These four are byte-identical to the AWS repo's copies and are kept in sync
+deliberately. `vpb_wire_path.py` carries the egress fix: the egress tool must be
+**REMOTE / reachableFrom DEVICE_CONFIG** with an IP on the egress port, or the
+vPB inspects traffic and forwards none of it.
+
+### Phase that does NOT port
+
+`kvo_aws_mirror.py` is AWS-specific end to end: `AwsPresence`, VPC traffic mirror
+targets/filters/sessions, and the AWS-side verification. Its Azure counterpart
+depends on which mechanism above is available, so it is deliberately not
+written yet rather than written against an API nobody can call.
+
+## The one number that settles any deployment
+
+Whatever the mechanism, the proof is the same: packets arriving at the tool.
+
+    scripts/prove_traffic_aws.sh --help
+
+On Azure the equivalent check is a tcpdump on the tool VM for the encapsulation
+in use (VXLAN UDP/4789 for the vTAP demo topology, L2GRE proto 47 for the
+sensor/collector topology). **Confirm which encapsulation your path uses before
+setting the filter**: an SE playbook that said VXLAN on a GRE path captured
+nothing and the demo looked broken while the tap worked perfectly.
