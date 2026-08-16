@@ -1613,8 +1613,16 @@ if [[ "$DEPLOYED_KVO" == "true" && -n "${KVO_PUBLIC_IP:-}" && "$KVO_PUBLIC_IP" !
     note "Activate in the UI, or re-run with:"
     note "  CLOUDLENS_LICENSE_CODES=XXXX-XXXX-XXXX-XXXX,YYYY-... $0 --resume"
   else
+    # SPLIT the codes. kvo_license.py takes them space-separated and treats a
+    # COMMA as the code/quantity separator, so passing "A,B,C" as one argument
+    # made it parse B as the quantity for A:
+    #   ValueError: invalid literal for int() with base 10: '143B-...,BA99-...'
+    # The guidance printed above tells operators to use a comma-separated list,
+    # so accept that and split it here, the way the AWS repo's array does.
+    LICENSE_CODE_ARGS=()
+    IFS=', ' read -r -a LICENSE_CODE_ARGS <<< "$CLOUDLENS_LICENSE_CODES"
     python3 "$LICENSE_SCRIPT" --kvo "$KVO_PUBLIC_IP" \
-      --codes "$CLOUDLENS_LICENSE_CODES" --accept-eula --insecure \
+      --codes "${LICENSE_CODE_ARGS[@]}" --accept-eula --insecure \
       && ok "KVO licensed." || warn "Licensing did not complete; see above."
   fi
 
