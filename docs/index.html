@@ -136,6 +136,10 @@
     <!-- 1.25 PREREQUISITE DEPLOYS: vController + KVO + vPB MARKETPLACE -->
     <section id="prereq-deploys" class="prereq-section">
       <div class="container">
+        <details class="sec-collapse">
+          <summary><span class="sc-t">Don't have vController, KVO, or vPB yet?</span></summary>
+          <div class="sc-body">
+
         <h2>Don't have vController, KVO, or vPB yet?</h2>
         <p class="lede">Deploy them from Azure Marketplace in one click before running sensor deployments.</p>
 
@@ -205,6 +209,9 @@
 cp terraform.tfvars.example terraform.tfvars
 terraform init &amp;&amp; terraform apply</code></pre>
         </details>
+      
+          </div>
+        </details>
       </div>
     </section>
 
@@ -245,6 +252,10 @@ terraform init &amp;&amp; terraform apply</code></pre>
     <!-- 1.15 TEST FIXTURE: 3 disposable workload VMs for SE demos / verification -->
     <section id="test-fixture" class="full-stack-section">
       <div class="container">
+        <details class="sec-collapse">
+          <summary><span class="sc-t">Verify it end-to-end on disposable VMs</span></summary>
+          <div class="sc-body">
+
         <h2>Verify it end-to-end on disposable VMs</h2>
         <p class="lede">For SE demos or first-call verification: stand up 3 throwaway workload VMs (Ubuntu 22.04 + RHEL 9 + Windows Server 2022) tagged with a custom discovery tag, then run the stack with the matching tag flags. Proves sensors install on every supported OS in one pass.</p>
 
@@ -262,12 +273,19 @@ az group delete -n cloudlens-test-vms-rg --yes --no-wait</code></pre>
         </div>
 
         <p class="full-stack-note">Phase 10 will print <code>Workload VMs tagged monitoring=enabled: 3</code>; Phase 11 installs sensors on all three and they register with vController. Phases 12&ndash;15 then licence KVO, adopt the vController and the vPB into it, and wire the vPB traffic path and monitoring policy. Total round trip: 25-30 minutes. Override the tag pair with <code>TESTVMS_TAG_KEY</code> / <code>TESTVMS_TAG_VALUE</code> env vars if you want to mirror a customer's existing convention.</p>
+      
+          </div>
+        </details>
       </div>
     </section>
 
     <!-- 1.2 DOCKER PATH (Tier 3 deep-link target) -->
     <section id="docker" class="full-stack-section">
       <div class="container">
+        <details class="sec-collapse">
+          <summary><span class="sc-t">Run from Docker</span></summary>
+          <div class="sc-body">
+
         <h2>Run from Docker</h2>
         <p class="lede">Pinned image with Ansible, Azure SDKs, and pywinrm. Works from your laptop, a CI runner, or any container host.</p>
 
@@ -301,6 +319,9 @@ docker build -t cloudlens-ansible-azure .</code></pre>
             <p>Drop the same <code>docker run</code> into GitHub Actions, GitLab CI, Jenkins, or Azure DevOps. Mount your <code>customer_input.yaml</code> as a build artifact.</p>
           </div>
         </div>
+      
+          </div>
+        </details>
       </div>
     </section>
 
@@ -467,6 +488,10 @@ done</code></pre>
     <!-- 3. INTERACTIVE WIZARD -->
     <section id="wizard" class="section alt">
       <div class="container">
+        <details class="sec-collapse">
+          <summary><span class="sc-t">Build your customer_input.yaml</span></summary>
+          <div class="sc-body">
+
         <header class="section-head">
           <h2>Build your customer_input.yaml</h2>
           <p>Fill in four fields. Download the file. Run quickstart. That is the whole flow.</p>
@@ -550,6 +575,9 @@ done</code></pre>
             <pre><code id="yaml-preview" class="lang-yaml"></code></pre>
           </aside>
         </div>
+      
+          </div>
+        </details>
       </div>
     </section>
 
@@ -570,6 +598,10 @@ done</code></pre>
     <!-- 4b. WHAT AZURE CAN AND CANNOT TAP -->
     <section id="tapping" class="section">
       <div class="container">
+        <details class="sec-collapse">
+          <summary><span class="sc-t">How traffic actually reaches the vPB on Azure</span></summary>
+          <div class="sc-body">
+
         <header class="section-head">
           <h2>How traffic actually reaches the vPB on Azure</h2>
           <p>Azure and AWS are not the same here, and the difference decides what you can promise a customer. Read this before reusing an AWS deck.</p>
@@ -588,12 +620,19 @@ done</code></pre>
           <p>Azure Virtual Network TAP is the true counterpart to AWS VPC Traffic Mirroring, and it is a gated Microsoft preview limited to EUAP regions. On a subscription that has not been onboarded the <code>virtualNetworkTaps</code> resource type is not exposed at all, so there is nothing to automate against. Do not scope work against it until it appears in the provider.</p>
           <p class="caption">Full detail, with the commands used to verify each claim: <a href="https://github.com/Keysight-Tech/cloudlens-ansible-azure/blob/main/docs/AZURE_TAPPING_ARCHITECTURE.md">AZURE_TAPPING_ARCHITECTURE.md</a></p>
         </div>
+      
+          </div>
+        </details>
       </div>
     </section>
 
     <!-- 5. SCALING VISUALIZER -->
     <section id="scaling" class="section alt">
       <div class="container">
+        <details class="sec-collapse">
+          <summary><span class="sc-t">How does it scale?</span></summary>
+          <div class="sc-body">
+
         <header class="section-head">
           <h2>How does it scale?</h2>
           <p>Drag the slider to see the estimated deployment time for your fleet size.</p>
@@ -629,12 +668,19 @@ done</code></pre>
             <div class="bar" role="listitem" data-band="10000+"><div class="fill"></div><span>10,000+</span><em>1 to 2 hr (AWX)</em></div>
           </div>
         </div>
+      
+          </div>
+        </details>
       </div>
     </section>
 
     <!-- 6. VERIFIED RESULTS -->
     <section id="verified" class="section">
       <div class="container">
+        <details class="sec-collapse">
+          <summary><span class="sc-t">Verified against real Azure</span></summary>
+          <div class="sc-body">
+
         <header class="section-head">
           <h2>Verified against real Azure</h2>
           <p>Numbers from the smoke test run on 2026 06 02, subscription CloudLensPublic, region eastus2.</p>
@@ -673,12 +719,19 @@ done</code></pre>
             </tbody>
           </table>
         </div>
+      
+          </div>
+        </details>
       </div>
     </section>
 
     <!-- 6.5 FAQ / COMMON ISSUES -->
     <section id="faq" class="faq-section section">
       <div class="container">
+        <details class="sec-collapse">
+          <summary><span class="sc-t">Common issues</span></summary>
+          <div class="sc-body">
+
         <header class="section-head">
           <h2>Common issues</h2>
           <p>If something does not work, check these first.</p>
@@ -753,12 +806,19 @@ ssh admin@localhost -p 2222                       # vPB CLI (admin / ixia)</code
             </div>
           </details>
         </div>
+      
+          </div>
+        </details>
       </div>
     </section>
 
     <!-- 7. QUICK DOCS -->
     <section id="docs" class="section alt">
       <div class="container">
+        <details class="sec-collapse">
+          <summary><span class="sc-t">Docs and support</span></summary>
+          <div class="sc-body">
+
         <header class="section-head">
           <h2>Docs and support</h2>
           <p>Everything you need to deploy with confidence.</p>
@@ -800,6 +860,9 @@ ssh admin@localhost -p 2222                       # vPB CLI (admin / ixia)</code
             <p>Bug reports and feature requests, handled by Keysight engineering.</p>
           </a>
         </div>
+      
+          </div>
+        </details>
       </div>
     </section>
   </main>
@@ -835,5 +898,24 @@ ssh admin@localhost -p 2222                       # vPB CLI (admin / ixia)</code
   </footer>
 
   <script src="script.js" defer></script>
+<script>
+/* Open a collapsed panel when a link or #hash points into it. Without this a
+   nav link scrolls to a closed section and the page looks broken. */
+(function(){
+  function openTarget(){
+    var h=location.hash; if(!h||h.length<2) return;
+    var el=document.querySelector(h); if(!el) return;
+    var d=el.querySelector("details.sec-collapse");
+    if(d&&!d.open){d.open=true;setTimeout(function(){el.scrollIntoView({block:"start"});},30);}
+  }
+  window.addEventListener("hashchange",openTarget);
+  window.addEventListener("load",openTarget);
+  document.addEventListener("click",function(e){
+    var a=e.target.closest&&e.target.closest('a[href^="#"]'); if(!a) return;
+    var tgt=document.querySelector(a.getAttribute("href")); if(!tgt) return;
+    var d=tgt.querySelector("details.sec-collapse"); if(d) d.open=true;
+  });
+})();
+</script>
 </body>
 </html>
