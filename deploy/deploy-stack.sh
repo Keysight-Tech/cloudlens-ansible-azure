@@ -1297,6 +1297,42 @@ fi
 # =====================================================================
 step "Phase 10: Get project key from vController"
 
+# AUTOMATE the first-login password change and the project key.
+#
+# This phase used to only PRINT instructions, and that is not merely less
+# convenient: the vController FORCES a password change on first login, and
+# until it happens its admin APIs stay locked. Phase 13 then failed with
+#   [kvo-adopt] KVO user create failed (HTTP 401)
+# from nginx, which looks like a permissions bug and is really "nobody ever
+# completed first-login setup". scripts/vcontroller_project_key.py rotates the
+# password to a known value and creates the project in one go, exactly as the
+# AWS repo's phase 9 does.
+PROJECT_KEY=""
+VC_ADMIN_PASS="${CLOUDLENS_VC_PASSWORD:-$ADMIN_PASSWORD}"
+VC_CREDS_FILE="${VC_CREDS_FILE:-$HOME/.cloudlens-vcontroller-creds.json}"
+PK_SCRIPT="$(find_script scripts/vcontroller_project_key.py || true)"
+if [[ "$DRY_RUN" == "true" ]]; then
+  dryrun_say "would rotate the vController password and create project ${CLOUDLENS_PROJECT:-cloudlens-autopilot}"
+elif [[ -n "$PK_SCRIPT" ]] && py_ready; then
+  PROJECT_KEY="$(python3 "$PK_SCRIPT" --host "$CLMS_PUBLIC_IP" \
+                   --project "${CLOUDLENS_PROJECT:-cloudlens-autopilot}" \
+                   --new-password "$VC_ADMIN_PASS" --wait 300 --insecure 2>/dev/null || echo "")"
+  if [[ -n "$PROJECT_KEY" ]]; then
+    ok "Project key obtained, and the vController password is now the one in the summary."
+    umask 077
+    printf '{"host":"%s","username":"admin","password":"%s","project":"%s"}\n' \
+      "$CLMS_PUBLIC_IP" "$VC_ADMIN_PASS" "${CLOUDLENS_PROJECT:-cloudlens-autopilot}" > "$VC_CREDS_FILE"
+    note "Credentials saved to ${VC_CREDS_FILE} (mode 600). Phase 13 reads it."
+  else
+    warn "Could not complete vController first-login setup automatically."
+    note "Adoption in phase 13 WILL fail with a 401 until this is done by hand,"
+    note "because the vController locks its admin API until the forced password"
+    note "change is completed. Do steps 1-4 below, then re-run with --resume."
+  fi
+else
+  warn "scripts/vcontroller_project_key.py or python3+requests unavailable."
+fi
+
 cat <<EOM
 
 vController is now reachable. To deploy sensors, you need a project key.
@@ -1583,6 +1619,26 @@ if [[ "$DEPLOYED_KVO" == "true" && -n "${KVO_PUBLIC_IP:-}" && "$KVO_PUBLIC_IP" !
   fi
 
   # --- Phase 13: adopt the vController + create its Cloud Config ------------
+  # The vController's APPLICATION password is not the VM's OS password.
+  #
+  # This passed $ADMIN_PASSWORD, the Azure VM admin credential, and adoption
+  # failed every time with:
+  #   [kvo-adopt] CLMS login failed (HTTP 401): {"errorMessage": "Invalid credentials"}
+  # They are separate credentials: the OS password is for SSH, while the
+  # vController web API has its own admin account whose factory default is
+  # Cl0udLens@dm!n until someone changes it on first login.
+  #
+  # Same resolution order as the AWS repo, so the two behave identically:
+  # explicit override, then whatever was saved when the password was changed,
+  # then the factory default.
+  VC_ADMIN_PASS="${VC_ADMIN_PASS:-${CLOUDLENS_VC_PASSWORD:-}}"
+  VC_CREDS_FILE="${VC_CREDS_FILE:-$HOME/.cloudlens-vcontroller-creds.json}"
+  if [[ -z "$VC_ADMIN_PASS" && -f "$VC_CREDS_FILE" ]]; then
+    VC_ADMIN_PASS=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("password",""))' \
+                      "$VC_CREDS_FILE" 2>/dev/null || echo "")
+  fi
+  VC_ADMIN_PASS="${VC_ADMIN_PASS:-Cl0udLens@dm!n}"
+
   step "Phase 13: Adopt the vController into KVO"
   ADOPT_SCRIPT="$(find_script scripts/kvo_adopt_clms.py || true)"
   KVO_CLM_NAME="${CLOUDLENS_CLM_NAME:-cloudlens-vcontroller}"
@@ -1593,7 +1649,7 @@ if [[ "$DEPLOYED_KVO" == "true" && -n "${KVO_PUBLIC_IP:-}" && "$KVO_PUBLIC_IP" !
     warn "scripts/kvo_adopt_clms.py unavailable; skipping adoption."
   else
     python3 "$ADOPT_SCRIPT" --kvo "$KVO_PUBLIC_IP" --clms "$CLMS_PUBLIC_IP" \
-      --clms-admin-pass "$ADMIN_PASSWORD" --name "$KVO_CLM_NAME" \
+      --clms-admin-pass "$VC_ADMIN_PASS" --name "$KVO_CLM_NAME" \
       --cloud-config "$KVO_CLOUD_CONFIG" --accept-eula --insecure \
       && ok "vController adopted as ${KVO_CLM_NAME}." \
       || warn "vController adoption did not complete; see above."
