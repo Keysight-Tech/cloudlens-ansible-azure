@@ -163,6 +163,24 @@ warn()  { echo -e "${C_YELLOW}\xE2\x9A\xA0${C_RESET} $1"; }
 fail()  { echo -e "${C_RED}\xE2\x9C\x97${C_RESET} $1" >&2; exit 1; }
 step()  { echo; echo -e "${C_BLUE}\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80 $1 \xE2\x94\x80\xE2\x94\x80\xE2\x94\x80${C_RESET}"; PHASE_NAME="$1"; }
 note()  { echo -e "${C_GREY}\xE2\x86\x92 $1${C_RESET}"; }
+find_script() {
+  local rel="$1" d
+  # BASH_SOURCE, not SCRIPT_DIR: this script is routinely run via
+  # `bash <(curl ...)`, where there is no script directory at all, so every
+  # candidate has to be tried and missing ones simply skipped.
+  local here=""
+  [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]] && here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  for d in "${here:+$here/..}" "${REPO_DIR:-}" "$PWD" "$HOME/cloudlens-ansible-azure"; do
+    [[ -n "$d" && -r "$d/$rel" ]] && { printf '%s' "$d/$rel"; return 0; }
+  done
+  return 1
+}
+
+py_ready() {
+  command -v python3 >/dev/null 2>&1 || return 1
+  python3 -c 'import requests' >/dev/null 2>&1
+}
+
 dryrun_say() { echo -e "${C_YELLOW}[dry-run]${C_RESET} $1"; }
 
 # POSIX-portable lowercase (bash 3.2 compatible)
@@ -1205,6 +1223,7 @@ if [[ "$DEPLOY_KVO" == "true" ]]; then
 
     if [[ "$DRY_RUN" != "true" ]] && az vm show -g "$RESOURCE_GROUP" -n "$vm_name" >/dev/null 2>&1; then
       warn "$vm_name already exists, reusing"
+      DEPLOYED_KVO=true   # likewise, so the KVO chain runs on a second pass
       pip=$(run_az_capture network public-ip show -g "$RESOURCE_GROUP" -n "${vm_name}-pip" --query ipAddress -o tsv 2>/dev/null || echo "unknown")
     else
       note "Deploying ARM template: ${KVO_TEMPLATE_URL} (instance $vm_name)"
@@ -1257,6 +1276,7 @@ if [[ "$DEPLOY_VPB" == "true" ]]; then
 
     if [[ "$DRY_RUN" != "true" ]] && az vm show -g "$RESOURCE_GROUP" -n "$vm_name" >/dev/null 2>&1; then
       warn "$vm_name already exists, reusing"
+      DEPLOYED_VPB=true   # a reused vPB is still a vPB: phases 14-15 depend on this
       pip=$(run_az_capture network public-ip show -g "$RESOURCE_GROUP" -n "${vm_name}-mgmt-pip" --query ipAddress -o tsv 2>/dev/null || echo "unknown")
     else
       note "Deploying ARM template: ${VPB_TEMPLATE_URL} (instance $vm_name)"
@@ -1308,8 +1328,14 @@ step "Phase 10: Get project key from vController"
 # password to a known value and creates the project in one go, exactly as the
 # AWS repo's phase 9 does.
 PROJECT_KEY=""
-VC_ADMIN_PASS="${CLOUDLENS_VC_PASSWORD:-$ADMIN_PASSWORD}"
-VC_CREDS_FILE="${VC_CREDS_FILE:-$HOME/.cloudlens-vcontroller-creds.json}"
+VC_CREDS_FILE="${VC_CREDS_FILE:-$HOME/.cloudlens-vcontroller-creds-${RESOURCE_GROUP}.json}"
+VC_ADMIN_PASS="${CLOUDLENS_VC_PASSWORD:-}"
+if [[ -z "$VC_ADMIN_PASS" && -f "$VC_CREDS_FILE" ]]; then
+  VC_ADMIN_PASS=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("password",""))' \
+                    "$VC_CREDS_FILE" 2>/dev/null || echo "")
+  [[ -n "$VC_ADMIN_PASS" ]] && note "Reusing the vController password recorded in ${VC_CREDS_FILE}."
+fi
+VC_ADMIN_PASS="${VC_ADMIN_PASS:-$ADMIN_PASSWORD}"
 PK_SCRIPT="$(find_script scripts/vcontroller_project_key.py || true)"
 if [[ "$DRY_RUN" == "true" ]]; then
   dryrun_say "would rotate the vController password and create project ${CLOUDLENS_PROJECT:-cloudlens-autopilot}"
@@ -1576,23 +1602,22 @@ fi
 # Microsoft preview and the virtualNetworkTaps resource type is not even exposed
 # on a non-onboarded subscription. See docs/AZURE_TAPPING_ARCHITECTURE.md before
 # promising a customer an AWS-equivalent agentless deployment on Azure.
-find_script() {
-  local rel="$1" d
-  # BASH_SOURCE, not SCRIPT_DIR: this script is routinely run via
-  # `bash <(curl ...)`, where there is no script directory at all, so every
-  # candidate has to be tried and missing ones simply skipped.
-  local here=""
-  [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]] && here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  for d in "${here:+$here/..}" "${REPO_DIR:-}" "$PWD" "$HOME/cloudlens-ansible-azure"; do
-    [[ -n "$d" && -r "$d/$rel" ]] && { printf '%s' "$d/$rel"; return 0; }
-  done
-  return 1
-}
 
-py_ready() {
-  command -v python3 >/dev/null 2>&1 || return 1
-  python3 -c 'import requests' >/dev/null 2>&1
-}
+# Run the KVO chain whenever a KVO is REACHABLE, not only when this run created
+# one. Deploying a vPB into a resource group that already has a KVO is the
+# normal second pass (--no-kvo), and gating on DEPLOYED_KVO skipped adoption
+# entirely: the vPB came up and was never adopted, with nothing explaining why.
+# The AWS repo solves the same problem with its VPB_IN_KVO resume flag.
+if [[ "$DEPLOYED_KVO" != "true" && "$DRY_RUN" != "true" ]]; then
+  EXISTING_KVO_IP="$(az vm list-ip-addresses -g "$RESOURCE_GROUP" -n "$DEFAULT_KVO_NAME" \
+                       --query '[0].virtualMachine.network.publicIpAddresses[0].ipAddress' -o tsv 2>/dev/null)"
+  if [[ -n "$EXISTING_KVO_IP" ]]; then
+    KVO_PUBLIC_IP="${KVO_PUBLIC_IP:-$EXISTING_KVO_IP}"
+    [[ -z "$KVO_PUBLIC_IP" || "$KVO_PUBLIC_IP" == "unknown" ]] && KVO_PUBLIC_IP="$EXISTING_KVO_IP"
+    DEPLOYED_KVO=true
+    ok "Found an existing KVO at ${KVO_PUBLIC_IP}; running the KVO chain against it."
+  fi
+fi
 
 if [[ "$DEPLOYED_KVO" == "true" && -n "${KVO_PUBLIC_IP:-}" && "$KVO_PUBLIC_IP" != "unknown" ]]; then
 
@@ -1640,7 +1665,7 @@ if [[ "$DEPLOYED_KVO" == "true" && -n "${KVO_PUBLIC_IP:-}" && "$KVO_PUBLIC_IP" !
   # explicit override, then whatever was saved when the password was changed,
   # then the factory default.
   VC_ADMIN_PASS="${VC_ADMIN_PASS:-${CLOUDLENS_VC_PASSWORD:-}}"
-  VC_CREDS_FILE="${VC_CREDS_FILE:-$HOME/.cloudlens-vcontroller-creds.json}"
+  VC_CREDS_FILE="${VC_CREDS_FILE:-$HOME/.cloudlens-vcontroller-creds-${RESOURCE_GROUP}.json}"
   if [[ -z "$VC_ADMIN_PASS" && -f "$VC_CREDS_FILE" ]]; then
     VC_ADMIN_PASS=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("password",""))' \
                       "$VC_CREDS_FILE" 2>/dev/null || echo "")
@@ -1686,9 +1711,9 @@ if [[ "$DEPLOYED_KVO" == "true" && -n "${KVO_PUBLIC_IP:-}" && "$KVO_PUBLIC_IP" !
       VPB_SSH_KEY="${CLOUDLENS_KEY_PEM:-$HOME/.ssh/${DEFAULT_VPB_NAME}.pem}"
       VPB_SSH_USER="${CLOUDLENS_VPB_SSH_USER:-keysight}"
       VPB_PRIVATE_IP="$(az vm list-ip-addresses -g "$RESOURCE_GROUP" -n "$DEFAULT_VPB_NAME" \
-                          --query 'virtualMachine.network.privateIpAddresses[0]' -o tsv 2>/dev/null)"
+                          --query '[0].virtualMachine.network.privateIpAddresses[0]' -o tsv 2>/dev/null)"
       KVO_PRIVATE_IP="$(az vm list-ip-addresses -g "$RESOURCE_GROUP" -n "$DEFAULT_KVO_NAME" \
-                          --query 'virtualMachine.network.privateIpAddresses[0]' -o tsv 2>/dev/null)"
+                          --query '[0].virtualMachine.network.privateIpAddresses[0]' -o tsv 2>/dev/null)"
       if [[ ! -f "$VPB_SSH_KEY" ]]; then
         warn "No SSH key at ${VPB_SSH_KEY}, and adoption drives the vPB CLI over SSH."
         note "Point CLOUDLENS_KEY_PEM at the key used for this deployment, then re-run."
