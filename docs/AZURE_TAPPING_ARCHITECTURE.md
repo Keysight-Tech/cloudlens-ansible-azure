@@ -128,3 +128,28 @@ in use (VXLAN UDP/4789 for the vTAP demo topology, L2GRE proto 47 for the
 sensor/collector topology). **Confirm which encapsulation your path uses before
 setting the filter**: an SE playbook that said VXLAN on a GRE path captured
 nothing and the demo looked broken while the tap worked perfectly.
+
+
+## Marketplace vPB on Azure: adoption blocked inside the image (2026-08-17)
+
+Phases 1-13 of the deploy run unattended. Phase 14 (adopt the vPB) reaches the
+device, clears its EULA, and writes the KVO target, and then fails INSIDE the
+Marketplace image (3.15.0-1):
+
+    vpb-shim CrashLoopBackOff:  panic: Could not read mgmt IP address
+
+The vpbsystem's interface inventory contains ONLY the data ports (eth1/eth2).
+No management interface exists, `interface eth0|mgmt0|mgmt` are all rejected
+(the CLI configures discovered interfaces, it cannot create them), and a
+reboot does not re-register it. The shim is the component that announces to
+KVO, so the device can never appear, regardless of network reachability
+(verified open: TCP 443 vPB -> KVO over VNet peering).
+
+The mgmt interface is written by first-boot provisioning. Our ARM template
+passes no customData; whether the image requires it, and in what format, is
+undocumented. The question is with Keysight, stated in full in the team memory
+and commit 3eb1008.
+
+Until that answers, the Marketplace-image path stops at phase 13 on Azure. The
+GWLB architecture (chapter above) is unaffected: its vPBs are the Linux
+installer build, not this image, and have carried real traffic.
