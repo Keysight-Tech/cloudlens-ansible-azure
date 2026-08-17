@@ -85,7 +85,11 @@ pip install --quiet \
   azure-mgmt-resource \
   msgraph-core
 
-ansible-galaxy collection install azure.azcollection ansible.windows community.windows --upgrade -q 2>&1 | tail -2
+# No -q here: ansible-core 2.16's collection-install subcommand rejects it
+# with "unrecognized arguments" (rc=2) and prints usage, and the old
+# "| tail -2" swallowed exactly that, so runs continued with NO collections
+# and failed later pointing anywhere but here.
+ansible-galaxy collection install azure.azcollection ansible.windows community.windows --upgrade 2>&1 | tail -3
 
 # azcollection's FULL Python requirements are NOT optional. The azure_rm
 # inventory plugin silently fails to load AzureCliCredential when any of
