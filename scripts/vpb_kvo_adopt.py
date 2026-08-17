@@ -36,8 +36,58 @@ import requests
 def log(m): print(f"[vpb-adopt] {m}", file=sys.stderr, flush=True)
 
 # ----- vPB side (SSH + the `vpb` CLI wrapper) ---------------------------
+# Set by main() when --azure-rg/--azure-vm are given. Module-level so the swap
+# does not change the signature of vpb_cli and every existing call site keeps
+# working untouched.
+AZURE_RG = None
+AZURE_VM = None
+
+
+def _azure_cli(command, timeout=180):
+    """Run a vPB CLI command on an AZURE vPB, with no SSH and no TTY.
+
+    The Azure Marketplace image cannot be driven the way AWS is:
+      * it uses PASSWORD auth (disablePasswordAuthentication false, no keys),
+        so there is no --key to hand to ssh
+      * its CLI prompts for its own EULA on first use, and that prompt reads
+        the CONSOLE, not stdin, so piping / sudo -S / az run-command all die
+        with "Unable to use a TTY" or "Interrupt on console input"
+
+    /usr/local/bin/vpb is only a wrapper that kubectl-execs into the vpbsystem
+    container and runs /usr/local/bin/xf-client. Talking to xf-client DIRECTLY
+    with `kubectl exec -i` gives it a real stdin, which satisfies the prompt.
+    Verified live: EULA cleared with "n" then "y", acceptance persists, and
+    subsequent commands run clean.
+    """
+    remote = (
+        "export KUBECONFIG=/etc/kubernetes/admin.conf; "
+        "POD=$(kubectl get pods -o name 2>/dev/null | grep vpbsystem | head -1); "
+        "[ -z \"$POD\" ] && { echo 'no vpbsystem pod'; exit 1; }; "
+        # %b, NOT %s: the command arrives JSON-encoded, so its newlines are
+        # literal backslash-n. %s would feed xf-client one line containing "\n"
+        # and every multi-line context sequence (kvo/ip/port/enable/exit) came
+        # back as "invalid input". %b expands the escapes into real newlines.
+        "printf '%b\\n' \"$VPB_CMD\" | kubectl exec -i ${POD#pod/} -c vpbsystem "
+        "-- /usr/local/bin/xf-client 2>&1"
+    )
+    script = f'VPB_CMD={json.dumps(command)}\n{remote}'
+    az = ["az", "vm", "run-command", "invoke", "-g", AZURE_RG, "-n", AZURE_VM,
+          "--command-id", "RunShellScript", "--scripts", script,
+          "--query", "value[0].message", "-o", "tsv"]
+    try:
+        r = subprocess.run(az, capture_output=True, text=True, timeout=timeout)
+        out = (r.stdout or "") + (r.stderr or "")
+        out = "\n".join(l for l in out.splitlines()
+                         if "Enable succeeded" not in l and l.strip() not in ("[stdout]", "[stderr]"))
+        return r.returncode == 0, out.strip()
+    except subprocess.TimeoutExpired:
+        return False, "timeout"
+
+
 def vpb_cli(host, port, user, key, command, timeout=60):
     """Run one vPB CLI command via `sudo vpb -c`. Returns (ok, output)."""
+    if AZURE_RG and AZURE_VM:
+        return _azure_cli(command, timeout=max(timeout, 180))
     ssh = ["ssh", "-i", key, "-p", str(port),
            "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
            "-o", "ConnectTimeout=15", "-o", "BatchMode=yes",
@@ -176,7 +226,11 @@ def main():
     ap.add_argument("--vpb", required=True, help="vPB SSH host (public IP/host)")
     ap.add_argument("--vpb-port", type=int, default=9022, help="vPB SSH port (AWS Marketplace: 9022)")
     ap.add_argument("--vpb-user", default="admin", help="vPB SSH user (AWS: admin)")
-    ap.add_argument("--key", required=True, help="path to the SSH private key (.pem)")
+    ap.add_argument("--azure-rg", help="Azure resource group holding the vPB VM. With "
+                                      "--azure-vm this drives the CLI through the VM "
+                                      "agent instead of SSH: no key and no TTY needed.")
+    ap.add_argument("--azure-vm", help="Azure VM name of the vPB")
+    ap.add_argument("--key", required=False, help="path to the SSH private key (.pem)")
     ap.add_argument("--kvo", required=True, help="KVO host for the API (public IP/host)")
     ap.add_argument("--kvo-internal-ip", required=True,
                     help="KVO IP the vPB uses for license + management (private, same-VPC)")
@@ -196,6 +250,11 @@ def main():
                     help="accept the vPB EULA if it blocks the CLI. This is a legal acceptance.")
     ap.add_argument("--insecure", action="store_true")
     args = ap.parse_args()
+    global AZURE_RG, AZURE_VM
+    if args.azure_rg and args.azure_vm:
+        AZURE_RG, AZURE_VM = args.azure_rg, args.azure_vm
+    elif not args.key:
+        ap.error("--key is required unless --azure-rg and --azure-vm are given")
     verify = not args.insecure
     if args.insecure:
         import urllib3; urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
