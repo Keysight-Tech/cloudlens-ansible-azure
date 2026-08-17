@@ -4,6 +4,11 @@
 # if set, else falls back to linux.ssh_key_file (default ~/.ssh/id_rsa).
 ansible_user: "{{ linux.ansible_user | default('azureuser') }}"
 ansible_ssh_pass: "{{ linux.ansible_password if (linux.ansible_password is defined) else omit }}"
+# Password-auth VMs need the password for sudo too. AWS never surfaces this
+# because its images have passwordless sudo; an Azure VM created with
+# --authentication-type password does not, and become fails with
+# "Missing sudo password" while the SSH login itself works fine.
+ansible_become_pass: "{{ linux.ansible_password if (linux.ansible_password is defined) else omit }}"
 ansible_ssh_private_key_file: "{{ linux.ssh_key_file if (linux.ssh_key_file is defined and linux.ansible_password is not defined) else omit }}"
 ansible_python_interpreter: /usr/bin/python3
 
