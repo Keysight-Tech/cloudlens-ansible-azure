@@ -68,15 +68,33 @@ are Microsoft canary regions. Onboarding goes through VTAP-Support@microsoft.com
 **So do not scope work against vTAP until a subscription is onboarded.** The
 resource type has to appear in the provider before any of it can be automated.
 
-### 2. Sensor-based tapping: available now, and what this Ansible repo builds
+### 2. Sensor-based tapping: available now, PROVEN 3/3, what this repo builds
 
     workload + CloudLens sensor -> vController -> collector/vHub -> vPB -> tool
 
 The sensor does the tapping in the guest. Everything downstream of the sensor is
 identical to AWS, because KVO's device-side objects are cloud-agnostic.
 
+**Proven end to end on 2026-08-17**, verified in the vController's own registry
+rather than Ansible's recap: three fixture VMs (Ubuntu 22.04, RHEL 9, Windows
+Server 2022) discovered by tag, sensors installed per OS, all three registered
+in the project:
+
+    test-ubuntu-1   6.14.0-475
+    test-rhel-1     6.14.0-475
+    test-windows-1  registered
+
+Registration needs only the vController's public IP, so the per-product VNet
+isolation that blocks Marketplace vPB adoption does NOT affect this path. The
+Windows installer exe is deliberately not in the repo (66 MB, gitignored):
+copy it into files/ first, as DEPLOYMENT_GUIDE.md says, or the play fails at
+"Transfer CloudLens installer". Running the chain from macOS also needs the
+Darwin fork-safety export, which quickstart.sh now sets itself.
+
 **The honest trade:** it needs software on each monitored VM. Say so plainly to a
 customer rather than letting them assume the AWS agentless story carries over.
+The sensors' DATA path (sensor -> collector/vHub -> tool) is a separate leg and
+is not yet exercised in this lab: no collector is deployed on Azure here.
 
 ## What this means for the automation
 
