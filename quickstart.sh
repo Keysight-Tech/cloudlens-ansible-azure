@@ -46,6 +46,16 @@ if [[ -n "${AZUREPS_HOST_ENVIRONMENT:-}" ]] || [[ "${ACC_CLOUD:-}" == "PROD" ]] 
   ok "Detected: Azure Cloud Shell (zero local install needed)"
 else
   ok "Detected: Local machine ($(uname -s) $(uname -m))"
+  # macOS: Ansible workers fork after the Objective-C runtime initialises, and
+  # the WinRM connection path imports frameworks that make forked children
+  # abort. The play then dies with the famously unhelpful
+  #   "A worker was found in a dead state"
+  # right at Gathering Facts for the first Windows host, while every Linux
+  # host on the same run is fine. Linux runners (Cloud Shell) never hit this.
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+    export NO_PROXY="*"
+  fi
 fi
 
 CPU_CORES="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
