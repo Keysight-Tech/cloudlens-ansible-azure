@@ -402,7 +402,7 @@ What it does (phases):
   7. Wait for vController to initialize (~15 minutes)
   8. KVO deployment (optional, orchestrator for vPB fleets)
   9. vPB deployment (optional)
- 10. Manual project key step (from vController UI)
+ 10. Project key: created automatically (manual paste only if that fails)
  11. Sensor chain (optional, runs quickstart.sh)
  12. KVO product licensing (an unlicensed KVO refuses every write)
  13. Adopt the vController into KVO + create its Cloud Config
@@ -1617,7 +1617,7 @@ else
 fi
 
 # =====================================================================
-# Phase 10: Manual project key step
+# Phase 10: Project key (automatic; manual only as a fallback)
 # =====================================================================
 step "Phase 10: Get project key from vController"
 
@@ -1663,6 +1663,10 @@ else
   warn "scripts/vcontroller_project_key.py or python3+requests unavailable."
 fi
 
+# The manual route is only the fallback. When the script above created the
+# project, this used to print these steps anyway, then throw the key away and
+# prompt for it, so a fully automatable run always stopped for a paste.
+if [[ -z "$PROJECT_KEY" && "$DRY_RUN" != "true" ]]; then
 cat <<EOM
 
 vController is now reachable. To deploy sensors, you need a project key.
@@ -1674,6 +1678,7 @@ vController is now reachable. To deploy sensors, you need a project key.
      project and copy the API key.
 
 EOM
+fi
 
 # Phase 10 pre-flight: scan for already-tagged VMs using the chosen
 # discovery tag. Tells the customer exactly how many sensors will be
@@ -1702,12 +1707,15 @@ if [[ "$CHAIN_SENSORS" == "true" ]] && [[ "$DRY_RUN" != "true" ]]; then
   fi
 fi
 
-PROJECT_KEY=""
 if [[ "$CHAIN_SENSORS" == "true" ]]; then
-  read -rp "Paste project key (or press Enter to skip sensor deployment): " PROJECT_KEY || true
-  if [[ -z "$PROJECT_KEY" ]]; then
-    warn "No project key supplied. Skipping sensor chain."
-    CHAIN_SENSORS=false
+  if [[ -n "$PROJECT_KEY" ]]; then
+    ok "Using the project key created automatically; no manual step needed."
+  else
+    read -rp "Paste project key (or press Enter to skip sensor deployment): " PROJECT_KEY || true
+    if [[ -z "$PROJECT_KEY" ]]; then
+      warn "No project key supplied. Skipping sensor chain."
+      CHAIN_SENSORS=false
+    fi
   fi
 fi
 
