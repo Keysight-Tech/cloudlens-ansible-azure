@@ -58,7 +58,9 @@ cat > "$STUB_BIN/az" <<'AZSTUB'
 # take effect on later listings, so the teardown's verify phase sees what it
 # "deleted". Behaviour knobs: STUB_NO_TAG=1 (group has no deployedBy tag),
 # STUB_OTHER=1 (a customer VM, NIC and storage account share the group),
-# STUB_DELETE_OPTION=1 (the VM's disk, NICs and public IP go with the VM).
+# STUB_DELETE_OPTION=1 (the VM's disk, NICs and public IP go with the VM),
+# STUB_SHARED_VNET=1 (the deploy's one shared VNet, cloudlens-vnet, tagged
+# deployedBy=cloudlens-stack, holds every CloudLens NIC).
 set -u
 LOG="${AZ_LOG:?}"; SEQ="${SEQ_FILE:?}"
 next_seq() { local n; n="$(cat "$SEQ" 2>/dev/null || echo 0)"; n=$((n+1)); printf '%s' "$n" > "$SEQ"; printf '%s' "$n"; }
@@ -108,6 +110,10 @@ vpb-mgmt-nic|$NIC_T
 vpb-ingress-1|$NIC_T
 vpb-egress-1|$NIC_T
 vpb_OsDisk_1_ccc|$DISK_T"
+if [[ "${STUB_SHARED_VNET:-0}" == "1" ]]; then
+  RES="$RES
+cloudlens-vnet|$VNET_T"
+fi
 if [[ "${STUB_OTHER:-0}" == "1" ]]; then
   RES="$RES
 customer-web01|$VM_T
@@ -146,6 +152,7 @@ vnet_nics() {
     vcontroller-vnet) echo "vcontroller-nic" ;;
     kvo-vnet) if [[ "${STUB_OTHER:-0}" == "1" ]]; then echo "kvo-nic customer-nic"; else echo "kvo-nic"; fi ;;
     vpb-vnet) echo "vpb-mgmt-nic vpb-ingress-1 vpb-egress-1" ;;
+    cloudlens-vnet) echo "vcontroller-nic kvo-nic vpb-mgmt-nic vpb-ingress-1 vpb-egress-1" ;;
   esac
 }
 # the value after a flag, e.g. -n NAME or --ids ID
@@ -186,6 +193,14 @@ case "$cmd" in
   "vm delete")
     shift 2; rec vm delete "$@" ;;
   "resource list")
+    # The teardown's second listing asks only for VNets carrying the deploy's
+    # tag; only the shared VNet has it.
+    if printf '%s\n' "$@" | grep -q -- '--resource-type'; then
+      if [[ "${STUB_SHARED_VNET:-0}" == "1" ]] && ! gone "$(rid cloudlens-vnet "$VNET_T")"; then
+        printf '%s\n' "$(rid cloudlens-vnet "$VNET_T")"
+      fi
+      exit 0
+    fi
     while IFS='|' read -r n t; do
       [[ -n "$n" ]] || continue
       gone "$(rid "$n" "$t")" && continue
@@ -272,7 +287,7 @@ begin_case() {
   CASE_TITLE="$1"; CASE_OK=true; CASE_NOTES=""
   : > "$AZ_LOG"; : > "$LIC_LOG"; : > "$SEQ_FILE"; : > "$OUT"
   # behaviour defaults, overridden per case before run_teardown
-  export LIST_COUNT=0 RELEASE_RC=0 STUB_NO_TAG=0 STUB_OTHER=0 STUB_DELETE_OPTION=0
+  export LIST_COUNT=0 RELEASE_RC=0 STUB_NO_TAG=0 STUB_OTHER=0 STUB_DELETE_OPTION=0 STUB_SHARED_VNET=0
   unset CLOUDLENS_KVO_ADMIN_USER CLOUDLENS_KVO_ADMIN_PASS 2>/dev/null || true
 }
 end_case() {
@@ -499,6 +514,26 @@ begin_case "12: templates with deleteOption: disk, NICs and public IP go with th
   out_lacks "could not delete"
   out_lacks "Some resources could not be removed"
   out_has "Nothing left in cl-rg"
+end_case
+
+begin_case "13: the deploy's tagged shared VNet counts as CloudLens by its tag, and is deleted after the NICs"
+  LIST_COUNT=0 STUB_SHARED_VNET=1 STUB_NO_TAG=1
+  run_teardown --resource-group cl-rg --yes
+  rc_is 0
+  out_has "    cloudlens-vnet "
+  az_lacks "group delete"
+  az_has "resource delete --ids .*virtualNetworks/cloudlens-vnet"
+  s_nic="$(seq_of "$AZ_LOG" 'networkInterfaces/')"; s_vnet="$(seq_of "$AZ_LOG" 'virtualNetworks/cloudlens-vnet')"
+  if [[ -n "$s_nic" && -n "$s_vnet" ]] && (( s_nic > s_vnet )); then flunk "NIC delete before the shared VNet delete"; fi
+end_case
+
+begin_case "14: with the shared VNet the tagged group still holds nothing but CloudLens, so the whole group goes"
+  LIST_COUNT=0 STUB_SHARED_VNET=1
+  run_teardown --resource-group cl-rg --yes
+  rc_is 0
+  out_has "    cloudlens-vnet "
+  out_has "every resource is CloudLens"
+  az_has "group delete"
 end_case
 
 echo

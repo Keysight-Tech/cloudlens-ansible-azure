@@ -168,6 +168,7 @@ PREFIX_ASSUMED=false  # true when PREFIX_NAMES came from the deploy defaults
 # Everything in the group, one per line: name<TAB>type<TAB>id
 RES_LINES=""
 CL_RES_LINES=""       # the CloudLens set (VMs included), same layout
+CL_TAGGED_VNET_IDS="" # VNets the deploy built and tagged deployedBy=cloudlens-stack
 OTHER_RES_LINES=""    # everything else, same layout
 # The CloudLens set split by type for the per-resource delete, one id per
 # line (ids carry no spaces, but a VNet's name is needed for the in-use
@@ -708,6 +709,15 @@ name_from_cl_vm() {
   return 1
 }
 
+# The shared VNet the deploy builds (cloudlens-vnet) is not named after any
+# VM, so the name rule above cannot claim it. The deploy tags it
+# deployedBy=cloudlens-stack instead, the same tag it puts on a group it
+# creates, and that tag is the evidence here. A tagged VNet still goes
+# through vnet_other_users before deletion: a customer NIC in it keeps it.
+CL_TAGGED_VNET_IDS="$(to_lower "$(tokens "$(ro_az resource list -g "$RESOURCE_GROUP" \
+  --resource-type Microsoft.Network/virtualNetworks \
+  --query "[?tags.deployedBy=='${DEPLOYED_BY_TAG}'].id" -o tsv)")")"
+
 # ---- classify every resource in the group -------------------------------
 while IFS=$'\t' read -r _rn _rt _rid; do
   if [[ -z "${_rn:-}" ]]; then continue; fi
@@ -726,7 +736,7 @@ while IFS=$'\t' read -r _rn _rt _rid; do
     microsoft.network/networksecuritygroups)
       if name_from_cl_vm "$_rn"; then _cls="nsg"; fi ;;
     microsoft.network/virtualnetworks)
-      if name_from_cl_vm "$_rn"; then _cls="vnet"; fi ;;
+      if name_from_cl_vm "$_rn" || in_list "$_ridl" "$CL_TAGGED_VNET_IDS"; then _cls="vnet"; fi ;;
     microsoft.compute/virtualmachines/extensions)
       # Deleted with its VM; listed so the audit is complete.
       if name_from_cl_vm "$_rn"; then _cls="ext"; fi ;;

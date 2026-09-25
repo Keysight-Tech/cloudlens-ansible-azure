@@ -103,6 +103,28 @@ ADMIN_CIDR="${CLOUDLENS_ADMIN_CIDR:-*}"
 ADMIN_CIDR_GIVEN=false
 if [[ -n "${CLOUDLENS_ADMIN_CIDR:-}" ]]; then ADMIN_CIDR_GIVEN=true; fi
 
+# One virtual network for every appliance. Handed no vnetName, each product
+# template builds its own VNet, and three VNets with no peering between them
+# is a deployment where the vController, KVO and vPB cannot reach each other.
+# The portal's full-stack template builds one VNet with five subnets and gives
+# it to every appliance; the CLI does the same, with the same subnet names and
+# the same prefixes, so a portal deploy and a CLI deploy come out identical.
+# --vnet-name joins a network you already run instead (it must carry those
+# five subnets); --vnet-cidr changes the space the deploy builds, a /16.
+VNET_NAME="${CLOUDLENS_VNET_NAME:-}"
+VNET_RG="${CLOUDLENS_VNET_RG:-}"
+VNET_CIDR="${CLOUDLENS_VNET_CIDR:-10.50.0.0/16}"
+VNET_GIVEN=false
+if [[ -n "${CLOUDLENS_VNET_NAME:-}" ]]; then VNET_GIVEN=true; fi
+DEFAULT_VNET_NAME="cloudlens-vnet"
+SUBNET_VCONTROLLER="vcontroller-subnet"   # slot 1:  a.b.1.0/24
+SUBNET_KVO="kvo-subnet"                   # slot 2:  a.b.2.0/24
+SUBNET_VPB_MGMT="vpb-mgmt"                # slot 10: a.b.10.0/24
+SUBNET_VPB_INGRESS="vpb-ingress"          # slot 11: a.b.11.0/24
+SUBNET_VPB_EGRESS="vpb-egress"            # slot 12: a.b.12.0/24
+VNET_CREATED=false
+VNET_ADOPTED=false
+
 CLMS_VM_SIZE="${CLOUDLENS_VCONTROLLER_SIZE:-Standard_D4s_v5}"
 KVO_VM_SIZE="${CLOUDLENS_KVO_SIZE:-Standard_D4s_v5}"
 VPB_VM_SIZE="${CLOUDLENS_VPB_SIZE:-Standard_D8s_v3}"
@@ -319,6 +341,16 @@ Access (who may reach the appliances):
                             absent; this machine's public /32 is offered.
                             * (or 0.0.0.0/0) means anywhere.  (default: *)
 
+Network (one shared virtual network for every appliance):
+  --vnet-name NAME          Join a VNet you already run instead of building
+                            cloudlens-vnet. It must already hold the subnets
+                            the templates expect: vcontroller-subnet,
+                            kvo-subnet, vpb-mgmt, vpb-ingress, vpb-egress.
+  --vnet-resource-group RG  Where that VNet lives    (default: the deploy's group)
+  --vnet-cidr CIDR          Address space of the VNet the deploy builds, a /16;
+                            subnets are a.b.1, 2, 10, 11 and 12 .0/24
+                                                     (default: 10.50.0.0/16)
+
 VM sizes (override if your prod workload is bigger):
   --vcontroller-size SKU    vController VM size      (default: Standard_D4s_v5)
   --kvo-size SKU            KVO VM size              (default: Standard_D4s_v5)
@@ -347,6 +379,7 @@ Toggles:
 
 Env-var overrides (alternative to flags, useful for curl | bash):
   CLOUDLENS_RG, CLOUDLENS_REGION, CLOUDLENS_ADMIN_USER, CLOUDLENS_ADMIN_CIDR,
+  CLOUDLENS_VNET_NAME, CLOUDLENS_VNET_RG, CLOUDLENS_VNET_CIDR,
   CLOUDLENS_VCONTROLLER_NAME / _SIZE / _COUNT,
   CLOUDLENS_KVO_NAME / _SIZE / _COUNT,
   CLOUDLENS_VPB_NAME / _SIZE / _COUNT,
@@ -417,6 +450,9 @@ while [[ $# -gt 0 ]]; do
 
     # Access
     --admin-cidr) ADMIN_CIDR="$2"; ADMIN_CIDR_GIVEN=true; shift 2 ;;
+    --vnet-name) VNET_NAME="$2"; VNET_GIVEN=true; shift 2 ;;
+    --vnet-resource-group) VNET_RG="$2"; shift 2 ;;
+    --vnet-cidr) VNET_CIDR="$2"; shift 2 ;;
     --vcontroller-name) DEFAULT_CLMS_NAME="$2"; shift 2 ;;
     --kvo-name) DEFAULT_KVO_NAME="$2"; shift 2 ;;
     --vpb-name) DEFAULT_VPB_NAME="$2"; shift 2 ;;
@@ -456,6 +492,10 @@ if [[ "$ADMIN_CIDR" == "0.0.0.0/0" ]]; then ADMIN_CIDR="*"; fi
 if [[ "$ADMIN_CIDR" != "*" ]] && ! valid_cidr "$ADMIN_CIDR"; then
   fail "--admin-cidr / CLOUDLENS_ADMIN_CIDR must be an IPv4 CIDR like 203.0.113.10/32, or * for anywhere (got '$ADMIN_CIDR')."
 fi
+# A /16 is the one shape the five fixed subnet slots can be carved from.
+if [[ ! "$VNET_CIDR" =~ ^[0-9]+\.[0-9]+\.0\.0/16$ ]]; then
+  fail "--vnet-cidr / CLOUDLENS_VNET_CIDR must be a /16 written a.b.0.0/16 (got '$VNET_CIDR'): the five subnets are carved from it as a.b.1/2/10/11/12.0/24."
+fi
 
 # Use ADMIN_USERNAME (already declared) for the OS admin user from now on
 ADMIN_USERNAME="$DEFAULT_ADMIN_USER"
@@ -479,6 +519,107 @@ run_az_capture() {
     return 0
   fi
   az "$@"
+}
+
+# ---------------------------------------------------------------------
+# The shared virtual network
+# ---------------------------------------------------------------------
+# subnet_prefix SLOT: the /24 for a subnet slot inside VNET_CIDR (a.b.0.0/16
+# gives a.b.SLOT.0/24). The slots are the portal template's, so both paths
+# produce the same layout and a support engineer sees one shape everywhere.
+subnet_prefix() {
+  local base="${VNET_CIDR%/*}" a b
+  a="${base%%.*}"; b="${base#*.}"; b="${b%%.*}"
+  printf '%s.%s.%s.0/24' "$a" "$b" "$1"
+}
+
+# Read-only probes. A dry run never asks Azure, so it reports "absent" and the
+# creates below are echoed; that is the rehearsal an operator wants to see.
+vnet_exists() {   # NAME RG
+  if [[ "$DRY_RUN" == "true" ]]; then return 1; fi
+  az network vnet show -g "$2" -n "$1" --query name -o tsv >/dev/null 2>&1
+}
+vnet_deployed_by() {   # NAME RG -> the deployedBy tag, or empty
+  local t=""
+  if [[ "$DRY_RUN" == "true" ]]; then printf ''; return 0; fi
+  t="$(az network vnet show -g "$2" -n "$1" --query "tags.deployedBy" -o tsv 2>/dev/null || true)"
+  if [[ "$t" == "None" ]]; then t=""; fi
+  printf '%s' "$t"
+}
+subnet_exists() {   # VNET RG SUBNET
+  if [[ "$DRY_RUN" == "true" ]]; then return 1; fi
+  az network vnet subnet show -g "$2" --vnet-name "$1" -n "$3" --query name -o tsv >/dev/null 2>&1
+}
+
+# ensure_shared_vnet: settle VNET_NAME and VNET_RG, build the network when the
+# deploy owns it, and make sure the five subnets exist before any template is
+# handed the name. Three cases, in order:
+#   1. --vnet-name given: the customer's network. Missing subnets are named,
+#      never invented: their address plan is theirs.
+#   2. Nothing given, but a vController already in the group built <vm>-vnet
+#      the old way: adopt it, so a re-run adds the KVO and vPB beside the
+#      vController instead of on a network it cannot reach.
+#   3. Nothing given, nothing to adopt: build cloudlens-vnet, tagged
+#      deployedBy=cloudlens-stack so the teardown knows it is ours.
+# Subnets are only created in a network this deploy built or adopted.
+ensure_shared_vnet() {
+  local owned=false missing="" pair="" sname="" slot="" tag="" why=""
+  if [[ -z "$VNET_RG" ]]; then VNET_RG="$RESOURCE_GROUP"; fi
+  if [[ -z "$VNET_NAME" ]]; then
+    if [[ -n "${EXISTING_VCTRL:-}" ]] && vnet_exists "${EXISTING_VCTRL}-vnet" "$VNET_RG"; then
+      VNET_NAME="${EXISTING_VCTRL}-vnet"; VNET_ADOPTED=true
+    else
+      VNET_NAME="$DEFAULT_VNET_NAME"
+    fi
+  fi
+  if vnet_exists "$VNET_NAME" "$VNET_RG"; then
+    tag="$(vnet_deployed_by "$VNET_NAME" "$VNET_RG")"
+    if [[ "$tag" == "cloudlens-stack" || "$VNET_ADOPTED" == "true" ]]; then owned=true; fi
+    if [[ "$VNET_ADOPTED" == "true" ]]; then why=" (the existing vController's network, adopted)"
+    elif [[ "$owned" == "true" ]]; then why=" (built by an earlier run of this deploy)"
+    else why=" (yours: subnets are checked, never created)"; fi
+    ok "Virtual network ${VNET_NAME} in ${VNET_RG} exists${why}"
+  else
+    if [[ "$VNET_GIVEN" == "true" ]]; then
+      fail "--vnet-name ${VNET_NAME} does not exist in ${VNET_RG}.
+  Check the name and --vnet-resource-group, or leave --vnet-name out and the
+  deploy builds ${DEFAULT_VNET_NAME} (${VNET_CIDR}) itself."
+    fi
+    if [[ "$DRY_RUN" == "true" ]]; then
+      dryrun_say "az network vnet create -g ${VNET_RG} -n ${VNET_NAME} --location ${LOCATION} --address-prefixes ${VNET_CIDR} --tags deployedBy=cloudlens-stack"
+    else
+      az network vnet create -g "$VNET_RG" -n "$VNET_NAME" --location "$LOCATION" \
+        --address-prefixes "$VNET_CIDR" --tags "deployedBy=cloudlens-stack" >/dev/null
+    fi
+    VNET_CREATED=true; owned=true
+    ok "Created virtual network ${VNET_NAME} (${VNET_CIDR}) in ${VNET_RG}"
+  fi
+  for pair in "${SUBNET_VCONTROLLER}:1" "${SUBNET_KVO}:2" "${SUBNET_VPB_MGMT}:10" \
+              "${SUBNET_VPB_INGRESS}:11" "${SUBNET_VPB_EGRESS}:12"; do
+    sname="${pair%%:*}"; slot="${pair##*:}"
+    if [[ "$VNET_CREATED" != "true" ]] && subnet_exists "$VNET_NAME" "$VNET_RG" "$sname"; then
+      note "subnet ${sname} present"
+      continue
+    fi
+    if [[ "$owned" != "true" ]]; then
+      missing="${missing}${missing:+ }${sname}"
+      continue
+    fi
+    if [[ "$DRY_RUN" == "true" ]]; then
+      dryrun_say "az network vnet subnet create -g ${VNET_RG} --vnet-name ${VNET_NAME} -n ${sname} --address-prefixes $(subnet_prefix "$slot")"
+    else
+      az network vnet subnet create -g "$VNET_RG" --vnet-name "$VNET_NAME" -n "$sname" \
+        --address-prefixes "$(subnet_prefix "$slot")" >/dev/null
+    fi
+    ok "subnet ${sname} $(subnet_prefix "$slot")"
+  done
+  if [[ -n "$missing" ]]; then
+    fail "Virtual network ${VNET_NAME} is not one this deploy built, and it lacks the
+  subnet(s) the templates expect: ${missing}.
+  Create them with exactly those names (any /24 inside its address space), or
+  leave --vnet-name out and the deploy builds its own network."
+  fi
+  return 0
 }
 
 # ---------------------------------------------------------------------
@@ -593,6 +734,11 @@ if [[ "$INTERACTIVE" == "true" && "$DRY_RUN" != "true" && "$ADMIN_CIDR_GIVEN" !=
   printf "  %-22s %s\n" "Admin CIDR:" "asked in Phase 3 (this machine's public /32 is offered)"
 else
   printf "  %-22s %s\n" "Admin CIDR:" "$ADMIN_CIDR"
+fi
+if [[ -n "$VNET_NAME" ]]; then
+  printf "  %-22s %s\n" "Network:" "existing VNet ${VNET_NAME} in ${VNET_RG:-${ARG_RG:-$DEFAULT_RG}} (must hold the five subnets)"
+else
+  printf "  %-22s %s\n" "Network:" "one shared VNet ${DEFAULT_VNET_NAME} ${VNET_CIDR}, five subnets, every appliance in it"
 fi
 printf "  %-22s %s (count: %d, size: %s)\n" "vController:" "$DEFAULT_CLMS_NAME" "$CLMS_COUNT" "$CLMS_VM_SIZE"
 printf "  %-22s %s (count: %d, size: %s)\n" "KVO:" "$DEFAULT_KVO_NAME" "$KVO_COUNT" "$KVO_VM_SIZE"
@@ -1265,6 +1411,12 @@ if [[ "$DRY_RUN" != "true" ]]; then
 fi
 
 # =====================================================================
+# Phase 5b: one shared virtual network, before any template is handed it
+# =====================================================================
+step "Phase 5b: Shared virtual network"
+ensure_shared_vnet
+
+# =====================================================================
 # Phase 6: vController deployment (formerly CLMS)
 # =====================================================================
 step "Phase 6: Deploy vController (formerly CLMS)"
@@ -1288,7 +1440,7 @@ for i in $(seq 1 "$CLMS_COUNT"); do
   else
     note "Deploying ARM template: ${CLMS_TEMPLATE_URL} (instance $vm_name)"
     if [[ "$DRY_RUN" == "true" ]]; then
-      dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-uri ${CLMS_TEMPLATE_URL} --parameters vmName=${vm_name} adminPassword=<hidden> vmSize=${CLMS_VM_SIZE} adminSourceCidr=${ADMIN_CIDR}"
+      dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-uri ${CLMS_TEMPLATE_URL} --parameters vmName=${vm_name} adminPassword=<hidden> vmSize=${CLMS_VM_SIZE} adminSourceCidr=${ADMIN_CIDR} vnetName=${VNET_NAME} subnetName=${SUBNET_VCONTROLLER}"
       pip="203.0.113.$((10+i))"
     else
       az deployment group create \
@@ -1301,6 +1453,9 @@ for i in $(seq 1 "$CLMS_COUNT"); do
             adminPassword="$ADMIN_PASSWORD" \
             vmSize="$CLMS_VM_SIZE" \
             adminSourceCidr="$ADMIN_CIDR" \
+            vnetName="$VNET_NAME" \
+            existingVnetResourceGroup="$VNET_RG" \
+            subnetName="$SUBNET_VCONTROLLER" \
         --query 'properties.outputs' -o json > /tmp/clms-outputs.json
       pip=$(python3 -c "import json,sys; d=json.load(open('/tmp/clms-outputs.json')); print(d.get('vcontrollerPublicIp', d.get('clmsPublicIp', {})).get('value', 'unknown'))" 2>/dev/null || echo "unknown")
     fi
@@ -1370,7 +1525,7 @@ if [[ "$DEPLOY_KVO" == "true" ]]; then
     else
       note "Deploying ARM template: ${KVO_TEMPLATE_URL} (instance $vm_name)"
       if [[ "$DRY_RUN" == "true" ]]; then
-        dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-uri ${KVO_TEMPLATE_URL} --parameters vmName=${vm_name} adminPassword=<hidden> vmSize=${KVO_VM_SIZE} adminSourceCidr=${ADMIN_CIDR}"
+        dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-uri ${KVO_TEMPLATE_URL} --parameters vmName=${vm_name} adminPassword=<hidden> vmSize=${KVO_VM_SIZE} adminSourceCidr=${ADMIN_CIDR} vnetName=${VNET_NAME} subnetName=${SUBNET_KVO}"
         pip="203.0.113.$((15+i))"
       else
         az deployment group create \
@@ -1383,6 +1538,9 @@ if [[ "$DEPLOY_KVO" == "true" ]]; then
               adminPassword="$ADMIN_PASSWORD" \
               vmSize="$KVO_VM_SIZE" \
               adminSourceCidr="$ADMIN_CIDR" \
+              vnetName="$VNET_NAME" \
+              existingVnetResourceGroup="$VNET_RG" \
+              subnetName="$SUBNET_KVO" \
           --query 'properties.outputs' -o json > /tmp/kvo-outputs.json
         pip=$(python3 -c "import json; print(json.load(open('/tmp/kvo-outputs.json'))['kvoPublicIp']['value'])" 2>/dev/null || echo "unknown")
       fi
@@ -1424,7 +1582,7 @@ if [[ "$DEPLOY_VPB" == "true" ]]; then
     else
       note "Deploying ARM template: ${VPB_TEMPLATE_URL} (instance $vm_name)"
       if [[ "$DRY_RUN" == "true" ]]; then
-        dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-uri ${VPB_TEMPLATE_URL} --parameters vmName=${vm_name} adminPassword=<hidden> vmSize=${VPB_VM_SIZE} ingressNicCount=${VPB_INGRESS_NICS} egressNicCount=${VPB_EGRESS_NICS} adminSourceCidr=${ADMIN_CIDR}"
+        dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-uri ${VPB_TEMPLATE_URL} --parameters vmName=${vm_name} adminPassword=<hidden> vmSize=${VPB_VM_SIZE} ingressNicCount=${VPB_INGRESS_NICS} egressNicCount=${VPB_EGRESS_NICS} adminSourceCidr=${ADMIN_CIDR} vnetName=${VNET_NAME}"
         pip="203.0.113.$((20+i))"
       else
         az deployment group create \
@@ -1439,6 +1597,8 @@ if [[ "$DEPLOY_VPB" == "true" ]]; then
               ingressNicCount="$VPB_INGRESS_NICS" \
               egressNicCount="$VPB_EGRESS_NICS" \
               adminSourceCidr="$ADMIN_CIDR" \
+              vnetName="$VNET_NAME" \
+              existingVnetResourceGroup="$VNET_RG" \
           --query 'properties.outputs' -o json > /tmp/vpb-outputs.json
         pip=$(python3 -c "import json; print(json.load(open('/tmp/vpb-outputs.json'))['vpbPublicIp']['value'])" 2>/dev/null || echo "unknown")
       fi
@@ -1987,6 +2147,7 @@ echo "vController UI:      https://${CLMS_PUBLIC_IP}"
 [[ "$DEPLOY_KVO" == "true" ]] && echo "KVO UI:              https://${KVO_PUBLIC_IP}"
 [[ "$DEPLOY_VPB" == "true" ]] && echo "vPB management:      ${VPB_PUBLIC_IP}"
 echo
+note "Network: ${VNET_NAME} in ${VNET_RG} (${SUBNET_VCONTROLLER}, ${SUBNET_KVO}, ${SUBNET_VPB_MGMT}, ${SUBNET_VPB_INGRESS}, ${SUBNET_VPB_EGRESS})"
 note "Tear down: curl -sSL ${REPO_RAW}/deploy/teardown-stack.sh | bash -s -- --resource-group ${RESOURCE_GROUP}"
 echo
 ok "Done."
