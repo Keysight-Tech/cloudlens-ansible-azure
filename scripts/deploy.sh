@@ -69,7 +69,7 @@ echo "─── Step 1: Discovering Azure VMs ───"
 ansible-inventory -i inventory/azure_rm.yaml --graph 2>&1 | tee inventory.txt
 echo ""
 read -rp "Continue with deployment? [y/N] " confirm
-if [[ "${confirm,,}" != "y" ]]; then
+if [[ "$(printf '%s' "$confirm" | tr '[:upper:]' '[:lower:]')" != "y" ]]; then
   echo "Cancelled."
   exit 0
 fi

@@ -19,7 +19,7 @@ fi
 SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID:-$(az account show --query id -o tsv)}"
 echo "Subscription: $SUBSCRIPTION_ID"
 read -rp "Use this subscription? [Y/n] " confirm
-if [[ "${confirm,,}" == "n" ]]; then
+if [[ "$(printf '%s' "$confirm" | tr '[:upper:]' '[:lower:]')" == "n" ]]; then
   az account list -o table
   read -rp "Enter subscription ID: " SUBSCRIPTION_ID
   az account set --subscription "$SUBSCRIPTION_ID"

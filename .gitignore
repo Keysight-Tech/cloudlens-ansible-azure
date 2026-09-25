@@ -40,3 +40,7 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 demo/run-demo.sh
+
+# Run artefacts written by deploy-stack.sh into the current directory
+cloudlens-deploy-stack.log
+cloudlens-deploy-summary.txt

@@ -26,6 +26,7 @@
 #   --location       REGION (e.g. eastus2)
 #   --no-vpb         Skip vPB deployment
 #   --no-sensors     Skip sensor chain at the end
+#   --admin-cidr     Source CIDR allowed to reach SSH/HTTPS (asked if absent)
 #   -h | --help      Show this banner and exit
 # =====================================================================
 set -euo pipefail
@@ -91,6 +92,16 @@ DEFAULT_CLMS_NAME="${CLOUDLENS_VCONTROLLER_NAME:-vcontroller}"
 DEFAULT_KVO_NAME="${CLOUDLENS_KVO_NAME:-kvo}"
 DEFAULT_VPB_NAME="${CLOUDLENS_VPB_NAME:-vpb}"
 DEFAULT_ADMIN_USER="${CLOUDLENS_ADMIN_USER:-azureuser}"
+
+# Who may reach the appliances: the source CIDR each template's NSG allows on
+# SSH (22), vPB SSH (9022) and HTTPS (443). The templates default to "*"
+# (anywhere), and an SSH rule open to * is the first finding a CIS scan
+# reports, so the interview asks for a range instead of silently taking that
+# default. Set CLOUDLENS_ADMIN_CIDR or --admin-cidr to answer it up front.
+# 0.0.0.0/0 is accepted and mapped to "*", the spelling the NSG rule expects.
+ADMIN_CIDR="${CLOUDLENS_ADMIN_CIDR:-*}"
+ADMIN_CIDR_GIVEN=false
+if [[ -n "${CLOUDLENS_ADMIN_CIDR:-}" ]]; then ADMIN_CIDR_GIVEN=true; fi
 
 CLMS_VM_SIZE="${CLOUDLENS_VCONTROLLER_SIZE:-Standard_D4s_v5}"
 KVO_VM_SIZE="${CLOUDLENS_KVO_SIZE:-Standard_D4s_v5}"
@@ -186,6 +197,93 @@ dryrun_say() { echo -e "${C_YELLOW}[dry-run]${C_RESET} $1"; }
 # POSIX-portable lowercase (bash 3.2 compatible)
 to_lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 
+# Prompt with a default. Reads the terminal only when there is one, so a
+# curl | bash run with no tty takes the default instead of dying on EOF.
+# The answer goes to stdout so callers can capture it.
+ask() {
+  local prompt="$1" def="${2:-}" ans=""
+  if [[ "$INTERACTIVE" == "true" ]]; then
+    read -rp "$prompt" ans || true
+  fi
+  printf '%s' "${ans:-$def}"
+}
+
+# An IPv4 CIDR, strictly: four octets 0-255 and a prefix 0-32. Typos here are
+# silent and expensive. "10.0.0.0/8 " or "1.2.3.4" (no prefix) would otherwise
+# reach Azure and fail the deployment minutes in, or worse, be accepted as
+# something wider than intended.
+valid_cidr() {
+  local c="${1:-}" ip pfx o
+  [[ "$c" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]] || return 1
+  ip="${c%/*}"; pfx="${c#*/}"
+  [[ "$pfx" -ge 0 && "$pfx" -le 32 ]] || return 1
+  local IFS=.
+  for o in $ip; do
+    [[ "$o" -ge 0 && "$o" -le 255 ]] || return 1
+  done
+  return 0
+}
+
+# Who may reach the appliances. Every template builds its NSG from this one
+# value, so it is asked once, before any of them deploys.
+#
+# The default offered is this machine's public address as a /32. That is the
+# answer a lone operator wants, and seeing it spelled out is what makes someone
+# paste their corporate range instead of pressing Enter on "anywhere". Two
+# lookup endpoints are tried because one being down must not quietly turn that
+# /32 default into "*".
+#
+# "*" is the NSG spelling of anywhere; 0.0.0.0/0 is accepted as the same thing
+# and normalised so the template only ever sees one spelling. valid_cidr stays
+# strict, so "*" is recognised before it is consulted.
+#
+# Echoes the chosen value on stdout; everything else goes to stderr so the
+# caller can capture it.
+ask_admin_cidr() {
+  local detected="" def="*" ans="" tries=0 url
+  for url in https://api.ipify.org https://checkip.amazonaws.com; do
+    detected="$(curl -fsS --max-time 4 "$url" 2>/dev/null | tr -d '[:space:]' || true)"
+    if [[ -n "$detected" ]] && valid_cidr "${detected}/32"; then
+      def="${detected}/32"
+      break
+    fi
+    detected=""
+  done
+  echo >&2
+  echo "Which network may reach the CloudLens appliances?" >&2
+  echo "  Source CIDR allowed to reach SSH (22), vPB SSH (9022) and HTTPS (443)." >&2
+  echo "  Mirrored traffic (VXLAN) is allowed from your virtual network separately." >&2
+  if [[ "$def" != "*" ]]; then
+    echo "  This machine appears to be ${detected}, so ${def} is offered." >&2
+  else
+    echo "  Your public address could not be read, so answer with your own range." >&2
+  fi
+  echo "  Enter a CIDR such as 203.0.113.10/32 or 10.0.0.0/8. Answering * (or" >&2
+  echo "  0.0.0.0/0) opens these ports to the whole internet; most policies forbid it." >&2
+  while [[ "$tries" -lt 3 ]]; do
+    ans="$(ask "  Admin CIDR [${def}]: " "$def")"
+    if [[ "$ans" == "0.0.0.0/0" ]]; then
+      ans="*"
+    fi
+    if [[ "$ans" == "*" ]] || valid_cidr "$ans"; then
+      if [[ "$ans" == "*" ]]; then
+        # warn writes on stdout, which here is the return value: redirect it
+        # or the warning text ends up inside ADMIN_CIDR.
+        warn "SSH will be reachable from any address on the internet." >&2
+      fi
+      printf '%s' "$ans"
+      return 0
+    fi
+    tries=$((tries+1))
+    echo "  ${ans} is not an IPv4 CIDR (four octets and a prefix, like 10.0.0.0/8)." >&2
+  done
+  warn "No usable CIDR after 3 tries; using ${def}." >&2
+  if [[ "$def" == "*" ]]; then
+    warn "SSH will be reachable from any address on the internet." >&2
+  fi
+  printf '%s' "$def"
+}
+
 # ---------------------------------------------------------------------
 # Logging: tee everything to log file
 # ---------------------------------------------------------------------
@@ -203,6 +301,8 @@ Usage:
 
 Options:
   --dry-run                 Walk through prompts and print would-be az commands
+  --resume                  Re-run against the same resource group; products
+                            already there are detected and reused
                             without touching Azure. Safe to run anywhere.
 
 Naming + region (all have sensible defaults, all overridable):
@@ -212,6 +312,12 @@ Naming + region (all have sensible defaults, all overridable):
   --vcontroller-name NAME   vController VM prefix    (default: vcontroller)
   --kvo-name NAME           KVO VM prefix            (default: kvo)
   --vpb-name NAME           vPB VM prefix            (default: vpb)
+
+Access (who may reach the appliances):
+  --admin-cidr CIDR         Source CIDR allowed to reach SSH (22), vPB SSH
+                            (9022) and HTTPS (443). Asked interactively when
+                            absent; this machine's public /32 is offered.
+                            * (or 0.0.0.0/0) means anywhere.  (default: *)
 
 VM sizes (override if your prod workload is bigger):
   --vcontroller-size SKU    vController VM size      (default: Standard_D4s_v5)
@@ -240,7 +346,7 @@ Toggles:
   -h, --help                Show this help
 
 Env-var overrides (alternative to flags, useful for curl | bash):
-  CLOUDLENS_RG, CLOUDLENS_REGION, CLOUDLENS_ADMIN_USER,
+  CLOUDLENS_RG, CLOUDLENS_REGION, CLOUDLENS_ADMIN_USER, CLOUDLENS_ADMIN_CIDR,
   CLOUDLENS_VCONTROLLER_NAME / _SIZE / _COUNT,
   CLOUDLENS_KVO_NAME / _SIZE / _COUNT,
   CLOUDLENS_VPB_NAME / _SIZE / _COUNT,
@@ -256,7 +362,7 @@ Example (full prod-style invocation):
 What it does (phases):
   1. Banner + environment detection (Cloud Shell vs local)
   2. Pre-flight checks (az CLI, subscription access, quota)
-  3. Customer input (resource group, region, admin password)
+  3. Customer input (resource group, region, admin password, admin CIDR)
   4. Marketplace terms acceptance (vController + KVO + vPB as selected)
   5. Resource group creation (skipped if exists)
   6. vController deployment via ARM template (formerly CLMS)
@@ -283,6 +389,11 @@ HLP
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN=true; shift ;;
+    # The script's own guidance says "re-run with --resume" after a manual step.
+    # Re-running against the same resource group already detects and reuses the
+    # products it finds there, so the flag only has to be accepted: without this
+    # line that printed advice ended in "Unknown argument: --resume".
+    --resume) shift ;;
 
     # Toggles
     --no-kvo) DEPLOY_KVO=false; shift ;;
@@ -303,6 +414,9 @@ while [[ $# -gt 0 ]]; do
     --resource-group) ARG_RG="$2"; shift 2 ;;
     --location) ARG_LOCATION="$2"; shift 2 ;;
     --admin-user) DEFAULT_ADMIN_USER="$2"; shift 2 ;;
+
+    # Access
+    --admin-cidr) ADMIN_CIDR="$2"; ADMIN_CIDR_GIVEN=true; shift 2 ;;
     --vcontroller-name) DEFAULT_CLMS_NAME="$2"; shift 2 ;;
     --kvo-name) DEFAULT_KVO_NAME="$2"; shift 2 ;;
     --vpb-name) DEFAULT_VPB_NAME="$2"; shift 2 ;;
@@ -334,6 +448,14 @@ for v in CLMS_COUNT:1:3 KVO_COUNT:1:2 VPB_COUNT:1:5 VPB_INGRESS_NICS:1:3 VPB_EGR
     fail "$name must be an integer between $lo and $hi (got '$val'). Run with -h for usage."
   fi
 done
+
+# A CIDR handed in by flag or env var skips the interview, so it gets the same
+# check the interview applies: a typo would otherwise reach ARM and fail the
+# deployment minutes in, or open a wider range than intended.
+if [[ "$ADMIN_CIDR" == "0.0.0.0/0" ]]; then ADMIN_CIDR="*"; fi
+if [[ "$ADMIN_CIDR" != "*" ]] && ! valid_cidr "$ADMIN_CIDR"; then
+  fail "--admin-cidr / CLOUDLENS_ADMIN_CIDR must be an IPv4 CIDR like 203.0.113.10/32, or * for anywhere (got '$ADMIN_CIDR')."
+fi
 
 # Use ADMIN_USERNAME (already declared) for the OS admin user from now on
 ADMIN_USERNAME="$DEFAULT_ADMIN_USER"
@@ -465,6 +587,13 @@ printf "${C_BOLD}Resolved configuration (override via flags or CLOUDLENS_* env v
 printf "  %-22s %s\n" "Resource group:" "${ARG_RG:-$DEFAULT_RG}"
 printf "  %-22s %s\n" "Location:" "${ARG_LOCATION:-$DEFAULT_LOCATION}"
 printf "  %-22s %s\n" "Admin username:" "$DEFAULT_ADMIN_USER"
+# This block prints before Phase 3, so say when the value is still to be asked
+# rather than show a "*" the interview is about to replace.
+if [[ "$INTERACTIVE" == "true" && "$DRY_RUN" != "true" && "$ADMIN_CIDR_GIVEN" != "true" ]]; then
+  printf "  %-22s %s\n" "Admin CIDR:" "asked in Phase 3 (this machine's public /32 is offered)"
+else
+  printf "  %-22s %s\n" "Admin CIDR:" "$ADMIN_CIDR"
+fi
 printf "  %-22s %s (count: %d, size: %s)\n" "vController:" "$DEFAULT_CLMS_NAME" "$CLMS_COUNT" "$CLMS_VM_SIZE"
 printf "  %-22s %s (count: %d, size: %s)\n" "KVO:" "$DEFAULT_KVO_NAME" "$KVO_COUNT" "$KVO_VM_SIZE"
 printf "  %-22s %s (count: %d, size: %s, ingress NICs: %d, egress NICs: %d)\n" \
@@ -692,6 +821,18 @@ if [[ -z "$input_pw" ]]; then
 else
   ADMIN_PASSWORD="$input_pw"
   ok "Using supplied password"
+fi
+
+# Who may reach the appliances. Skipped when --admin-cidr or
+# CLOUDLENS_ADMIN_CIDR already answered it, and in dry-run or non-interactive
+# runs, which keep the "*" the templates default to (and say so).
+if [[ "$INTERACTIVE" == "true" && "$DRY_RUN" != "true" && "$ADMIN_CIDR_GIVEN" != "true" ]]; then
+  ADMIN_CIDR="$(ask_admin_cidr)"
+  ok "Admin CIDR: ${ADMIN_CIDR}"
+elif [[ "$ADMIN_CIDR" == "*" ]]; then
+  warn "Admin CIDR: * (SSH and HTTPS reachable from any address; narrow it with --admin-cidr or CLOUDLENS_ADMIN_CIDR)"
+else
+  ok "Admin CIDR: ${ADMIN_CIDR} (from --admin-cidr / CLOUDLENS_ADMIN_CIDR)"
 fi
 
 # Deploy KVO?
@@ -1147,7 +1288,7 @@ for i in $(seq 1 "$CLMS_COUNT"); do
   else
     note "Deploying ARM template: ${CLMS_TEMPLATE_URL} (instance $vm_name)"
     if [[ "$DRY_RUN" == "true" ]]; then
-      dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-uri ${CLMS_TEMPLATE_URL} --parameters vmName=${vm_name} adminPassword=<hidden> vmSize=${CLMS_VM_SIZE}"
+      dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-uri ${CLMS_TEMPLATE_URL} --parameters vmName=${vm_name} adminPassword=<hidden> vmSize=${CLMS_VM_SIZE} adminSourceCidr=${ADMIN_CIDR}"
       pip="203.0.113.$((10+i))"
     else
       az deployment group create \
@@ -1159,6 +1300,7 @@ for i in $(seq 1 "$CLMS_COUNT"); do
             adminUsername="$ADMIN_USERNAME" \
             adminPassword="$ADMIN_PASSWORD" \
             vmSize="$CLMS_VM_SIZE" \
+            adminSourceCidr="$ADMIN_CIDR" \
         --query 'properties.outputs' -o json > /tmp/clms-outputs.json
       pip=$(python3 -c "import json,sys; d=json.load(open('/tmp/clms-outputs.json')); print(d.get('vcontrollerPublicIp', d.get('clmsPublicIp', {})).get('value', 'unknown'))" 2>/dev/null || echo "unknown")
     fi
@@ -1228,7 +1370,7 @@ if [[ "$DEPLOY_KVO" == "true" ]]; then
     else
       note "Deploying ARM template: ${KVO_TEMPLATE_URL} (instance $vm_name)"
       if [[ "$DRY_RUN" == "true" ]]; then
-        dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-uri ${KVO_TEMPLATE_URL} --parameters vmName=${vm_name} adminPassword=<hidden> vmSize=${KVO_VM_SIZE}"
+        dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-uri ${KVO_TEMPLATE_URL} --parameters vmName=${vm_name} adminPassword=<hidden> vmSize=${KVO_VM_SIZE} adminSourceCidr=${ADMIN_CIDR}"
         pip="203.0.113.$((15+i))"
       else
         az deployment group create \
@@ -1240,6 +1382,7 @@ if [[ "$DEPLOY_KVO" == "true" ]]; then
               adminUsername="$ADMIN_USERNAME" \
               adminPassword="$ADMIN_PASSWORD" \
               vmSize="$KVO_VM_SIZE" \
+              adminSourceCidr="$ADMIN_CIDR" \
           --query 'properties.outputs' -o json > /tmp/kvo-outputs.json
         pip=$(python3 -c "import json; print(json.load(open('/tmp/kvo-outputs.json'))['kvoPublicIp']['value'])" 2>/dev/null || echo "unknown")
       fi
@@ -1281,7 +1424,7 @@ if [[ "$DEPLOY_VPB" == "true" ]]; then
     else
       note "Deploying ARM template: ${VPB_TEMPLATE_URL} (instance $vm_name)"
       if [[ "$DRY_RUN" == "true" ]]; then
-        dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-uri ${VPB_TEMPLATE_URL} --parameters vmName=${vm_name} adminPassword=<hidden> vmSize=${VPB_VM_SIZE} ingressNicCount=${VPB_INGRESS_NICS} egressNicCount=${VPB_EGRESS_NICS}"
+        dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-uri ${VPB_TEMPLATE_URL} --parameters vmName=${vm_name} adminPassword=<hidden> vmSize=${VPB_VM_SIZE} ingressNicCount=${VPB_INGRESS_NICS} egressNicCount=${VPB_EGRESS_NICS} adminSourceCidr=${ADMIN_CIDR}"
         pip="203.0.113.$((20+i))"
       else
         az deployment group create \
@@ -1295,6 +1438,7 @@ if [[ "$DEPLOY_VPB" == "true" ]]; then
               vmSize="$VPB_VM_SIZE" \
               ingressNicCount="$VPB_INGRESS_NICS" \
               egressNicCount="$VPB_EGRESS_NICS" \
+              adminSourceCidr="$ADMIN_CIDR" \
           --query 'properties.outputs' -o json > /tmp/vpb-outputs.json
         pip=$(python3 -c "import json; print(json.load(open('/tmp/vpb-outputs.json'))['vpbPublicIp']['value'])" 2>/dev/null || echo "unknown")
       fi
@@ -1842,6 +1986,8 @@ echo "Log saved to:        ${LOG_FILE}"
 echo "vController UI:      https://${CLMS_PUBLIC_IP}"
 [[ "$DEPLOY_KVO" == "true" ]] && echo "KVO UI:              https://${KVO_PUBLIC_IP}"
 [[ "$DEPLOY_VPB" == "true" ]] && echo "vPB management:      ${VPB_PUBLIC_IP}"
+echo
+note "Tear down: curl -sSL ${REPO_RAW}/deploy/teardown-stack.sh | bash -s -- --resource-group ${RESOURCE_GROUP}"
 echo
 ok "Done."
 trap - ERR

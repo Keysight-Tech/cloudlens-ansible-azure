@@ -26,7 +26,7 @@ ansible-inventory -i inventory/azure_rm.yaml --graph
 
 echo ""
 read -rp "Continue with cleanup? [y/N] " confirm
-if [[ "${confirm,,}" != "y" ]]; then
+if [[ "$(printf '%s' "$confirm" | tr '[:upper:]' '[:lower:]')" != "y" ]]; then
   echo "Cancelled."
   exit 0
 fi
