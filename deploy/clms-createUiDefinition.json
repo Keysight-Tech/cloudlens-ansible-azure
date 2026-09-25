@@ -197,6 +197,19 @@
               "required": true
             },
             "visible": "[equals(steps('networkConfig').vnetMode, 'existing')]"
+          },
+          {
+            "name": "adminSourceCidr",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Admin source CIDR",
+            "placeholder": "203.0.113.10/32",
+            "toolTip": "Source CIDR allowed to reach SSH (22), vPB SSH (9022) and HTTPS (443). Use your admin network, VPN egress or bastion range. Entering * opens these ports to the whole internet.",
+            "constraints": {
+              "required": true,
+              "regex": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$|^\\*$",
+              "validationMessage": "An IPv4 CIDR such as 203.0.113.10/32, or * for anywhere"
+            },
+            "visible": true
           }
         ]
       }
@@ -211,6 +224,7 @@
       "existingVnetResourceGroup": "[if(equals(steps('networkConfig').vnetMode, 'existing'), steps('networkConfig').existingVnetResourceGroup, '')]",
       "subnetName": "[if(equals(steps('networkConfig').vnetMode, 'existing'), steps('networkConfig').existingSubnetName, '')]",
       "addressSpace": "[if(equals(steps('networkConfig').vnetMode, 'new'), steps('networkConfig').addressSpace, '10.50.0.0/16')]",
+      "adminSourceCidr": "[steps('networkConfig').adminSourceCidr]",
       "subnetPrefix": "[if(equals(steps('networkConfig').vnetMode, 'new'), steps('networkConfig').subnetPrefix, '10.50.1.0/24')]"
     }
   }

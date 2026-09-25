@@ -111,6 +111,20 @@
       "metadata": {
         "description": "Number of egress NICs (forward processed traffic to monitoring tools). Default 1. Use 2 or 3 to fan out to multiple tools. With more than 4 NICs total you must select Standard_D16s_v3 or larger."
       }
+    },
+    "adminSourceCidr": {
+      "type": "string",
+      "defaultValue": "*",
+      "metadata": {
+        "description": "Source CIDR allowed to reach SSH (22), vPB SSH (9022) and HTTPS (443). Narrow it to your admin network. '*' is the whole internet and most policies forbid it."
+      }
+    },
+    "sensorSourcePrefix": {
+      "type": "string",
+      "defaultValue": "VirtualNetwork",
+      "metadata": {
+        "description": "Source allowed to send mirrored traffic (VXLAN 4789, 10800-10801) to the vPB. VirtualNetwork covers this VNet, peered VNets and on-premises ranges reached through a gateway."
+      }
     }
   },
   "variables": {
@@ -129,13 +143,13 @@
     "imagePublisher": "keysight-technologies-cloudlens",
     "imageOffer": "keysight-cloudlens-virtual-packet-broker",
     "imageSku": "cloudlens-virtual-packet-broker-3-15-0_1",
-    "mgmtNicArr": "[array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', variables('mgmtNicName')),'\",\"properties\":{\"primary\":true}}')))]",
-    "ingressNic1Arr": "[if(greaterOrEquals(parameters('ingressNicCount'), 1), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-ingress-1')),'\",\"properties\":{\"primary\":false}}'))), json('[]'))]",
-    "ingressNic2Arr": "[if(greaterOrEquals(parameters('ingressNicCount'), 2), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-ingress-2')),'\",\"properties\":{\"primary\":false}}'))), json('[]'))]",
-    "ingressNic3Arr": "[if(greaterOrEquals(parameters('ingressNicCount'), 3), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-ingress-3')),'\",\"properties\":{\"primary\":false}}'))), json('[]'))]",
-    "egressNic1Arr": "[if(greaterOrEquals(parameters('egressNicCount'), 1), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-egress-1')),'\",\"properties\":{\"primary\":false}}'))), json('[]'))]",
-    "egressNic2Arr": "[if(greaterOrEquals(parameters('egressNicCount'), 2), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-egress-2')),'\",\"properties\":{\"primary\":false}}'))), json('[]'))]",
-    "egressNic3Arr": "[if(greaterOrEquals(parameters('egressNicCount'), 3), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-egress-3')),'\",\"properties\":{\"primary\":false}}'))), json('[]'))]",
+    "mgmtNicArr": "[array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', variables('mgmtNicName')),'\",\"properties\":{\"primary\":true,\"deleteOption\":\"Delete\"}}')))]",
+    "ingressNic1Arr": "[if(greaterOrEquals(parameters('ingressNicCount'), 1), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-ingress-1')),'\",\"properties\":{\"primary\":false,\"deleteOption\":\"Delete\"}}'))), json('[]'))]",
+    "ingressNic2Arr": "[if(greaterOrEquals(parameters('ingressNicCount'), 2), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-ingress-2')),'\",\"properties\":{\"primary\":false,\"deleteOption\":\"Delete\"}}'))), json('[]'))]",
+    "ingressNic3Arr": "[if(greaterOrEquals(parameters('ingressNicCount'), 3), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-ingress-3')),'\",\"properties\":{\"primary\":false,\"deleteOption\":\"Delete\"}}'))), json('[]'))]",
+    "egressNic1Arr": "[if(greaterOrEquals(parameters('egressNicCount'), 1), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-egress-1')),'\",\"properties\":{\"primary\":false,\"deleteOption\":\"Delete\"}}'))), json('[]'))]",
+    "egressNic2Arr": "[if(greaterOrEquals(parameters('egressNicCount'), 2), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-egress-2')),'\",\"properties\":{\"primary\":false,\"deleteOption\":\"Delete\"}}'))), json('[]'))]",
+    "egressNic3Arr": "[if(greaterOrEquals(parameters('egressNicCount'), 3), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-egress-3')),'\",\"properties\":{\"primary\":false,\"deleteOption\":\"Delete\"}}'))), json('[]'))]",
     "allNicsArr": "[concat(variables('mgmtNicArr'),variables('ingressNic1Arr'),variables('ingressNic2Arr'),variables('ingressNic3Arr'),variables('egressNic1Arr'),variables('egressNic2Arr'),variables('egressNic3Arr'))]"
   },
   "resources": [
@@ -168,7 +182,7 @@
               "protocol": "Tcp",
               "access": "Allow",
               "direction": "Inbound",
-              "sourceAddressPrefix": "*",
+              "sourceAddressPrefix": "[parameters('adminSourceCidr')]",
               "sourcePortRange": "*",
               "destinationAddressPrefix": "*",
               "destinationPortRange": "22"
@@ -181,7 +195,7 @@
               "protocol": "Tcp",
               "access": "Allow",
               "direction": "Inbound",
-              "sourceAddressPrefix": "*",
+              "sourceAddressPrefix": "[parameters('adminSourceCidr')]",
               "sourcePortRange": "*",
               "destinationAddressPrefix": "*",
               "destinationPortRange": "9022"
@@ -194,7 +208,7 @@
               "protocol": "Tcp",
               "access": "Allow",
               "direction": "Inbound",
-              "sourceAddressPrefix": "*",
+              "sourceAddressPrefix": "[parameters('adminSourceCidr')]",
               "sourcePortRange": "*",
               "destinationAddressPrefix": "*",
               "destinationPortRange": "443"
@@ -207,7 +221,7 @@
               "protocol": "Udp",
               "access": "Allow",
               "direction": "Inbound",
-              "sourceAddressPrefix": "*",
+              "sourceAddressPrefix": "[parameters('sensorSourcePrefix')]",
               "sourcePortRange": "*",
               "destinationAddressPrefix": "*",
               "destinationPortRange": "4789"
@@ -220,7 +234,7 @@
               "protocol": "Udp",
               "access": "Allow",
               "direction": "Inbound",
-              "sourceAddressPrefix": "*",
+              "sourceAddressPrefix": "[parameters('sensorSourcePrefix')]",
               "sourcePortRange": "*",
               "destinationAddressPrefix": "*",
               "destinationPortRange": "10800-10801"
@@ -283,7 +297,10 @@
                 "id": "[variables('mgmtSubnetId')]"
               },
               "publicIPAddress": {
-                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]"
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]",
+                "properties": {
+                  "deleteOption": "Delete"
+                }
               },
               "privateIPAllocationMethod": "Dynamic"
             }
@@ -383,6 +400,7 @@
           },
           "osDisk": {
             "createOption": "FromImage",
+            "deleteOption": "Delete",
             "managedDisk": {
               "storageAccountType": "Premium_LRS"
             }

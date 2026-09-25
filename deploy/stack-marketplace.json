@@ -155,6 +155,20 @@
       "metadata": {
         "description": "Optional. Custom base name for vpb. Blank = use <namePrefix>-vpb. When vpbCount > 1 the suffix -1, -2, -3 is appended automatically."
       }
+    },
+    "adminSourceCidr": {
+      "type": "string",
+      "defaultValue": "*",
+      "metadata": {
+        "description": "Source CIDR allowed to reach SSH (22), vPB SSH (9022) and HTTPS (443). Narrow it to your admin network. '*' is the whole internet and most policies forbid it."
+      }
+    },
+    "sensorSourcePrefix": {
+      "type": "string",
+      "defaultValue": "VirtualNetwork",
+      "metadata": {
+        "description": "Source allowed to send mirrored traffic (VXLAN 4789, 10800-10801) to the vPB. VirtualNetwork covers this VNet, peered VNets and on-premises ranges reached through a gateway."
+      }
     }
   },
   "variables": {
@@ -252,6 +266,9 @@
           },
           "subnetName": {
             "value": "[variables('vcontrollerSubnetName')]"
+          },
+          "adminSourceCidr": {
+            "value": "[parameters('adminSourceCidr')]"
           }
         }
       }
@@ -294,6 +311,9 @@
           },
           "subnetName": {
             "value": "[variables('kvoSubnetName')]"
+          },
+          "adminSourceCidr": {
+            "value": "[parameters('adminSourceCidr')]"
           }
         }
       }
@@ -339,6 +359,12 @@
           },
           "egressNicCount": {
             "value": "[parameters('vpbEgressNicCount')]"
+          },
+          "adminSourceCidr": {
+            "value": "[parameters('adminSourceCidr')]"
+          },
+          "sensorSourcePrefix": {
+            "value": "[parameters('sensorSourcePrefix')]"
           }
         }
       }

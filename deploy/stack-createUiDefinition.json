@@ -391,6 +391,19 @@
                   "regex": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
                   "validationMessage": "Enter a valid CIDR (for example, 10.50.0.0/16)."
                 }
+              },
+              {
+                "name": "adminSourceCidr",
+                "type": "Microsoft.Common.TextBox",
+                "label": "Admin source CIDR",
+                "placeholder": "203.0.113.10/32",
+                "toolTip": "Source CIDR allowed to reach SSH (22), vPB SSH (9022) and HTTPS (443). Use your admin network, VPN egress or bastion range. Entering * opens these ports to the whole internet.",
+                "constraints": {
+                  "required": true,
+                  "regex": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$|^\\*$",
+                  "validationMessage": "An IPv4 CIDR such as 203.0.113.10/32, or * for anywhere"
+                },
+                "visible": true
               }
             ]
           }
@@ -413,7 +426,9 @@
       "vpbCount": "[steps('stackConfig').countsHeader.vpbCount]",
       "vcontrollerVmName": "[steps('stackConfig').vcontrollerVmName]",
       "kvoVmName": "[steps('stackConfig').kvoVmName]",
-      "vpbVmName": "[steps('stackConfig').vpbVmName]"
+      "vpbVmName": "[steps('stackConfig').vpbVmName]",
+      "adminSourceCidr": "[steps('stackConfig').networkHeader.adminSourceCidr]",
+      "sensorSourcePrefix": "VirtualNetwork"
     }
   }
 }

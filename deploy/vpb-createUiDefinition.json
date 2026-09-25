@@ -265,6 +265,19 @@
               "required": false
             },
             "visible": "[equals(steps('networkConfig').vnetMode, 'existing')]"
+          },
+          {
+            "name": "adminSourceCidr",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Admin source CIDR",
+            "placeholder": "203.0.113.10/32",
+            "toolTip": "Source CIDR allowed to reach SSH (22), vPB SSH (9022) and HTTPS (443). Use your admin network, VPN egress or bastion range. Entering * opens these ports to the whole internet.",
+            "constraints": {
+              "required": true,
+              "regex": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$|^\\*$",
+              "validationMessage": "An IPv4 CIDR such as 203.0.113.10/32, or * for anywhere"
+            },
+            "visible": true
           }
         ]
       }
@@ -282,7 +295,9 @@
       "ingressSubnetPrefix": "[if(equals(steps('networkConfig').vnetMode, 'new'), steps('networkConfig').ingressSubnetPrefix, '10.50.3.0/24')]",
       "egressSubnetPrefix": "[if(equals(steps('networkConfig').vnetMode, 'new'), steps('networkConfig').egressSubnetPrefix, '10.50.4.0/24')]",
       "ingressNicCount": "[steps('vmConfig').ingressNicCount]",
-      "egressNicCount": "[steps('vmConfig').egressNicCount]"
+      "egressNicCount": "[steps('vmConfig').egressNicCount]",
+      "adminSourceCidr": "[steps('networkConfig').adminSourceCidr]",
+      "sensorSourcePrefix": "VirtualNetwork"
     }
   }
 }
