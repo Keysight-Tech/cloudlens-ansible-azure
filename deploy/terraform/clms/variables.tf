@@ -96,3 +96,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "admin_source_cidr" {
+  description = "Source CIDR allowed to reach SSH (22), vPB SSH (9022) and HTTPS (443) on the appliance. Narrow it to your admin network: '*' is the whole internet and most policies forbid it."
+  type        = string
+  default     = "*"
+}

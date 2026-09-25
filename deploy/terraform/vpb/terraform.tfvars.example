@@ -56,3 +56,10 @@ tags = {
   project = "cloudlens"
   owner   = "network-visibility"
 }
+
+# Who may reach SSH (22), vPB SSH (9022) and HTTPS (443). Default "*" is the
+# whole internet, which most policies forbid: put your admin range here.
+# admin_source_cidr = "203.0.113.10/32"
+# Where mirrored traffic (VXLAN) may come from. VirtualNetwork covers this
+# VNet, peered VNets and on-premises ranges behind a gateway.
+# sensor_source_prefix = "VirtualNetwork"

@@ -67,7 +67,7 @@ resource "azurerm_network_security_group" "vpb_mgmt" {
     protocol                   = "Tcp"
     source_port_range          = "*"
     destination_port_range     = "22"
-    source_address_prefix      = "*"
+    source_address_prefix      = var.admin_source_cidr
     destination_address_prefix = "*"
   }
 
@@ -79,7 +79,7 @@ resource "azurerm_network_security_group" "vpb_mgmt" {
     protocol                   = "Tcp"
     source_port_range          = "*"
     destination_port_range     = "443"
-    source_address_prefix      = "*"
+    source_address_prefix      = var.admin_source_cidr
     destination_address_prefix = "*"
   }
 
@@ -91,7 +91,7 @@ resource "azurerm_network_security_group" "vpb_mgmt" {
     protocol                   = "Udp"
     source_port_range          = "*"
     destination_port_range     = "4789"
-    source_address_prefix      = "*"
+    source_address_prefix      = var.sensor_source_prefix
     destination_address_prefix = "*"
   }
 
@@ -103,7 +103,7 @@ resource "azurerm_network_security_group" "vpb_mgmt" {
     protocol                   = "Udp"
     source_port_range          = "*"
     destination_port_range     = "10800-10801"
-    source_address_prefix      = "*"
+    source_address_prefix      = var.sensor_source_prefix
     destination_address_prefix = "*"
   }
 }

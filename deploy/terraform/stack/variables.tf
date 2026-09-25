@@ -219,3 +219,15 @@ variable "vpb_count" {
     error_message = "vpb_count must be between 1 and 5."
   }
 }
+
+variable "admin_source_cidr" {
+  description = "Source CIDR allowed to reach SSH (22), vPB SSH (9022) and HTTPS (443) on the appliance. Narrow it to your admin network: '*' is the whole internet and most policies forbid it."
+  type        = string
+  default     = "*"
+}
+
+variable "sensor_source_prefix" {
+  description = "Source allowed to send mirrored traffic (VXLAN 4789, 10800-10801) to the vPB. VirtualNetwork covers this VNet, peered VNets and on-premises ranges reached through a gateway."
+  type        = string
+  default     = "VirtualNetwork"
+}

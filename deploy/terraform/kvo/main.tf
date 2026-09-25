@@ -61,7 +61,7 @@ resource "azurerm_network_security_group" "kvo" {
     protocol                   = "Tcp"
     source_port_range          = "*"
     destination_port_range     = "22"
-    source_address_prefix      = "*"
+    source_address_prefix      = var.admin_source_cidr
     destination_address_prefix = "*"
   }
 
@@ -73,7 +73,7 @@ resource "azurerm_network_security_group" "kvo" {
     protocol                   = "Tcp"
     source_port_range          = "*"
     destination_port_range     = "443"
-    source_address_prefix      = "*"
+    source_address_prefix      = var.admin_source_cidr
     destination_address_prefix = "*"
   }
 }

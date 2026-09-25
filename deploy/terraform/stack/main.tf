@@ -118,10 +118,11 @@ module "clms" {
   resource_group_name = local.rg_name
   use_existing_rg     = true # stack owns the RG
 
-  vm_name        = "${var.clms_vm_name}-${count.index + 1}"
-  admin_username = var.admin_username
-  admin_password = var.admin_password
-  vm_size        = var.clms_vm_size
+  vm_name           = "${var.clms_vm_name}-${count.index + 1}"
+  admin_username    = var.admin_username
+  admin_password    = var.admin_password
+  admin_source_cidr = var.admin_source_cidr
+  vm_size           = var.clms_vm_size
 
   # All instances share the same VNet + subnet; Azure gives each its own private IP.
   existing_vnet_name           = var.shared_vnet ? azurerm_virtual_network.shared[0].name : ""
@@ -148,10 +149,11 @@ module "kvo" {
   resource_group_name = local.rg_name
   use_existing_rg     = true # stack owns the RG
 
-  vm_name        = "${var.kvo_vm_name}-${count.index + 1}"
-  admin_username = var.admin_username
-  admin_password = var.admin_password
-  vm_size        = var.kvo_vm_size
+  vm_name           = "${var.kvo_vm_name}-${count.index + 1}"
+  admin_username    = var.admin_username
+  admin_password    = var.admin_password
+  admin_source_cidr = var.admin_source_cidr
+  vm_size           = var.kvo_vm_size
 
   existing_vnet_name           = var.shared_vnet ? azurerm_virtual_network.shared[0].name : ""
   existing_vnet_resource_group = var.shared_vnet ? local.rg_name : ""
@@ -177,10 +179,12 @@ module "vpb" {
   resource_group_name = local.rg_name
   use_existing_rg     = true # stack owns the RG
 
-  vm_name        = "${var.vpb_vm_name}-${count.index + 1}"
-  admin_username = var.admin_username
-  admin_password = var.admin_password
-  vm_size        = var.vpb_vm_size
+  vm_name              = "${var.vpb_vm_name}-${count.index + 1}"
+  admin_username       = var.admin_username
+  admin_password       = var.admin_password
+  admin_source_cidr    = var.admin_source_cidr
+  sensor_source_prefix = var.sensor_source_prefix
+  vm_size              = var.vpb_vm_size
 
   existing_vnet_name           = var.shared_vnet ? azurerm_virtual_network.shared[0].name : ""
   existing_vnet_resource_group = var.shared_vnet ? local.rg_name : ""
