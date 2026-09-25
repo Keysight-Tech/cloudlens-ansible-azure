@@ -31,6 +31,17 @@ Three ways to deploy vController + KVO (optional) + vPB + sensors end to end. Sa
 curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/deploy/deploy-stack.sh | bash
 ```
 
+**One network, every appliance.** The deploy builds a single virtual network,
+`cloudlens-vnet` (10.50.0.0/16), with the same five subnets the portal's
+full-stack form creates, and hands it to the vController, the KVO and the vPB.
+Earlier versions let each product template build its own VNet, which left three
+networks with no peering between them and appliances that could not reach each
+other. A re-run against a group where an older vController already built
+`<name>-vnet` adopts that network and adds the missing subnets to it. To use a
+VNet you already run, pass `--vnet-name` (and `--vnet-resource-group` if it is
+elsewhere); it must already contain the five subnets, which the deploy checks
+and never creates in a network it did not build.
+
 **Tear it down** when you are done, to remove everything that deployment
 created. Put your resource group name in. It audits first, shows what it
 found, and asks before deleting anything:
@@ -112,6 +123,9 @@ Every default is overridable three ways: **CLI flag wins over env var wins over 
 | `eastus2` | `--location <region>` | `CLOUDLENS_REGION` | Any Azure region |
 | `azureuser` | `--admin-user <name>` | `CLOUDLENS_ADMIN_USER` | OS-level SSH user across all VMs |
 | `*` | `--admin-cidr <cidr>` | `CLOUDLENS_ADMIN_CIDR` | Network allowed to reach SSH 22, vPB SSH 9022 and HTTPS 443 on the appliances. Asked interactively; your own public address as a /32 is offered. Mirrored traffic (VXLAN) is allowed from the VNet separately |
+| `cloudlens-vnet` | `--vnet-name <name>` | `CLOUDLENS_VNET_NAME` | Join a VNet you already run instead of building one. It must hold the five subnets the templates expect: `vcontroller-subnet`, `kvo-subnet`, `vpb-mgmt`, `vpb-ingress`, `vpb-egress`; missing ones are named, never invented |
+| the deploy's group | `--vnet-resource-group <rg>` | `CLOUDLENS_VNET_RG` | Where that VNet lives |
+| `10.50.0.0/16` | `--vnet-cidr <cidr>` | `CLOUDLENS_VNET_CIDR` | Address space of the VNet the deploy builds, a /16; the subnets are carved as a.b.1, 2, 10, 11 and 12 .0/24 |
 | `vcontroller` | `--vcontroller-name <name>` | `CLOUDLENS_VCONTROLLER_NAME` | VM name prefix |
 | `kvo` | `--kvo-name <name>` | `CLOUDLENS_KVO_NAME` | VM name prefix |
 | `vpb` | `--vpb-name <name>` | `CLOUDLENS_VPB_NAME` | VM name prefix |

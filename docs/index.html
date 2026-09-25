@@ -229,6 +229,7 @@ terraform init &amp;&amp; terraform apply</code></pre>
         <p class="full-stack-note">Prompts for resource group and region, accepts Marketplace terms, deploys vController, waits for initialization, optionally adds vPB, and chains to sensor deployment. Run from Azure Cloud Shell or any machine with Azure CLI.</p>
 
         <p class="full-stack-note">It also asks "Which network may reach the CloudLens appliances?" and offers your own public address as a /32. The answer becomes the admin source CIDR on SSH 22, vPB SSH 9022 and HTTPS 443 for every appliance. Pass <code>--admin-cidr CIDR</code> or set <code>CLOUDLENS_ADMIN_CIDR</code> to answer it without a prompt. Mirrored traffic (VXLAN 4789, 10800-10801) is allowed from the virtual network separately, never from the admin range.</p>
+        <p class="full-stack-note"><strong>One network, every appliance.</strong> The deploy builds a single virtual network, <code>cloudlens-vnet</code>, with the same five subnets the full-stack portal form creates, and hands it to the vController, the KVO and the vPB. Earlier versions let each template build its own VNet, three networks with no peering and appliances that could not reach each other. A re-run adopts a VNet an older vController already built. To join a network you already run, pass <code>--vnet-name</code>; it must hold the five expected subnets, which the deploy checks and never invents.</p>
 
         <div class="full-stack-paths">
           <div class="path-card">
