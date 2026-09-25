@@ -31,6 +31,41 @@ Three ways to deploy vController + KVO (optional) + vPB + sensors end to end. Sa
 curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/deploy/deploy-stack.sh | bash
 ```
 
+**Tear it down** when you are done, to remove everything that deployment
+created. Put your resource group name in. It audits first, shows what it
+found, and asks before deleting anything:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/deploy/teardown-stack.sh | bash -s -- --resource-group YOUR-RG
+```
+
+Add `--audit` to see what it would delete and which CloudLens resources the
+group holds without deleting anything (it never touches the KVO), or
+`--dry-run` to print every command it would run.
+
+If the group has a KVO, the script offers to release its licences before
+deleting anything. Once you have confirmed the teardown it lists what the KVO
+holds and asks "Release all N licences from this KVO now?" (default yes;
+`--release-licences` answers it when there is no terminal). That order is
+deliberate: licences are only ever stripped from a KVO you have already chosen
+to destroy, never from one you then decide to keep. The counts return to your
+entitlement while the KVO is alive; once it is deleted they cannot be
+recovered. A release that leaves the KVO clear is the only thing that skips the
+licence-loss confirmation; otherwise the script says why and makes you type the
+resource group name to accept the loss (`--accept-licence-loss` when there is
+no terminal). The UI route still works too: release them yourself first, in the
+KVO under Settings > Product Licensing > Deactivate licenses, then run the
+teardown.
+
+It only removes what the deployment built. When the deploy created the resource
+group (it tags it `deployedBy=cloudlens-stack`) and nothing else has been added
+to it, the whole group is deleted. Otherwise only the CloudLens VMs and the
+disks, NICs, public IPs, NSGs and VNets the templates created for them go, and
+the group and everything else in it are left alone (`--keep-resource-group`
+forces that narrower scope even on a group the deploy created). Older deployments left OS disks and NICs
+behind when a VM was deleted; the templates now set `deleteOption` so they go
+with the VM, and the script removes such leftovers either way.
+
 **Prerequisites the script handles for you:**
 - Azure CLI (`az`): auto-installed if missing (macOS via Homebrew, Debian via apt, RHEL via dnf)
 - Python 3 + venv + Ansible + Azure SDK: installed into a venv during Phase 11 (sensor install)
@@ -76,6 +111,7 @@ Every default is overridable three ways: **CLI flag wins over env var wins over 
 | `cloudlens-rg` | `--resource-group <name>` | `CLOUDLENS_RG` | New or existing RG name |
 | `eastus2` | `--location <region>` | `CLOUDLENS_REGION` | Any Azure region |
 | `azureuser` | `--admin-user <name>` | `CLOUDLENS_ADMIN_USER` | OS-level SSH user across all VMs |
+| `*` | `--admin-cidr <cidr>` | `CLOUDLENS_ADMIN_CIDR` | Network allowed to reach SSH 22, vPB SSH 9022 and HTTPS 443 on the appliances. Asked interactively; your own public address as a /32 is offered. Mirrored traffic (VXLAN) is allowed from the VNet separately |
 | `vcontroller` | `--vcontroller-name <name>` | `CLOUDLENS_VCONTROLLER_NAME` | VM name prefix |
 | `kvo` | `--kvo-name <name>` | `CLOUDLENS_KVO_NAME` | VM name prefix |
 | `vpb` | `--vpb-name <name>` | `CLOUDLENS_VPB_NAME` | VM name prefix |
@@ -386,7 +422,7 @@ A single Ansible control point authenticates to Azure, discovers VMs by tag, and
 
 ## Need CLMS or vPB first?
 
-If you do not have CloudLens Manager or a Virtual Packet Broker running yet, deploy them from Azure Marketplace in one click.
+If you do not have CloudLens Manager or a Virtual Packet Broker running yet, deploy them from Azure Marketplace in one click. Each form now requires an admin source CIDR: the network allowed to reach SSH 22, vPB SSH 9022 and HTTPS 443 on the appliance; your own public address as a /32 is the usual answer.
 
 <p align="center">
   <a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fclms-marketplace.json"><img src="https://img.shields.io/badge/▶_Deploy_CLMS-0078D4?style=for-the-badge&logo=microsoft-azure&logoColor=white" alt="Deploy CLMS"/></a>

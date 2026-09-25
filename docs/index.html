@@ -228,6 +228,8 @@ terraform init &amp;&amp; terraform apply</code></pre>
 
         <p class="full-stack-note">Prompts for resource group and region, accepts Marketplace terms, deploys vController, waits for initialization, optionally adds vPB, and chains to sensor deployment. Run from Azure Cloud Shell or any machine with Azure CLI.</p>
 
+        <p class="full-stack-note">It also asks "Which network may reach the CloudLens appliances?" and offers your own public address as a /32. The answer becomes the admin source CIDR on SSH 22, vPB SSH 9022 and HTTPS 443 for every appliance. Pass <code>--admin-cidr CIDR</code> or set <code>CLOUDLENS_ADMIN_CIDR</code> to answer it without a prompt. Mirrored traffic (VXLAN 4789, 10800-10801) is allowed from the virtual network separately, never from the admin range.</p>
+
         <div class="full-stack-paths">
           <div class="path-card">
             <h4><span class="path-icon" aria-hidden="true">&#128640;</span> Bash (recommended)</h4>
@@ -246,6 +248,32 @@ terraform init &amp;&amp; terraform apply</code></pre>
             <a class="btn btn-primary" href="https://github.com/Keysight-Tech/cloudlens-ansible-azure/blob/main/docs/CloudLens_Stack_Deployment_Runbook.pdf" target="_blank" rel="noopener">Download Runbook</a>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- 1.12 FULL STACK ONE-COMMAND TEARDOWN -->
+    <section id="teardown" class="full-stack-section">
+      <div class="container">
+        <h2>One command back down</h2>
+        <p class="lede">Same discipline in reverse. It removes what this deployment created, and nothing else.</p>
+
+        <p class="full-stack-note"><strong>1. See what is there first.</strong> Read-only, deletes nothing and never touches the KVO: what the script would delete, and which CloudLens resources the group holds. Put your resource group name in.</p>
+        <div class="full-stack-cmd-wrap">
+          <pre id="teardown-audit-cmd"><code>curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/deploy/teardown-stack.sh | bash -s -- --resource-group YOUR-RG --audit</code></pre>
+          <button class="copy-btn" data-copy="teardown-audit-cmd" type="button" aria-label="Copy the audit command">Copy</button>
+        </div>
+
+        <p class="full-stack-note"><strong>2. Tear it down.</strong> Audits again, shows what it found, and asks you to confirm before deleting. If the group has a KVO, the script then lists the licences it holds and offers to release them before anything is deleted (default yes on a terminal; <code>--release-licences</code> answers it without one): they come back while the KVO is alive and never afterwards, and the teardown is confirmed first so licences are only stripped from a KVO you have already chosen to destroy. Only a release that leaves the KVO clear skips the licence-loss confirmation; anything else is explained and the typed resource group name is still required (<code>--accept-licence-loss</code> stands in for it when there is no terminal). The UI route remains: release them yourself first under Settings &gt; Product Licensing &gt; Deactivate licenses, then run the teardown.</p>
+        <div class="full-stack-cmd-wrap">
+          <pre id="teardown-cmd"><code>curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/deploy/teardown-stack.sh | bash -s -- --resource-group YOUR-RG</code></pre>
+          <button class="copy-btn" data-copy="teardown-cmd" type="button" aria-label="Copy the teardown command">Copy</button>
+        </div>
+
+        <p class="full-stack-note">Deleting a VM on its own is not enough, and that surprises people. Older deployments left the OS disk and the NICs behind when a VM was deleted, and the disk kept billing. The templates now set <code>deleteOption</code> so they go with the VM, and this script removes such leftovers either way.</p>
+
+        <p class="full-stack-note"><strong>It only removes what your deployment built.</strong> When the deploy created the resource group (it tags it <code>deployedBy=cloudlens-stack</code>) and nothing else has been added to it since, the whole group is deleted. Otherwise the script deletes only the CloudLens VMs and the disks, NICs, public IPs, NSGs and virtual networks the templates created for them, and leaves the group and everything else in it alone, because in a shared group "it was in the same place" is not proof of ownership. <code>--keep-resource-group</code> holds it to that narrower scope even on a group the deploy created. The resource group name is yours to pass, so the same command is safe in any subscription.</p>
+
+        <p class="full-stack-note">Add <code>--audit</code> to look without deleting, or <code>--dry-run</code> to print every command it would run. Nothing is removed without an explicit confirmation, or <code>--yes</code> in a pipeline. <code>--kvo-address</code>, <code>--kvo-admin-user</code> and <code>--kvo-admin-pass</code> name the KVO and its admin login for the licence release when you need to set them yourself.</p>
       </div>
     </section>
 
@@ -269,7 +297,7 @@ curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azur
 
 # 3. Cleanup when done
 az group delete -n cloudlens-test-vms-rg --yes --no-wait</code></pre>
-          <button type="button" class="copy-btn" data-target="test-fixture-cmd" aria-label="Copy command">Copy</button>
+          <button type="button" class="copy-btn" data-copy="test-fixture-cmd" aria-label="Copy command">Copy</button>
         </div>
 
         <p class="full-stack-note">Phase 10 will print <code>Workload VMs tagged monitoring=enabled: 3</code>; Phase 11 installs sensors on all three and they register with vController. Phases 12&ndash;15 then licence KVO, adopt the vController and the vPB into it, and wire the vPB traffic path and monitoring policy. Total round trip: 25-30 minutes. Override the tag pair with <code>TESTVMS_TAG_KEY</code> / <code>TESTVMS_TAG_VALUE</code> env vars if you want to mirror a customer's existing convention.</p>
