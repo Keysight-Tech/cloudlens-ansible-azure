@@ -217,6 +217,15 @@ VCONTROLLER_IP="$(python3 -c "import yaml,sys; print(yaml.safe_load(open('custom
 # =====================================================================
 step "Discovering tagged VMs"
 
+# customer_input.yaml azure.tag_filters, resource_groups and locations narrow
+# discovery, as that file documents and the message below promises. They used
+# to be ignored: only the tag baked into inventory/azure_rm.yaml counted.
+# CLOUDLENS_INVENTORY still overrides everything.
+if [[ -z "${CLOUDLENS_INVENTORY:-}" ]]; then
+  INVENTORY="$(python3 scripts/render_azure_inventory.py customer_input.yaml "${TMPDIR:-/tmp}/cloudlens-inventory-$(id -u)")" \
+    || fail "customer_input.yaml azure.tag_filters / resource_groups / locations could not be used (see above)."
+fi
+
 INV_JSON="$(ansible-inventory -i "$INVENTORY" --list 2>/dev/null || echo '{}')"
 VM_COUNT="$(printf '%s' "$INV_JSON" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(len(d.get("_meta",{}).get("hostvars",{})))')"
 

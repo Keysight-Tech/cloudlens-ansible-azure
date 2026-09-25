@@ -316,24 +316,26 @@ az group delete -n cloudlens-test-vms-rg --yes --no-wait</code></pre>
           <div class="sc-body">
 
         <h2>Run from Docker</h2>
-        <p class="lede">Pinned image with Ansible, Azure SDKs, and pywinrm. Works from your laptop, a CI runner, or any container host.</p>
+        <p class="lede">A ready-built image with Ansible, the Azure SDKs and pywinrm. Works from your laptop, a CI runner, or any container host.</p>
 
         <div class="full-stack-cmd-wrap">
-          <pre id="docker-cmd"><code>docker run --rm -it \
-  -v $(pwd)/customer_input.yaml:/work/customer_input.yaml \
-  -v $HOME/.ssh:/root/.ssh:ro \
+          <pre id="docker-cmd"><code>docker run --rm -it --platform linux/amd64 \
+  -v "$(pwd)/customer_input.yaml:/work/customer_input.yaml:ro" \
+  -v "$(pwd)/files:/work/files:ro" \
+  -v "$HOME/.ssh/id_rsa:/root/.ssh/id_rsa:ro" \
   -e AZURE_SUBSCRIPTION_ID -e AZURE_TENANT \
   -e AZURE_CLIENT_ID -e AZURE_SECRET \
+  -e ANSIBLE_WINRM_PASSWORD \
   ghcr.io/keysight-tech/cloudlens-ansible-azure:latest</code></pre>
           <button class="copy-btn" data-copy="docker-cmd" type="button" aria-label="Copy docker run command">Copy</button>
         </div>
 
-        <p class="full-stack-note">Service Principal credentials passed via env vars (use <code>scripts/setup_azure_sp.sh</code> to create one). Same behavior as the Cloud Shell quickstart, just packaged for CI/CD or repeat customer deployments.</p>
+        <p class="full-stack-note">Run it from the folder that holds <code>customer_input.yaml</code>. Put the Windows installer from vController in <code>files/</code> there (Linux-only deployments can leave the folder empty). Service principal credentials come in as environment variables: <code>scripts/setup_azure_sp.sh</code> creates one, and the container uses it both to discover VMs and for the Windows WinRM bootstrap. Export <code>ANSIBLE_WINRM_PASSWORD</code> before running when you have Windows VMs. Only the key file is mounted, not all of <code>~/.ssh</code>: a mounted <code>~/.ssh/config</code> is ignored inside the container. The container exits non-zero when the Azure login fails, when no VM matches the tags, or when a host fails. Add <code>-v "$(pwd)/logs:/work/logs"</code> to keep <code>ansible.log</code>.</p>
 
         <div class="full-stack-paths">
           <div class="path-card">
             <h4>📦 Image registry</h4>
-            <p>Image is published to GitHub Container Registry on every push to <code>main</code>.</p>
+            <p>Rebuilt, smoke-tested and published whenever a file in the image changes on <code>main</code>. Every build is also tagged <code>main-&lt;sha&gt;</code>, so a pipeline can pin one.</p>
             <a class="btn btn-secondary" href="https://github.com/Keysight-Tech/cloudlens-ansible-azure/pkgs/container/cloudlens-ansible-azure" target="_blank" rel="noopener">View on ghcr.io</a>
           </div>
           <div class="path-card">
@@ -345,7 +347,15 @@ docker build -t cloudlens-ansible-azure .</code></pre>
           </div>
           <div class="path-card">
             <h4>🤖 CI/CD pattern</h4>
-            <p>Drop the same <code>docker run</code> into GitHub Actions, GitLab CI, Jenkins, or Azure DevOps. Mount your <code>customer_input.yaml</code> as a build artifact.</p>
+            <p>GitHub Actions, GitLab CI, Jenkins and Azure DevOps runners have no terminal, so drop <code>-it</code>, and pin a <code>main-&lt;sha&gt;</code> tag instead of <code>latest</code>:</p>
+            <pre><code>docker run --rm --platform linux/amd64 \
+  -v "$PWD/customer_input.yaml:/work/customer_input.yaml:ro" \
+  -v "$PWD/files:/work/files:ro" \
+  -v "$HOME/.ssh/id_rsa:/root/.ssh/id_rsa:ro" \
+  -e AZURE_SUBSCRIPTION_ID -e AZURE_TENANT \
+  -e AZURE_CLIENT_ID -e AZURE_SECRET \
+  -e ANSIBLE_WINRM_PASSWORD \
+  ghcr.io/keysight-tech/cloudlens-ansible-azure:main-&lt;sha&gt;</code></pre>
           </div>
         </div>
       
@@ -450,8 +460,15 @@ done</code></pre>
                   </div>
                   <div class="path-card">
                     <h4><span class="path-emoji" aria-hidden="true">&#128011;</span> Tier 3: Docker</h4>
-                    <p>Reproducible. Pinned versions. Best for: CI or repeat deployments.</p>
-<pre><code>docker run --rm -it -v $(pwd)/customer_input.yaml:/work/customer_input.yaml ghcr.io/keysight-tech/cloudlens-ansible-azure:latest</code></pre>
+                    <p>The same image every run. Best for: CI or repeat deployments. Details in <a href="#docker">Run from Docker</a>.</p>
+<pre><code>docker run --rm -it --platform linux/amd64 \
+  -v "$(pwd)/customer_input.yaml:/work/customer_input.yaml:ro" \
+  -v "$(pwd)/files:/work/files:ro" \
+  -v "$HOME/.ssh/id_rsa:/root/.ssh/id_rsa:ro" \
+  -e AZURE_SUBSCRIPTION_ID -e AZURE_TENANT \
+  -e AZURE_CLIENT_ID -e AZURE_SECRET \
+  -e ANSIBLE_WINRM_PASSWORD \
+  ghcr.io/keysight-tech/cloudlens-ansible-azure:latest</code></pre>
                   </div>
                 </div>
               </div>
@@ -572,7 +589,6 @@ done</code></pre>
                 <select id="mode" name="mode">
                   <option value="direct_public">direct_public</option>
                   <option value="jumpbox">jumpbox</option>
-                  <option value="bastion">bastion</option>
                 </select>
               </div>
             </div>
@@ -590,9 +606,9 @@ done</code></pre>
             <aside class="next-steps" id="wizard-next-steps">
               <h4>Once you have customer_input.yaml</h4>
               <ol>
-                <li>Save the file to your working directory</li>
-                <li>Choose a deploy path above (Portal, Cloud Shell, or Docker)</li>
-                <li>The deploy command will pick up your customer_input.yaml automatically</li>
+                <li>Save it as <code>customer_input.yaml</code> in your working directory</li>
+                <li>Cloud Shell: run the quickstart from that directory; it reads the file there</li>
+                <li>Docker: run the command under <a href="#docker">Run from Docker</a> from that directory; it mounts the file into the container</li>
               </ol>
             </aside>
           </form>

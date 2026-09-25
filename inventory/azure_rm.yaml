@@ -1,8 +1,12 @@
 plugin: azure.azcollection.azure_rm
 plain_host_names: yes
 include_extended_facts: yes
+# The discovery tag every doc tells customers to set: cloudlens=yes. Keep this
+# exact one-line form: deploy/deploy-stack.sh rewrites it by regex when the
+# operator picks another tag, and the Docker entrypoint renders the tags from
+# customer_input.yaml azure.tag_filters over it.
 exclude_host_filters:
-  - tags['monitoring'] is not defined or tags['monitoring'] != 'enabled'
+  - tags['cloudlens'] is not defined or tags['cloudlens'] != 'yes'
 keyed_groups:
   - prefix: os
     key: tags['os'] | default('untagged')

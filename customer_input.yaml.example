@@ -1,8 +1,8 @@
 # =====================================================================
-# CloudLens Ansible — Customer Input File
+# CloudLens Ansible: Customer Input File
 # =====================================================================
 # Copy to customer_input.yaml and fill in your values.
-# DO NOT commit customer_input.yaml to git — passwords go in env vars.
+# DO NOT commit customer_input.yaml to git: passwords go in env vars.
 #
 # Quick start:
 #   cp customer_input.yaml.example customer_input.yaml
@@ -15,8 +15,9 @@ azure:
   subscription_id: "00000000-0000-0000-0000-000000000000"
   tenant_id: "00000000-0000-0000-0000-000000000000"
 
-  # Tag selector — VMs are matched by these tags
-  # Customer must tag each VM:  cloudlens=yes  os=ubuntu|rhel|windows  env=prod
+  # Tag selector: only VMs carrying ALL of these tags are discovered.
+  # Tag each VM:  cloudlens=yes  os=ubuntu|rhel|windows  env=prod
+  # Quote the values ("yes", not yes): an unquoted yes is read as a boolean.
   tag_filters:
     cloudlens: "yes"
     env: "prod"
@@ -27,7 +28,7 @@ azure:
 
 # === CloudLens Configuration ===
 cloudlens:
-  # CLMS Manager IP or FQDN — sensors will register here
+  # vController (CLMS) IP or FQDN: sensors register here
   manager_ip_or_fqdn: "clms.customer.example.com"
 
   # Project key from CLMS → Projects → API Keys
@@ -41,7 +42,8 @@ cloudlens:
   ssl_verify: "no"
   auto_update: "yes"
 
-  # Only used when registry_type=secure
+  # Only used when registry_type=secure. A relative path is relative to the
+  # repo root (/work in the Docker image, where files/ is mounted).
   local_ca_path: "files/cloudlenscerts.crt"
   ca_cert_dir: "/etc/ssl/certs"
 
@@ -51,10 +53,9 @@ cloudlens:
 
 # === Connection Mode ===
 # How your control machine reaches the target VMs:
-#   direct_public  — VMs have public IPs reachable from your laptop
-#   jumpbox        — VMs private-only, reached via a Linux jumpbox in the VNet
-#   bastion        — Azure Bastion service
-#   cloud_shell    — Auto-detected when running in Azure Cloud Shell
+#   direct_public: VMs have public IPs reachable from your laptop
+#   jumpbox:       VMs private-only, reached via a Linux jumpbox in the VNet
+# (Azure Bastion is not supported as a connection mode.)
 connection:
   mode: "jumpbox"
 
@@ -63,9 +64,6 @@ connection:
   jumpbox_user: "azureuser"
   jumpbox_ssh_key: "~/.ssh/id_rsa"
 
-  # Used when mode=bastion
-  bastion_resource_id: ""
-
 # === Linux SSH Connection (target VMs) ===
 linux:
   ansible_user: "azureuser"
@@ -73,6 +71,7 @@ linux:
 
 # === Windows WinRM Connection (target VMs) ===
 # Password MUST be set via env var: export ANSIBLE_WINRM_PASSWORD='...'
+# With Docker, also pass it into the container: -e ANSIBLE_WINRM_PASSWORD
 windows:
   ansible_user: "azureuser"
   ansible_connection: "winrm"
@@ -80,14 +79,16 @@ windows:
   ansible_winrm_server_cert_validation: "ignore"
   ansible_port: 5985
 
-  # Place the Windows installer in files/ — get it from CLMS UI
+  # Download the Windows installer from vController and put it in files/.
+  # A relative path is relative to the repo root (/work in the Docker image,
+  # where -v "$(pwd)/files:/work/files:ro" mounts it).
   installer_path: "files/cloudlens-win-sensor-6.13.0.359.exe"
   installer_filename: "cloudlens-win-sensor-6.13.0.359.exe"
 
 # === Deployment Behavior ===
 # Most values auto-tuned. Override only if you know what you're doing.
 deploy:
-  forks: 0                   # 0 = auto-tune based on VM count
+  forks: 0                   # 0 = auto-tune; ANSIBLE_FORKS overrides this
   timeout_seconds: 60
   reinstall_if_unhealthy: true
   shard_size: 500            # for >2000 VMs: VMs per shard

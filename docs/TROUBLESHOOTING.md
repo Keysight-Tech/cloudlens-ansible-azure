@@ -67,7 +67,7 @@ Or for production with a signed CA:
 ```yaml
 cloudlens:
   registry_type: "secure"
-  local_ca_path: "files/cloudlenscerts.crt"   # place CA bundle here
+  local_ca_path: "files/cloudlenscerts.crt"   # relative to the repo root; with Docker, mount files/
   ssl_verify: "yes"
 ```
 

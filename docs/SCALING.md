@@ -36,10 +36,10 @@ ansible-playbook deploy.yaml --forks 500 ...
 When VM count exceeds 2,000, sharding auto-enables.
 
 **What it does:**
-1. Generates one flat inventory dump
-2. Splits into chunks of N VMs (default 500)
-3. Launches each chunk as an independent `ansible-playbook` run in parallel
-4. Aggregates results at the end
+1. Reads the inventory once and lists the VMs in the Ubuntu, RHEL and Windows target groups
+2. Splits them into chunks of N VMs (default 500: `SHARD_SIZE`, or `deploy.shard_size` in `customer_input.yaml` for Docker)
+3. Runs one `ansible-playbook` per chunk in parallel, against the same inventory with `--limit`, so groups and group_vars stay intact
+4. Prints one line per shard and exits non-zero if any shard failed or ran against no hosts
 
 **Manual sharding:**
 
@@ -98,6 +98,9 @@ To use:
 
 ```bash
 cp deploy/tuned-ansible.cfg ansible.cfg
+
+# Docker: the file ships in the image
+docker run -e ANSIBLE_CONFIG=/work/deploy/tuned-ansible.cfg ...
 ```
 
 ## AWX / Ansible Tower Integration

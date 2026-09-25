@@ -15,14 +15,24 @@ on:
   push:
     branches: [main]
     tags: ['v*.*.*']
+    # Every file the image contains and runs. ansible.cfg, vars/, scripts/ and
+    # deploy/shard.sh were missing, so a fix to them never reached :latest.
     paths:
       - 'Dockerfile'
-      - 'scripts/docker-entrypoint.sh'
+      - '.dockerignore'
       - 'requirements.yml'
-      - 'playbooks/**'
-      - 'inventory/**'
+      - 'ansible.cfg'
       - 'deploy.yaml'
       - 'cleanup.yaml'
+      - 'playbooks/**'
+      - 'inventory/**'
+      - 'vars/**'
+      - 'scripts/**'
+      - 'files/**'
+      - 'customer_input.yaml.example'
+      - 'deploy/shard.sh'
+      - 'deploy/tuned-ansible.cfg'
+      - 'deploy/tests/test_docker_image.sh'
       - '.github/workflows/docker-publish.yml'
   workflow_dispatch:
 
@@ -40,6 +50,10 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          # The default writes the job token into .git/config, and COPY . put
+          # that file in the public image.
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -70,6 +84,24 @@ jobs:
             org.opencontainers.image.licenses=Proprietary
             org.opencontainers.image.url=https://keysight-tech.github.io/cloudlens-ansible-azure/
             org.opencontainers.image.documentation=https://github.com/Keysight-Tech/cloudlens-ansible-azure#readme
+
+      # Build once into the runner's docker, prove it can deploy, then push.
+      # :latest used to be pushed untested; an image that cannot load its own
+      # collections or parse its inventory must never reach customers.
+      - name: Build image for testing
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          load: true
+          push: false
+          tags: cloudlens-ansible-azure:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Smoke test the image
+        run: IMAGE=cloudlens-ansible-azure:ci bash deploy/tests/test_docker_image.sh
 
       - name: Build and push image
         uses: docker/build-push-action@v6

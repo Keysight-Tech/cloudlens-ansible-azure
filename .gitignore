@@ -44,3 +44,8 @@ demo/run-demo.sh
 # Run artefacts written by deploy-stack.sh into the current directory
 cloudlens-deploy-stack.log
 cloudlens-deploy-summary.txt
+
+# written by scripts/setup_azure_sp.sh: holds the service principal secret
+scripts/load_sp_creds.sh
+# rendered by the Docker entrypoint
+inventory/generated.*

@@ -1,4 +1,24 @@
 ---
+# Preflight runs without a connection, so a missing password fails here with
+# the fix in the message instead of as a WinRM authentication error per host.
+- name: Preflight for Windows VMs
+  hosts: "{{ target_group }}"
+  gather_facts: no
+  vars_files:
+    - ../vars/cloudlens.yaml
+  tasks:
+    - name: WinRM password is set
+      ansible.builtin.assert:
+        that:
+          - ansible_password is defined
+          - (ansible_password | string | length) > 0
+        fail_msg: >-
+          No WinRM password for {{ inventory_hostname }}. Set
+          windows.ansible_password in customer_input.yaml or export
+          ANSIBLE_WINRM_PASSWORD. With Docker, also pass it into the container:
+          -e ANSIBLE_WINRM_PASSWORD.
+        quiet: true
+
 - name: Deploy CloudLens Agent to Windows VMs 
   hosts: "{{ target_group }}"
   become: no
@@ -83,6 +103,25 @@
       when: 
         - "'NOT_FOUND' in cloudlens_check.stdout or (cloudlens_health is defined and cloudlens_health.rc != 0)"
       block:
+        # Checked before the old agent is stopped or uninstalled: without the
+        # installer the rest of this block would remove a working sensor and
+        # then fail, leaving the VM with none.
+        - name: Installer is present on the control machine
+          ansible.builtin.stat:
+            path: "{{ local_installer_path }}"
+          delegate_to: localhost
+          become: false
+          register: local_installer
+
+        - name: Stop when the installer is missing
+          ansible.builtin.fail:
+            msg: >-
+              Windows installer not found at {{ local_installer_path }}.
+              Download it from vController and put it in files/ (Docker: add
+              -v $(pwd)/files:/work/files:ro), or set windows.installer_path
+              in customer_input.yaml. Nothing was changed on {{ inventory_hostname }}.
+          when: not local_installer.stat.exists
+
         - name: Stop CloudLens service if running
           win_shell: |
             $service = Get-Service -Name CloudLens -ErrorAction SilentlyContinue

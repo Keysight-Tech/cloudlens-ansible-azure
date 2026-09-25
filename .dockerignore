@@ -1,0 +1,50 @@
+# What "COPY . /work/" must never pick up.
+#
+# The published image carried the CI job's .git, including a GitHub token in
+# .git/config. A local "docker build ." (the site's "Build locally" card) also
+# baked in customer_input.yaml, the service principal secret that
+# scripts/setup_azure_sp.sh writes, run logs and the Windows installer, so a
+# locally built image worked where the published one failed, and could leak.
+.git
+.github
+.claude
+.DS_Store
+.vscode
+.idea
+.pytest_cache
+**/__pycache__
+**/*.pyc
+
+# docs, demos and the stack tooling do not run in the image
+docs/
+demo/
+deploy/*
+!deploy/shard.sh
+!deploy/tuned-ansible.cfg
+
+# local Ansible state and logs
+collections/
+.venv/
+.ansible/
+.ansible_facts_cache/
+logs/
+*.log
+*.retry
+
+# customer input, credentials, installers, rendered inventory
+customer_input.yaml
+azure_sp_creds.json
+scripts/load_sp_creds.sh
+.azure/
+files/*
+!files/.gitkeep
+inventory/generated.*
+
+# terraform and deploy-stack run artefacts
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+terraform.tfvars
+cloudlens-deploy-*
+.cloudlens-deploy-*

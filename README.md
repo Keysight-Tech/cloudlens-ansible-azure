@@ -513,24 +513,42 @@ curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azur
 
 ### 🐳 Tier 3: Docker (local PC or CI/CD)
 
-> Run from your laptop, a CI runner, or any container host. Reproducible, hermetic, version-pinned.
+> Run from your laptop, a CI runner, or any container host. Run it from the folder that holds `customer_input.yaml`.
 
 ```bash
-docker run --rm -it \
-  -v $(pwd)/customer_input.yaml:/work/customer_input.yaml \
-  -v $HOME/.ssh:/root/.ssh:ro \
+docker run --rm -it --platform linux/amd64 \
+  -v "$(pwd)/customer_input.yaml:/work/customer_input.yaml:ro" \
+  -v "$(pwd)/files:/work/files:ro" \
+  -v "$HOME/.ssh/id_rsa:/root/.ssh/id_rsa:ro" \
   -e AZURE_SUBSCRIPTION_ID -e AZURE_TENANT \
   -e AZURE_CLIENT_ID -e AZURE_SECRET \
+  -e ANSIBLE_WINRM_PASSWORD \
   ghcr.io/keysight-tech/cloudlens-ansible-azure:latest
+```
+
+In CI, drop `-it` (runners have no terminal) and pin a commit tag instead of `latest`:
+
+```bash
+docker run --rm --platform linux/amd64 \
+  -v "$PWD/customer_input.yaml:/work/customer_input.yaml:ro" \
+  -v "$PWD/files:/work/files:ro" \
+  -v "$HOME/.ssh/id_rsa:/root/.ssh/id_rsa:ro" \
+  -e AZURE_SUBSCRIPTION_ID -e AZURE_TENANT \
+  -e AZURE_CLIENT_ID -e AZURE_SECRET \
+  -e ANSIBLE_WINRM_PASSWORD \
+  ghcr.io/keysight-tech/cloudlens-ansible-azure:main-<sha>
 ```
 
 <details>
 <summary>How it works</summary>
 
-- Pinned container image with Ansible, Azure collections, and all Python deps baked in
-- Mounts your `customer_input.yaml` and SSH keys read-only
-- Service Principal credentials passed via env vars (use `scripts/setup_azure_sp.sh` to create one)
-- Works identically on macOS, Windows, Linux, GitHub Actions, GitLab CI, Jenkins
+- One image with Ansible, the Azure collections and every Python dependency; collection versions are bounded in `requirements.yml`, and every build is tagged `main-<sha>` so a pipeline can pin one
+- Rebuilt, smoke-tested and published whenever a file in the image changes on `main`
+- Mounts `customer_input.yaml`, `files/` (the Windows installer from vController) and your SSH key read-only. Only the key is mounted: a `~/.ssh/config` is ignored inside the container
+- Service principal credentials come in as env vars (`scripts/setup_azure_sp.sh` creates one). The container logs in with them for VM discovery and for the Windows WinRM bootstrap, which runs `az vm run-command`
+- `azure.tag_filters`, `azure.resource_groups` and `azure.locations` in `customer_input.yaml` decide which VMs are discovered
+- Exits non-zero when the Azure login fails, when no VM matches the tags, or when a host fails, so a CI job cannot go green having deployed nothing
+- Add `-v "$(pwd)/logs:/work/logs"` to keep `ansible.log`. More than 2,000 VMs are deployed in parallel shards automatically
 
 </details>
 

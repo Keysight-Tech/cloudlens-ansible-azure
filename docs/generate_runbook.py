@@ -750,14 +750,16 @@ def build_deployment(doc: Document) -> None:
     add_paragraph(
         doc,
         "Best for repeatable runs from a developer laptop, a CI pipeline, or "
-        "any container host. The image is pinned and hermetic, so you get the "
-        "same result on macOS, Windows, Linux, GitHub Actions, GitLab CI, and Jenkins.",
+        "any container host. Every build is tagged main-<sha>; pin one in CI "
+        "and every run uses exactly the same image on macOS, Windows, Linux, "
+        "GitHub Actions, GitLab CI and Jenkins.",
     )
     t3_steps = [
         "Create a Service Principal with `bash scripts/setup_azure_sp.sh` (one-time).",
-        "Copy customer_input.yaml.example to customer_input.yaml and fill in your CLMS IP, project key, and tag filter.",
+        "Copy customer_input.yaml.example to customer_input.yaml and fill in your vController address, project key, and tag filter.",
+        "For Windows VMs, put the installer from vController in files/ next to customer_input.yaml.",
         "Export AZURE_SUBSCRIPTION_ID, AZURE_TENANT, AZURE_CLIENT_ID, AZURE_SECRET, ANSIBLE_WINRM_PASSWORD as env vars.",
-        "Run the container:",
+        "Run the container from that folder (in CI, drop -it and pin a main-<sha> tag):",
     ]
     for step in t3_steps:
         p = doc.add_paragraph(style="List Number")
@@ -767,9 +769,10 @@ def build_deployment(doc: Document) -> None:
         run.font.color.rgb = TEXT_DARK
     add_code_block(
         doc,
-        "docker run --rm -it \\\n"
-        "  -v $(pwd)/customer_input.yaml:/work/customer_input.yaml \\\n"
-        "  -v $HOME/.ssh:/root/.ssh:ro \\\n"
+        "docker run --rm -it --platform linux/amd64 \\\n"
+        "  -v \"$(pwd)/customer_input.yaml:/work/customer_input.yaml:ro\" \\\n"
+        "  -v \"$(pwd)/files:/work/files:ro\" \\\n"
+        "  -v \"$HOME/.ssh/id_rsa:/root/.ssh/id_rsa:ro\" \\\n"
         "  -e AZURE_SUBSCRIPTION_ID -e AZURE_TENANT \\\n"
         "  -e AZURE_CLIENT_ID -e AZURE_SECRET \\\n"
         "  -e ANSIBLE_WINRM_PASSWORD \\\n"
@@ -777,8 +780,9 @@ def build_deployment(doc: Document) -> None:
     )
     add_callout(
         doc, "Expected outcome",
-        "Container exits 0 with a 'sensors deployed: N/N' summary. Pin the "
-        "image tag in CI to get hermetic, reproducible runs.",
+        "Ansible prints a PLAY RECAP line per VM and the container exits 0. "
+        "It exits non-zero when the Azure login fails, when no VM matches the "
+        "tags, or when any host fails, so a CI job cannot pass having deployed nothing.",
     )
     doc.add_page_break()
 
