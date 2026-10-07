@@ -1,7 +1,5 @@
 # Customer Experience Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Build a world-class polished README + PDF customer runbook so any customer or SE can fully automate CloudLens sensor deployment to Azure VMs.
 
 **Architecture:** Two artifacts, one source of truth. README is the technical entry (3 automated deploy paths, decision tree, compatibility matrix). PDF is the executive deliverable (Keysight-branded, printable). Supporting SVG assets render the visual diagrams in both.
