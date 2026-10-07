@@ -579,7 +579,6 @@ def build_executive_summary(doc: Document) -> None:
         headers=["Scenario", "Result", "Time"],
         rows=[
             ["Ubuntu 22.04 (private IP via jumpbox)", "Sensor running", "4 min"],
-            ["Ubuntu 22.04 (private IP via jumpbox)", "Sensor running", "4 min"],
             ["Windows Server 2022 (WinRM direct)", "Sensor running", "6 min"],
             ["CLMS 6.14.141 registration", "All 3 sensors registered", "<1 min"],
             ["End-to-end", "3/3 success", "8 min"],

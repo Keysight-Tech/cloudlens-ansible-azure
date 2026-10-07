@@ -56,29 +56,35 @@ Three things the prospect will care about:
 | 22-27 | Switch to the tool side, tcpdump streams real VXLAN packets | Live capture, inner L2 frames decoded |
 | 27-30 | Close with the upgrade path | KVO single-pane, eBPF kTLS for payload, APIM SHG for PaaS visibility |
 
-The whole thing runs against `kvo-test-rg` in Azure subscription
-`CloudLensPublic`. Nothing needs to be torn down between demos.
+The whole thing runs against four resource groups in Azure subscription
+`CloudLensPublic`: `demo-prod-rg` (workload VMs), `demo-cloudlens-rg`
+(vController + vPB), `demo-vectra-rg` (Vectra mock) and `kvo-test-rg`
+(KVO, reused from the earlier KVO deploy). Nothing needs to be torn down
+between demos.
 
 ---
 
 ## What is already deployed in the lab (reuse for every demo)
 
-All resources live in `kvo-test-rg` in the `CloudLensPublic` Azure
-subscription, in `eastus2`.
+All resources live in the `CloudLensPublic` Azure subscription, in
+`eastus2`, spread over four resource groups. `demo/setup-azure-visibility-demo.sh`
+creates the three `demo-*` groups; `kvo-test-rg` holds the KVO deployed
+earlier and is reused as is.
 
-| Component | Public IP | Private IP | Notes |
-|---|---|---|---|
-| KVO | `20.230.15.87` | `10.60.1.4` | EULA accepted, admin user set |
-| vController | `20.122.11.40` | `10.60.10.4` | Project `cloudlens-demo` active |
-| vPB | `40.75.119.109` | `10.60.20.4` (mgmt) | v3.15.0-1, KVO adoption is a known issue (see OPERATIONS.md) |
-| Vectra mock | `52.251.127.107` | `10.60.40.4` | nginx + tcpdump ready for UDP/4789 |
-| app01-ubuntu | `172.172.73.189` | `10.60.30.4` | Sensor running, registered |
-| app02-ubuntu | `20.14.133.93` | `10.60.30.5` | Sensor running, registered |
-| win01 | `20.110.207.206` | `10.60.30.6` | Sensor running, registered |
-| win02 | `20.119.222.251` | `10.60.30.7` | Sensor running, registered |
+| Component | Resource group | Public IP | Private IP | Notes |
+|---|---|---|---|---|
+| KVO | `kvo-test-rg` | `20.230.15.87` | `10.60.1.4` | EULA accepted, admin user set |
+| vController | `demo-cloudlens-rg` | `20.122.11.40` | `10.60.10.4` | Project `cloudlens-demo` active |
+| vPB | `demo-cloudlens-rg` | `40.75.119.109` | `10.60.20.4` (mgmt) | v3.15.0-1 Marketplace image, not adopted in KVO (image defect, see OPERATIONS.md section 4c) |
+| Vectra mock | `demo-vectra-rg` | `52.251.127.107` | `10.60.40.4` | nginx + tcpdump ready for UDP/4789 |
+| app01-ubuntu | `demo-prod-rg` | `172.172.73.189` | `10.60.30.4` | Sensor running, registered |
+| app02-ubuntu | `demo-prod-rg` | `20.14.133.93` | `10.60.30.5` | Sensor running, registered |
+| win01 | `demo-prod-rg` | `20.110.207.206` | `10.60.30.6` | Sensor running, registered |
+| win02 | `demo-prod-rg` | `20.119.222.251` | `10.60.30.7` | Sensor running, registered |
 
-Shared admin password lives at `~/.netrefer-demo-v2/admin_pw` (yes the
-folder name is historical; do not rename it without updating scripts).
+Shared admin password lives at `~/.cloudlens-demo/admin_pw`. The demo
+orchestrator writes it there and every demo script reads it from that
+path, so do not move or rename the file.
 
 ---
 
@@ -96,7 +102,7 @@ folder name is historical; do not rename it without updating scripts).
 2. **Confirm all 4 sensors are still healthy**
 
    ```bash
-   sshpass -p "$(cat ~/.netrefer-demo-v2/admin_pw)" ssh \
+   sshpass -p "$(cat ~/.cloudlens-demo/admin_pw)" ssh \
      -o StrictHostKeyChecking=no azureuser@172.172.73.189 \
      'sudo docker ps --filter name=cloudlens-agent --format "{{.Names}}: {{.Status}}"'
    ```
@@ -119,7 +125,7 @@ folder name is historical; do not rename it without updating scripts).
    are pre-buffered:
 
    ```bash
-   sshpass -p "$(cat ~/.netrefer-demo-v2/admin_pw)" ssh \
+   sshpass -p "$(cat ~/.cloudlens-demo/admin_pw)" ssh \
      azureuser@52.251.127.107 \
      'sudo nohup timeout 1800 tcpdump -i any -nn -w /tmp/vxlan-capture.pcap udp port 4789 > /tmp/tcpdump.log 2>&1 &'
    ```
@@ -142,11 +148,17 @@ Works in any region. Let me show you the live build."**
 
 ### Beat 2 (0:03 - 0:08) : The customer-facing deploy path
 
-Open https://keysight-tech.github.io/cloudlens-ansible-azure/. Scroll to
-the prereq cards (vController, KVO, vPB). Hover over the Deploy to Azure
-buttons. Say: **"This is what your team clicks. One Azure Marketplace
-deploy per component. The ARM templates are open source - go pick at
-them."**
+Open https://keysight-tech.github.io/cloudlens-ansible-azure/. Show the
+"Deploy the full CloudLens Stack" button (one wizard: vController + KVO +
+vPB in one shared VNet with five subnets), then the one-command path
+right under it: a single curl that deploys the same stack, asks which
+network may reach the appliances, creates the project key itself,
+installs the sensors and adopts everything into KVO. Scroll to "One
+command back down" and say that the teardown releases the KVO licences
+before it deletes anything. Say: **"This is what your team runs. One
+wizard or one paste, and the same command in reverse. The ARM templates
+are open source - go pick at them."** The per-product Marketplace cards
+remain for teams that want one appliance at a time.
 
 If they care about IaC: also click the `Prefer Terraform?` disclosure.
 
@@ -232,13 +244,20 @@ Hand them three artifacts:
 ## If the prospect asks any of these...
 
 **Q: "What if a vPB dies?"**
-A: Production keeps serving. Sensors just stop pushing mirror. No
-customer impact. Run vPB Active-Active in two AZs for ~10s failover.
+A: On the sensor path shown here, production keeps serving; the sensors
+simply have nowhere to send the mirror until the vPB is back. Run two
+vPBs for continuity. On the GWLB path the answer is different, see the
+next question.
 
 **Q: "Can you do GWLB?"**
-A: Yes - dual vPB hairpin with 5-tuple LB. See
-`Azure_GWLB_VPB/docs/cloudlens-vpb-gwlb-ha-architecture.drawio`. This
-demo uses out-of-band because most customers reject inline.
+A: Yes. Azure Gateway Load Balancer chaining is generally available and
+documented in the vPB User Guide chapter 3; the dual vPB active-active
+design with the hairpin and 5-tuple hashing is in
+https://github.com/Keysight-Tech/cloudlens-vpb-azure-gwlb. Be clear that
+it is inline: the vPB sits in the service chain, so a failed vPB, or an
+expired vPB licence, stops the application, not just the visibility.
+That is why this demo uses the out-of-band sensor path and why a GWLB
+deployment needs two vPBs and an alarm on licence expiry.
 
 **Q: "What about east-west between two PaaS services?"**
 A: Honest answer: Microsoft does not expose those packets to anyone.
@@ -249,9 +268,15 @@ specific APIs to APIM Self-Hosted Gateway in AKS - which is a real,
 documented path and we have the runbook.
 
 **Q: "Why is vPB v3.15 saying License Manager Error?"**
-A: KVO adoption auto-licenses on adopt. We have a documented quirk in
-Azure peered VNets - see OPERATIONS.md section 4c. Out-of-band data
-path works regardless.
+A: KVO auto-licenses a vPB when it adopts it, and this vPB is not
+adopted. The cause is a defect in the Azure Marketplace vPB image
+(3.15.0-1): its `vpb-shim` pod, the component that announces the device
+to KVO, crash-loops because the image carries no management interface,
+only the data ports. It is not a VNet peering or NSG problem; TCP 443
+from the vPB to the KVO was verified open. OPERATIONS.md section 4c has
+the known-issue entry and `docs/AZURE_TAPPING_ARCHITECTURE.md` has the
+evidence and the open question to Keysight. The out-of-band data path
+works regardless: the vPB is configured directly from `sudo vpb`.
 
 **Q: "Can we audit your code?"**
 A: All open source.
@@ -270,11 +295,11 @@ The lab is built to be idempotent. After a demo:
 
 ```bash
 # Stop any test traffic generators
-sshpass -p "$(cat ~/.netrefer-demo-v2/admin_pw)" ssh \
+sshpass -p "$(cat ~/.cloudlens-demo/admin_pw)" ssh \
   azureuser@172.172.73.189 'pkill -f "while true; do curl"' || true
 
 # Clear the tcpdump capture (so the next demo starts at 0 bytes)
-sshpass -p "$(cat ~/.netrefer-demo-v2/admin_pw)" ssh \
+sshpass -p "$(cat ~/.cloudlens-demo/admin_pw)" ssh \
   azureuser@52.251.127.107 'sudo truncate -s 0 /tmp/vxlan-capture.pcap'
 
 # In vController UI: delete the Connection you created (Tools stays)
@@ -293,8 +318,22 @@ more than two weeks, tear down to save cost; rebuild in 30 min when
 needed.
 
 ```bash
-bash demo/teardown.sh                # nukes 3 RGs
-bash demo/teardown.sh --include-kvo  # also drops kvo-test-rg
+# The three demo groups hold no KVO, so this is safe:
+bash demo/teardown.sh                # deletes demo-prod-rg, demo-cloudlens-rg, demo-vectra-rg
+```
+
+Do not run `demo/teardown.sh --include-kvo`: it runs `az group delete`
+on `kvo-test-rg`, and every licence still activated on that KVO is
+stranded for good. Release them from the live KVO first, either in its
+UI (Settings > Product Licensing > Deactivate licenses) or with the
+repo's teardown, which asks for confirmation, releases the licences,
+then removes the CloudLens VMs and leaves a group it did not create in
+place:
+
+```bash
+bash deploy/teardown-stack.sh --resource-group kvo-test-rg --audit   # read-only: what it found, what would go
+bash deploy/teardown-stack.sh --resource-group kvo-test-rg           # releases the licences, then deletes
+az group delete -n kvo-test-rg --yes --no-wait                       # only after the release, for whatever is left
 ```
 
 To rebuild fresh:

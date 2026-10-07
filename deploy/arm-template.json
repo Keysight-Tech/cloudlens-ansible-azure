@@ -3,7 +3,7 @@
   "contentVersion": "1.0.0.0",
   "metadata": {
     "title": "CloudLens Sensor Runner (existing vController required)",
-    "description": "Spins up a self-destructing Ubuntu VM that installs CloudLens sensors on every tagged VM in your subscription. Use this when you ALREADY have a vController / CLMS deployed and just need to push sensors to your workloads. If you do NOT have vController yet, click 'Deploy CloudLens Stack' on the docs site instead - that deploys vController + KVO + vPB first, then chains to sensor install. The runner self-deletes after the configured time (default 60 minutes) so you do not pay for an idle VM."
+    "description": "Spins up an Ubuntu runner VM that installs CloudLens sensors on every tagged VM in your subscription. Use this when you ALREADY have a vController / CLMS deployed and just need to push sensors to your workloads. If you do NOT have vController yet, click 'Deploy CloudLens Stack' on the docs site instead - that deploys vController + KVO + vPB first, then chains to sensor install. The runner powers itself off selfDestructMinutes (default 60) after the sensor run finishes; it does not delete itself. The stopped VM, its disk, NIC and public IP stay in the resource group until you delete the group, so delete the group when the run is done."
   },
   "parameters": {
     "clmsIpOrFqdn": {
@@ -28,14 +28,14 @@
     "windowsAdminPassword": {
       "type": "securestring",
       "metadata": {
-        "description": "Admin password for Windows target VMs (leave blank if no Windows)"
+        "description": "Not used by the runner. Nothing in this template reads this value: the cloud-init does not pass it to quickstart.sh, does not export ANSIBLE_WINRM_PASSWORD and does not write windows.ansible_password into customer_input.yaml, so the Windows play (playbooks/windows.yaml) fails its preflight password check for each Windows VM it discovers. Leave the default in place; it is a placeholder, not a blank."
       },
       "defaultValue": "skip-no-windows"
     },
     "linuxSshKey": {
       "type": "string",
       "metadata": {
-        "description": "SSH public key for connecting to target Linux VMs"
+        "description": "SSH public key placed in /home/azureuser/.ssh/authorized_keys on the runner VM itself, so you can ssh in as azureuser and follow /opt/cl/deploy.log (see the sshCommand output). That is its only use: a public key cannot log the runner into anything, and the cloud-init creates no private key. Target Linux VMs are reached with the private key named by linux.ssh_key_file in customer_input.yaml (~/.ssh/id_rsa by default), which the cloud-init does not create."
       }
     },
     "subscriptionScope": {
@@ -46,14 +46,14 @@
         "specific-rgs"
       ],
       "metadata": {
-        "description": "Discover ALL tagged VMs in subscription, OR limit to specific RGs"
+        "description": "Not used by the runner: the cloud-init never reads this value, so either choice discovers the same VMs. Discovery scope on the runner comes from customer_input.yaml, which quickstart.sh copies from customer_input.yaml.example with an empty resource_groups list, so the whole subscription is searched."
       }
     },
     "resourceGroups": {
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Comma-separated RG list (only if subscriptionScope=specific-rgs)"
+        "description": "Not used by the runner: the cloud-init never reads this value and does not write azure.resource_groups into customer_input.yaml, so listing resource groups here does not narrow discovery."
       }
     },
     "runnerSize": {
@@ -73,7 +73,7 @@
       "type": "int",
       "defaultValue": 60,
       "metadata": {
-        "description": "Auto-delete runner VM after this many minutes (0 = keep)"
+        "description": "Minutes after quickstart.sh finishes before the runner runs shutdown -h and powers itself off. The VM is stopped, not deleted: it stays in the resource group until you delete the group. 0 does not keep the runner: shutdown -h +0 powers it off as soon as the sensor run ends. Use a larger number to keep it reachable longer."
       }
     },
     "location": {
@@ -84,14 +84,14 @@
       "type": "string",
       "defaultValue": "cloudlens",
       "metadata": {
-        "description": "Azure tag KEY that marks workload VMs for sensor install. Default 'cloudlens'. Override if your team uses a different tagging convention (e.g. 'monitoring')."
+        "description": "Azure tag KEY the cloud-init tries to substitute into inventory/azure_rm.yaml with sed. The substitution has no effect: the sed pattern looks for the filter line with double quotes while the file uses single quotes, so the file is left unchanged, and quickstart.sh then renders its own inventory from customer_input.yaml anyway (scripts/render_azure_inventory.py). The runner always discovers VMs tagged cloudlens=yes and env=prod, the tag_filters in customer_input.yaml.example. Tag your VMs that way; changing this value does not change which VMs are found."
       }
     },
     "discoveryTagValue": {
       "type": "string",
       "defaultValue": "yes",
       "metadata": {
-        "description": "Azure tag VALUE that pairs with the key above. Default 'yes'. Combined default: cloudlens=yes."
+        "description": "Azure tag VALUE paired with the key above in the same sed substitution, which has no effect for the reasons given there. The runner discovers VMs tagged cloudlens=yes and env=prod regardless of this value."
       }
     }
   },

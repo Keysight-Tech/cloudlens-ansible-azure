@@ -6,7 +6,7 @@
     "config": {
       "isWizard": true,
       "basics": {
-        "description": "Deploy Keysight Vision Orchestrator (KVO) v3.0.0-55 from Azure Marketplace. KVO is the centralized control and automation layer for Keysight Visibility solutions, managing virtual Packet Broker (vPB) fleets across physical, virtual, and cloud environments. After deployment, the web UI is reachable in about 60 seconds and full initialization completes in roughly 15 minutes. Refer to Keysight KVO documentation for default UI credentials.",
+        "description": "Deploy Keysight Vision Orchestrator (KVO) v3.0.0-55 from Azure Marketplace. KVO is the centralized control and automation layer for Keysight Visibility solutions, managing virtual Packet Broker (vPB) fleets across physical, virtual, and cloud environments. After deployment, the web UI is reachable in about 60 seconds and full initialization completes in roughly 15 minutes. The web UI login is the factory default admin / admin; KVO forces a password change on first login.",
         "subscription": {},
         "resourceGroup": {
           "allowExisting": true
@@ -46,7 +46,7 @@
             "type": "Microsoft.Compute.UserNameTextBox",
             "label": "Linux admin username",
             "defaultValue": "azureuser",
-            "toolTip": "OS-level admin user for SSH. The KVO web UI uses its own separate admin account (refer to Keysight KVO documentation for default UI credentials).",
+            "toolTip": "OS-level admin user for SSH. The KVO web UI uses its own separate admin account: the factory default is admin / admin, and KVO forces a password change on first login.",
             "osPlatform": "Linux",
             "constraints": {
               "required": true
@@ -58,7 +58,7 @@
             "visible": true,
             "options": {
               "icon": "Info",
-              "text": "Heads-up: the password below is for **OS-level SSH** on the underlying Linux VM (only used for advanced troubleshooting). The KVO **web UI** uses its own admin account that you'll set during first-login EULA acceptance. These are two separate accounts."
+              "text": "The password below is for **OS-level SSH** on the underlying Linux VM (only used for advanced troubleshooting). The KVO **web UI** uses its own admin account: the factory default is admin / admin, and KVO forces a password change on first login, after you accept the EULA. These are two separate accounts."
             }
           },
           {

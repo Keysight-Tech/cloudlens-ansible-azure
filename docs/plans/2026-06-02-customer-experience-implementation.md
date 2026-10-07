@@ -30,7 +30,7 @@ Expected: design file exists, python-docx installed.
 
 Hand-author SVG showing: Customer machine → Azure Inventory → 3 OS playbook lanes → CLMS. Use Azure brand blue `#0078D4`, Keysight gold `#D4AF37`. 1200×600 viewport. Show Service Principal auth, tag discovery, OS-conditional connection, CLMS registration.
 
-**Verify:** `open docs/assets/architecture-diagram.svg` — renders cleanly.
+**Verify:** `open docs/assets/architecture-diagram.svg` - renders cleanly.
 
 **Commit:** `git add docs/assets/architecture-diagram.svg && git commit -m "docs: architecture diagram SVG"`
 
@@ -76,7 +76,7 @@ Try asciinema + agg first. If unavailable, hand-author a styled SVG terminal scr
 
 ---
 
-### Task 5: Rewrite README.md — hero section
+### Task 5: Rewrite README.md - hero section
 
 **Files:** Modify `README.md`
 
@@ -96,7 +96,7 @@ Embed `docs/assets/decision-tree.svg` under "Which path?" section. Embed `docs/a
 
 ---
 
-### Task 7: Rewrite README — 3 deployment paths section
+### Task 7: Rewrite README - 3 deployment paths section
 
 **Files:** Modify `README.md`
 
@@ -136,7 +136,7 @@ Python script using python-docx. Style matches existing GWLB Word doc: Keysight 
 
 **Run:** `python3 docs/generate_runbook.py`
 
-**Verify:** `open docs/CloudLens_Ansible_Azure_Customer_Runbook.docx` — all 11 sections render with Keysight branding.
+**Verify:** `open docs/CloudLens_Ansible_Azure_Customer_Runbook.docx` - all 11 sections render with Keysight branding.
 
 **Commit:** `git add docs/generate_runbook.py docs/CloudLens_Ansible_Azure_Customer_Runbook.docx && git commit -m "docs: Word runbook generator + customer runbook"`
 
@@ -154,11 +154,11 @@ Python script using python-docx. Style matches existing GWLB Word doc: Keysight 
 
 ### Task 12: Push to GitHub + final polish
 
-**Step 1:** `cd ~/cloudlens-deploy/cloudlens-ansible-azure && git log --oneline -15` — expect ~11 doc commits.
+**Step 1:** `cd ~/cloudlens-deploy/cloudlens-ansible-azure && git log --oneline -15` - expect ~11 doc commits.
 
 **Step 2:** `git push origin main`
 
-**Step 3:** Open https://github.com/Keysight-Tech/cloudlens-ansible-azure — verify GIF/SVG plays, 3 buttons clickable, decision tree visible, mobile-friendly.
+**Step 3:** Open https://github.com/Keysight-Tech/cloudlens-ansible-azure - verify GIF/SVG plays, 3 buttons clickable, decision tree visible, mobile-friendly.
 
 **Step 4:** Polish pass: fix any typos, broken links, image scaling on mobile. Commit fixes if any.
 

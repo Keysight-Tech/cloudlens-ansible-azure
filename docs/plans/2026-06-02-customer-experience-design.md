@@ -1,4 +1,4 @@
-# Customer Experience Design — README + PDF Runbook
+# Customer Experience Design: README + PDF Runbook
 
 **Status:** Approved
 **Date:** 2026-06-02
@@ -35,14 +35,14 @@ A customer with no prior context can:
 
 Sections in order:
 
-1. **Hero** — 30-second deploy GIF, then 3 deploy buttons (Portal / Cloud Shell / Docker), then status badges
-2. **"Which path?" decision tree** — 3 questions → tier recommendation
-3. **VM compatibility matrix** — visual grid (OS × Topology × Auth Method)
-4. **The 3 deployment paths** — one sentence + one command + expected output each
-5. **Scaling table** — VM count → forks → wall time
-6. **Verified against Azure** — smoke test results table
-7. **Troubleshooting decision tree** — symptom → cause → fix
-8. **Footer** — support contacts, related repos, license
+1. **Hero**: 30-second deploy GIF, then 3 deploy buttons (Portal / Cloud Shell / Docker), then status badges
+2. **"Which path?" decision tree**: 3 questions → tier recommendation
+3. **VM compatibility matrix**: visual grid (OS × Topology × Auth Method)
+4. **The 3 deployment paths**: one sentence + one command + expected output each
+5. **Scaling table**: VM count → forks → wall time
+6. **Verified against Azure**: smoke test results table
+7. **Troubleshooting decision tree**: symptom → cause → fix
+8. **Footer**: support contacts, related repos, license
 
 ### 2. CloudLens_Ansible_Azure_Customer_Runbook.docx (Executive "wow")
 
@@ -54,7 +54,7 @@ Sections:
 3. Solution overview (architecture diagram + traffic flow)
 4. Customer decision tree
 5. Prerequisites checklist (printable)
-6. Deployment — 3 paths with screenshots
+6. Deployment: 3 paths with screenshots
 7. Verification checklist (printable)
 8. Scaling guide
 9. Troubleshooting reference
@@ -72,7 +72,7 @@ Distribution: Both `.docx` (editable) and `.pdf` (final form) in `docs/`.
 | `docs/assets/architecture-diagram.svg` | SVG | High-level system architecture |
 | `docs/CUSTOMER_EMAIL.md` | Markdown | Pre-written email template SEs send to customers |
 
-## Hero Section — Decided Layout
+## Hero Section: Decided Layout
 
 Order on the README:
 
@@ -97,11 +97,11 @@ The matrix must visually communicate full coverage. Cells documented as ✓ supp
 | CentOS / Rocky / AlmaLinux | ✓ | ✓ | ✓ | ✓ |
 | Windows Server 2019 / 2022 | ✓ | (planned) | (planned) | ✓ |
 
-Anything not yet tested gets "(planned)" — honest, not aspirational.
+Anything not yet tested gets "(planned)": honest, not aspirational.
 
 ## Verified Results Table
 
-Real numbers from this session's smoke test:
+Real numbers from the smoke test:
 
 | Scenario | Result |
 |---|---|
@@ -118,8 +118,8 @@ Real numbers from this session's smoke test:
 - **PDF style:** Matches existing GWLB customer runbook
 - **Audience:** SE-facing AND customer-facing, dual mode
 - **Automation emphasis:** Every section ends with an executable command or button
-- **No** GitHub Pages site (Option B rejected — adds maintenance burden, README is sufficient entry point)
-- **No** onboarding video script (Option D rejected — GIF is enough for now)
+- **No** GitHub Pages site (Option B rejected: adds maintenance burden, README is sufficient entry point)
+- **No** onboarding video script (Option D rejected: GIF is enough for now)
 
 ## Out of Scope
 
@@ -130,4 +130,4 @@ Real numbers from this session's smoke test:
 
 ## Implementation Plan
 
-See `docs/plans/2026-06-02-customer-experience-implementation.md` (to be written next via writing-plans skill).
+See `docs/plans/2026-06-02-customer-experience-implementation.md`.

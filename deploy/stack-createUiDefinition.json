@@ -204,7 +204,7 @@
             "visible": true,
             "options": {
               "icon": "Info",
-              "text": "Heads-up: the password below is for **OS-level SSH** on all three VMs. The vController **web UI** uses built-in credentials (`admin / Cl0udLens@dm!n`) you'll change on first login. The KVO **web UI** admin account is set during first-login EULA acceptance. The vPB **CLI** is reached through a two-hop SSH and has its own credentials. All separate from this password."
+              "text": "Heads-up: the username and password below are for **OS-level SSH** on all three VMs (port 22 on vController and KVO, port 9022 on the vPB). The vController **web UI** uses built-in credentials (`admin / Cl0udLens@dm!n`) with a forced change on first login. The KVO **web UI** uses the factory default `admin / admin` with a forced change on first login. The vPB **CLI** has no separate password: SSH to the vPB on port 9022 with the credentials below, then run `sudo vpb`. Allow 10 to 15 minutes after deployment for the vPB to be fully up. The web UI logins are separate from this password."
             }
           },
           {
@@ -377,7 +377,7 @@
                 "visible": true,
                 "options": {
                   "icon": "Info",
-                  "text": "The stack creates ONE shared VNet with five subnets: vcontroller-subnet (10.50.1.0/24), kvo-subnet (10.50.2.0/24), vpb-mgmt (10.50.10.0/24), vpb-ingress (10.50.11.0/24), vpb-egress (10.50.12.0/24). Override the address space below if your default range conflicts."
+                  "text": "The stack creates ONE shared VNet with five fixed /24 subnets: vcontroller-subnet (10.50.1.0/24), kvo-subnet (10.50.2.0/24), vpb-mgmt (10.50.10.0/24), vpb-ingress (10.50.11.0/24), vpb-egress (10.50.12.0/24). These prefixes are fixed and are not carved from the address space below, so the address space you enter must contain all five (the default 10.50.0.0/16 does). Choose a range that does not overlap with VNets you plan to peer with."
                 }
               },
               {
@@ -385,7 +385,7 @@
                 "type": "Microsoft.Common.TextBox",
                 "label": "Shared VNet address space (CIDR)",
                 "defaultValue": "10.50.0.0/16",
-                "toolTip": "CIDR for the shared VNet. The five subnets carve from this. Must not overlap with VNets you plan to peer with.",
+                "toolTip": "CIDR for the shared VNet. The five subnets use fixed prefixes (10.50.1.0/24, 10.50.2.0/24, 10.50.10.0/24, 10.50.11.0/24, 10.50.12.0/24) and are not carved from this value, so the range must contain all of them. Must not overlap with VNets you plan to peer with.",
                 "constraints": {
                   "required": true,
                   "regex": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",

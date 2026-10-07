@@ -2,7 +2,7 @@
 
 ## Overview
 
-CloudLens Ansible Azure deploys the **CloudLens sensor agent** to Azure VMs at scale, using:
+CloudLens Ansible Azure deploys the CloudLens appliance stack (vController, KVO, vPB) and the **CloudLens sensor agent** to Azure VMs at scale, using:
 
 - **Azure dynamic inventory** (`azure_rm` plugin) to discover VMs by tag
 - **OS-specific playbooks** for Ubuntu, RHEL/CentOS, and Windows
@@ -39,7 +39,7 @@ CloudLens Ansible Azure deploys the **CloudLens sensor agent** to Azure VMs at s
        │
        └──► windows.yaml (parallel)
                  Checks if already healthy → skip
-                 Otherwise: copies MSI → silent install
+                 Otherwise: copies the installer .exe → silent install
                  Verifies service, process, registry, config
 ```
 
@@ -57,22 +57,24 @@ Volumes mounted:
 |---|---|
 | `/lib/modules:/lib/modules` | Kernel modules access |
 | `/var/log/cloudlens:/var/log/cloudlens` | Persistent sensor logs |
-| `/var/tmp/cloudtap:/var/cloudtap` | Capture spool |
-| `/:/host` | Read-only host filesystem for metadata |
+| `/var/tmp/cloudtap:/var/cloudtap` | Capture spool (RHEL/Podman and RHEL/Docker only) |
+| `/:/host` | Host filesystem for metadata (mounted read-write) |
 | `/var/run/docker.sock:/var/run/docker.sock` | Container metadata (Ubuntu only) |
 
 ## Windows Install Pattern
 
-MSI silent install with key parameters:
+The installer executable is copied to `C:\temp` and run silently:
 
 ```
-msiexec /i cloudlens-win-sensor-X.Y.Z.exe /quiet \
-  Server="<CLMS_IP>" \
+cloudlens-win-sensor-X.Y.Z.exe /install /quiet \
+  Server="<vController address>" \
   Project_Key="<KEY>" \
   SSL_Verify="no" \
   Auto_Update="yes" \
   Custom_Tags="Env=Azure ..."
 ```
+
+An existing installation is removed first through its registered UninstallString (msiexec /x for MSI-registered builds, `/uninstall /quiet` for exe builds).
 
 Idempotent checks:
 1. Registry → `HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*CloudLens*`
@@ -87,22 +89,32 @@ All four must pass → skip reinstall. Any failure → uninstall + reinstall.
 | Concern | Approach |
 |---|---|
 | **WinRM disabled by default** | Bootstrap via Azure VM Run Command (works without WinRM) |
-| **Public vs private IPs** | Default uses public IPs. For Bastion: set `hostnames: private_ipv4_addresses` in `azure_rm.yaml` |
+| **Public vs private IPs** | Each VM is reached on its public IP when it has one, otherwise on its private IP (`hostvar_expressions` in `inventory/azure_rm.yaml`). Private-only VMs are reached through a jumpbox (`connection.mode: jumpbox` in `customer_input.yaml`) or by running from inside Azure (Cloud Shell, a peered VM). Azure Bastion is not a connection mode. `deploy-stack.sh` forces public addresses when it detects it is running outside Azure. |
 | **NSG rules** | Bootstrap auto-opens 5985 (WinRM). For Linux, SSH (22) is assumed open. |
-| **Accelerated Networking** | No special handling required for sensor agents (only relevant for vPB, in a separate repo) |
+| **Accelerated Networking** | Not needed for sensor agents. The vPB templates in `deploy/` enable it on the vPB's ingress and egress NICs (the management NIC runs without it); the three-NIC layout is why Standard_D8s_v3 is the minimum vPB size. |
 | **Multi-region** | Add multiple `locations` to `customer_input.yaml`. Each VM is targeted regardless of region. |
-| **Managed Identity** | Currently uses Service Principal. Managed Identity support: set `auth_source: msi` in `azure_rm.yaml` and run from an Azure VM. |
+| **Authentication** | Three sources, picked automatically: service principal env vars (`AZURE_SUBSCRIPTION_ID`, `AZURE_TENANT`, `AZURE_CLIENT_ID`, `AZURE_SECRET`, created by `scripts/setup_azure_sp.sh`); an `az login` session or Azure Cloud Shell (`quickstart.sh` sets `ANSIBLE_AZURE_AUTH_SOURCE=cli` when no service principal is present); or, in Docker, the service principal or a mounted `~/.azure` login. Managed identity is not wired into the inventory today. |
+
+## Appliance stack
+
+`deploy/deploy-stack.sh`, the portal's full-stack template (`deploy/stack-marketplace.json`) and the Terraform stack module deploy the appliances the sensors report to. The bash deploy builds one virtual network, `cloudlens-vnet` (10.50.0.0/16 by default, `--vnet-cidr`), with five subnets: `vcontroller-subnet` (a.b.1.0/24), `kvo-subnet` (a.b.2.0/24), `vpb-mgmt` (a.b.10.0/24), `vpb-ingress` (a.b.11.0/24) and `vpb-egress` (a.b.12.0/24), and places every appliance in it, so the vController, KVO and vPB reach each other on private addresses. `--vnet-name` joins a VNet you already run; it must already hold those five subnets. A re-run adopts the `<vcontroller>-vnet` an older deploy built.
+
+Each appliance NSG admits SSH 22, vPB SSH 9022 and HTTPS 443 only from the admin source CIDR (`--admin-cidr`, asked interactively with your public /32 offered; `*` opens them to the internet). Mirrored traffic reaches the vPB ingress as VXLAN (UDP 4789 and 10800-10801) from `VirtualNetwork`: this VNet, peered VNets and on-premises ranges behind a gateway. The templates open no GRE port; the Azure vPB path is VXLAN.
+
+Azure-native tapping is Gateway Load Balancer service chaining (vPB User Guide chapter 3). It is generally available and inline: the vPB sits in the data path, so a stopped or unlicensed vPB stops the application, not only the visibility, and vPB licence expiry is a production alarm. Azure Virtual Network TAP, the out-of-band equivalent of AWS VPC Traffic Mirroring, is a gated Microsoft preview. The sensor path in this document is what the repo builds today; see docs/AZURE_TAPPING_ARCHITECTURE.md.
+
+`deploy/teardown-stack.sh` audits the group and asks for confirmation; once confirmed it offers to release the KVO licences while the KVO is still alive, then deletes the CloudLens resources, or the whole group when the deploy created it and nothing else lives in it.
 
 ## Security Boundaries
 
-- **Service Principal** scoped to specific resource groups (least privilege)
+- **Service Principal** created by `scripts/setup_azure_sp.sh` with Virtual Machine Contributor and Reader on the whole subscription; narrow the `--scopes` to the workload resource groups yourself when policy requires it. `azure.resource_groups` in `customer_input.yaml` limits discovery, not the credential.
 - **WinRM passwords** are read from env vars only, never committed
 - **Customer input file** git-ignored
 - **Sensor talks to CLMS over HTTPS** (port 443), outbound only, with no inbound exposure
 
 ## Scaling
 
-Tested patterns:
+Measured runs (forks set explicitly):
 
 | VMs | Forks | Approx. Duration |
 |---|---|---|
@@ -111,4 +123,4 @@ Tested patterns:
 | 500 | 50 | ~25 min |
 | 1000 | 100 | ~50 min |
 
-Tune via `customer_input.yaml` → `deploy.forks` or `ansible.cfg` → `forks`.
+`quickstart.sh` and the Docker entrypoint pick the fork count from the number of discovered VMs: 20 up to 50 VMs, 50 up to 500, 200 up to 2,000, then 500 per shard with sharding enabled automatically above 2,000 VMs. `quickstart.sh` additionally caps the value at four times the control node's CPU cores; the Docker entrypoint does not. `ANSIBLE_FORKS` overrides the choice in both; `deploy.forks` in `customer_input.yaml` is read by the Docker entrypoint only; `forks = 20` in `ansible.cfg` applies to a bare `ansible-playbook` run. Timings and control-node sizing are in docs/SCALING.md.

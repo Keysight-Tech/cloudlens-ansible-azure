@@ -365,10 +365,22 @@ vPB multi-NIC (fan-in / fan-out for prod):
   --vpb-ingress-nics N      Number of ingress NICs   (1-3, default: 1)
   --vpb-egress-nics N       Number of egress NICs    (1-3, default: 1)
 
+Sensor discovery (which workload VMs get the sensor):
+  --discovery-tag-key KEY   Azure tag key that marks "install the sensor
+                            here"                    (default: cloudlens)
+  --discovery-tag-value VALUE
+                            Tag value paired with that key
+                                                     (default: yes)
+                            The default pair is cloudlens=yes. Set both to
+                            match an existing convention such as
+                            monitoring=enabled. Asked interactively when
+                            sensors are chained and neither is given.
+
 Toggles:
   --no-kvo                  Skip KVO deployment
   --with-kvo                Deploy KVO (skip interactive prompt)
   --no-vpb                  Skip vPB deployment
+  --with-vpb                Deploy vPB (skip interactive prompt)
   --no-sensors              Skip sensor playbook chain at the end
   --rollback                On any failure, delete the resource group we
                             created (NEVER touches pre-existing RGs).
@@ -383,8 +395,30 @@ Env-var overrides (alternative to flags, useful for curl | bash):
   CLOUDLENS_VCONTROLLER_NAME / _SIZE / _COUNT,
   CLOUDLENS_KVO_NAME / _SIZE / _COUNT,
   CLOUDLENS_VPB_NAME / _SIZE / _COUNT,
-  CLOUDLENS_VPB_INGRESS_NICS, CLOUDLENS_VPB_EGRESS_NICS
-  CLOUDLENS_SENSOR_MANAGER_ADDR (address sensors register on; default: public IP with admin CIDR *, private IP otherwise)
+  CLOUDLENS_VPB_INGRESS_NICS, CLOUDLENS_VPB_EGRESS_NICS,
+  CLOUDLENS_DISCOVERY_TAG_KEY / _VALUE (same as --discovery-tag-key / -value),
+  CLOUDLENS_ROLLBACK_ON_FAIL=true (same as --rollback; default: false)
+
+  With no flag equivalent:
+  CLOUDLENS_SENSOR_MANAGER_ADDR  Address sensors register on (default: public IP
+                                 with admin CIDR *, private IP otherwise)
+  CLOUDLENS_LICENSE_CODES        Comma- or space-separated KVO activation codes
+                                 for Phase 12. Without them KVO stays unlicensed,
+                                 refuses every write, and Phases 13-15 cannot run.
+  CLOUDLENS_PROJECT              vController project Phase 10 creates; its API
+                                 key is the project key (default: cloudlens-autopilot)
+  CLOUDLENS_VC_PASSWORD          vController UI password to use instead of the one
+                                 recorded in ~/.cloudlens-vcontroller-creds-<rg>.json
+  CLOUDLENS_CLM_NAME             Name the vController is adopted under in KVO,
+                                 Phase 13 (default: cloudlens-vcontroller)
+  CLOUDLENS_CLOUD_CONFIG         KVO Cloud Config name, Phases 13 and 15
+                                 (default: cloudlens-azure)
+  CLOUDLENS_VPB_DEVICE_NAME      Name the vPB is adopted under in KVO, Phase 14
+                                 (default: cloudlens-vpb)
+  CLOUDLENS_KEY_PEM              SSH private key Phase 14 uses to drive the vPB CLI
+                                 (default: ~/.ssh/<vpb-name>.pem)
+  CLOUDLENS_VPB_SSH_USER         SSH user for that key (default: keysight, the
+                                 Azure Marketplace vPB login on port 9022)
 
 Example (full prod-style invocation):
   CLOUDLENS_RG=prod-cloudlens-rg CLOUDLENS_REGION=westeurope \\
@@ -412,7 +446,9 @@ What it does (phases):
  16. Final summary written to cloudlens-deploy-summary.txt
 
 Phases 12-15 need KVO (--with-kvo); 14-15 also need the vPB (--with-vpb).
-They are cloud-agnostic and share their scripts with the AWS repo verbatim.
+Their scripts under scripts/ started as copies of the AWS repo's and have since
+drifted (Azure transport in vpb_kvo_adopt.py, timeouts and argument handling in
+the other three): read docs/AZURE_TAPPING_ARCHITECTURE.md before porting a fix.
 
 Azure agentless tapping: read docs/AZURE_TAPPING_ARCHITECTURE.md FIRST. Azure
 has no generally-available equivalent of AWS VPC Traffic Mirroring, so the

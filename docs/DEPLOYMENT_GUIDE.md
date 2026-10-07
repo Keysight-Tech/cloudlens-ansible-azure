@@ -1,6 +1,6 @@
 # Deployment Guide
 
-End-to-end customer deployment in 6 steps.
+End-to-end customer deployment in 6 steps, for a sensors-only rollout against a vController you already run. Two shortcuts exist: `deploy/deploy-stack.sh` deploys the vController (plus KVO and vPB), creates the project key itself, writes `customer_input.yaml` and runs the sensor install, so none of the steps below are typed by hand; and `quickstart.sh` performs Steps 1, 4 and 6 from an `az login` session or Azure Cloud Shell without a service principal. The Docker image (README, Tier 3) runs the same playbooks from a laptop or CI runner. Use `deploy/teardown-stack.sh` to remove an appliance stack; it releases the KVO licences first and asks before deleting.
 
 ## Step 1: Prerequisites
 
@@ -47,7 +47,7 @@ Tag the VMs that should receive CloudLens sensors:
 |---|---|
 | `cloudlens` | `yes` |
 | `os` | `ubuntu` \| `rhel` \| `windows` |
-| `env` | `prod` (or `dev`/`qa`, must match conditional_groups in `inventory/azure_rm.yaml`) |
+| `env` | `prod` (the deploy targets the `*_prod_vms` groups; VMs tagged `env=dev` land in `*_dev_vms` and are only reached by passing `-e target_group=ubuntu_dev_vms` and so on to each playbook; there is no `qa` group) |
 
 Bulk-tag all Linux VMs in a resource group:
 
@@ -105,11 +105,22 @@ Set the Windows admin password env var (do NOT put it in the yaml):
 export ANSIBLE_WINRM_PASSWORD='YourSecurePassword123!'
 ```
 
-Place the Windows installer in `files/`:
+Download the Windows installer from the vController and place it in `files/`:
 
 ```bash
-cp /path/to/cloudlens-win-sensor-6.12.0.316.exe files/
+cp /path/to/cloudlens-win-sensor-6.13.0.359.exe files/
 ```
+
+If your file has another version in its name, add it to `customer_input.yaml`:
+
+```yaml
+windows:
+  ansible_user: "azureuser"
+  installer_path: "files/cloudlens-win-sensor-<version>.exe"
+  installer_filename: "cloudlens-win-sensor-<version>.exe"
+```
+
+The file is git-ignored (`files/*.exe`).
 
 ## Step 5: Dry run
 

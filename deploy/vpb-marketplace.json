@@ -3,7 +3,7 @@
   "contentVersion": "1.0.0.0",
   "metadata": {
     "title": "Keysight CloudLens Virtual Packet Broker (vPB) from Azure Marketplace",
-    "description": "One-click deployment of a CloudLens Virtual Packet Broker v3.15.0 from Azure Marketplace. Provisions a single vPB VM with three NICs (management, ingress, egress), accelerated networking on the data-plane NICs, a public IP on the management NIC, and an NSG that opens SSH, HTTPS, and VXLAN ports (4789, 10800-10801). Default CLI credentials: admin / ixia (change immediately). SSH is reachable about 60 seconds after deploy; full vPB initialization takes 5 to 10 minutes.",
+    "description": "One-click deployment of a CloudLens Virtual Packet Broker v3.15.0 from Azure Marketplace. Provisions a single vPB VM with three NICs (management, ingress, egress), accelerated networking on the data-plane NICs, a public IP on the management NIC, and an NSG that opens SSH (22 and KCOS 9022), HTTPS (443) and VXLAN (UDP 4789, 10800-10801) from the sources you choose. Access on v3.15: ssh -p 9022 <adminUsername>@<public-ip> (Keysight's own Marketplace listing uses the keysight user with an SSH key pair), then sudo vpb for the CLI. There is no separate CLI password and nothing listens on port 2222: admin / ixia and port 2222 belong to v3.14 and on-prem builds. Allow 10 to 15 minutes after the deployment reports success for the vPB to be fully up; SSH on 9022 and sudo vpb can refuse connections until then.",
     "author": "Keysight Technologies"
   },
   "parameters": {
@@ -18,13 +18,13 @@
       "type": "string",
       "defaultValue": "azureuser",
       "metadata": {
-        "description": "Linux admin username used for SSH access to the underlying VM. KCOS-based vPB images expose OS-level SSH on port 9022 (NOT the default 22): ssh azureuser@<public-ip> -p 9022. The vPB CLI uses its own separate admin account (admin / ixia) reachable as a two-hop SSH on port 2222 from inside the OS shell."
+        "description": "Linux admin username for the vPB OS shell. KCOS-based vPB images expose OS-level SSH on port 9022, not 22: ssh -p 9022 <adminUsername>@<public-ip> with the adminPassword set below. Keysight's own Marketplace listing uses the keysight user with an SSH key pair instead. The vPB CLI on v3.15 has no account or password of its own: run sudo vpb from the OS shell. Port 2222 and admin / ixia belong to v3.14 and on-prem builds and do not exist on this image."
       }
     },
     "adminPassword": {
       "type": "securestring",
       "metadata": {
-        "description": "Linux admin password for SSH access. Must be 12+ characters and include uppercase, lowercase, a digit, and a symbol. This is the OS-level password, not the vPB CLI password."
+        "description": "Linux admin password for the OS shell on port 9022. Must be 12+ characters and include uppercase, lowercase, a digit, and a symbol. It is the only password the vPB asks for: the v3.15 CLI (sudo vpb) has no password of its own."
       }
     },
     "vmSize": {
@@ -97,7 +97,7 @@
         3
       ],
       "metadata": {
-        "description": "Number of ingress NICs (receive mirror traffic). Default 1. Use 2 or 3 to fan in from multiple sources. Each extra NIC adds an Azure NIC to the VM. With more than 3 NICs total (1 mgmt + N ingress + N egress) you must select Standard_D16s_v3 or larger - D8s_v3 supports max 4 NICs."
+        "description": "Number of ingress NICs (receive mirror traffic). Default 1. Use 2 or 3 to fan in from multiple sources. Each extra NIC adds an Azure NIC to the VM. With more than 4 NICs total (1 mgmt + N ingress + N egress) you must select Standard_D16s_v3 or larger - D8s_v3 supports max 4 NICs."
       }
     },
     "egressNicCount": {

@@ -16,6 +16,14 @@ This doc explains how to deploy CloudLens sensors to **hundreds or thousands of 
 | 2,000–10,000 | **Sharded** parallel | 500/shard | Yes (auto) | 30–60 min |
 | 10,000+ | AWX/Tower | 1000/shard | Yes | 1–2 hr |
 
+Two details the table hides. First, `quickstart.sh` caps the automatic value at
+4 x CPU cores of the control machine (a 2-core Cloud Shell never exceeds 8
+forks, a 4-core laptop 16); `ANSIBLE_FORKS` bypasses the cap. Second, the
+Docker image has no core cap and reads `deploy.forks` from
+`customer_input.yaml` when `ANSIBLE_FORKS` is unset (`0` means auto-tune).
+For 500+ VMs run from a control node with enough cores (see Control-Node
+Sizing) or set the forks explicitly.
+
 ## Tuning Forks Manually
 
 If you need to override:
@@ -24,7 +32,7 @@ If you need to override:
 # Cloud Shell / quickstart
 ANSIBLE_FORKS=500 bash quickstart.sh
 
-# Docker
+# Docker: ANSIBLE_FORKS wins, then deploy.forks in customer_input.yaml
 docker run -e ANSIBLE_FORKS=500 ...
 
 # Direct ansible-playbook
@@ -93,6 +101,12 @@ In `deploy/tuned-ansible.cfg` (use this for high-scale):
 3. **Strategy `free`**: fast hosts don't wait for slow ones
 4. **Fact caching**: VM facts cached for 1 hour
 5. **Connection retries**: 3 retries per task before failing
+6. **Public-key SSH only**: `ssh_args` includes `PreferredAuthentications=publickey`.
+   VMs that authenticate with a password (`linux.ansible_password` in
+   `customer_input.yaml`, which is what deploy-stack.sh writes for the VMs it
+   creates) fail to connect with this file. Remove that option, or keep the
+   shipped `ansible.cfg`, for password-authenticated fleets. The fact cache
+   moves to `/tmp/ansible_facts`.
 
 To use:
 
@@ -120,9 +134,12 @@ AWX gives you:
 - Slack/Teams notifications on success/failure
 - Scheduled re-runs
 
-## Real-World Throughput
+## Expected Throughput
 
-Measured against the smoke test environment (Azure eastus2):
+The recorded run (2026-06-02, CloudLensPublic, eastus2) covered three VMs:
+3/3 sensors in 8 minutes. The rows below for 100, 500 and 5,000 VMs are
+projections from the fork and shard settings, not measurements; replace them
+with your own numbers from `ansible.log` after a large run.
 
 | Scenario | VMs | Forks | Time | Throughput |
 |---|---|---|---|---|
@@ -150,13 +167,20 @@ SHARD_SIZE=100 bash deploy/shard.sh <total> 50
 
 ### SSH connection storms tripping NSG/firewall
 
-Use sharding to spread connection attempts over time:
+`deploy/shard.sh` launches every shard at once, so the simultaneous connection
+count is shards x forks. Lower it with smaller forks per shard or fewer, larger
+shards:
 ```bash
-SHARD_DELAY=10 bash deploy/shard.sh ...    # 10 sec between shard launches
+SHARD_SIZE=1000 bash deploy/shard.sh <total> 50    # 5 shards x 50 forks for 5,000 VMs
 ```
+SSH multiplexing in `deploy/tuned-ansible.cfg` also reuses one connection per
+host.
 
-### Slow Docker image pulls saturating CLMS
+### Slow sensor image pulls saturating the vController
 
-CLMS registry can serve ~50 concurrent pulls comfortably. For thousands of VMs pulling at once:
-- Pre-stage the image to an Azure Container Registry replica
-- Set `image.repository` in customer_input.yaml to the closer ACR
+The playbooks pull `<manager_ip_or_fqdn>/sensor` from the vController's own
+registry on every VM; there is no setting to point them at another registry.
+For thousands of VMs pulling at once, spread the load with sharding
+(`SHARD_SIZE`, fewer forks per shard) and deploy one vController per region
+or per few thousand sensors (`--vcontroller-count` on deploy-stack.sh), so
+each fleet pulls from the appliance closest to it.

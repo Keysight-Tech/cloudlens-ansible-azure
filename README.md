@@ -12,7 +12,7 @@
 ![CloudLens Ansible Demo](docs/assets/deploy-demo.svg)
 
 <p align="center">
-  <a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Farm-template.json"><img src="https://img.shields.io/badge/▶_Deploy_to_Azure-0078D4?style=for-the-badge&logo=microsoft-azure&logoColor=white" alt="Deploy to Azure"/></a>
+  <a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Farm-template.json"><img src="https://img.shields.io/badge/▶_Deploy_sensors_(runner_VM)-0078D4?style=for-the-badge&logo=microsoft-azure&logoColor=white" alt="Deploy sensors (runner VM)"/></a>
   <a href="https://shell.azure.com"><img src="https://img.shields.io/badge/☁_Cloud_Shell-005A9E?style=for-the-badge&logo=azure-pipelines&logoColor=white" alt="Cloud Shell"/></a>
   <a href="https://github.com/Keysight-Tech/cloudlens-ansible-azure/pkgs/container/cloudlens-ansible-azure"><img src="https://img.shields.io/badge/🐳_Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker"/></a>
 </p>
@@ -42,6 +42,33 @@ VNet you already run, pass `--vnet-name` (and `--vnet-resource-group` if it is
 elsewhere); it must already contain the five subnets, which the deploy checks
 and never creates in a network it did not build.
 
+**No manual project key.** Once the vController answers, Phase 10 completes
+its forced first-login password change, creates the project
+(`cloudlens-autopilot`, or `CLOUDLENS_PROJECT`) and uses its API key as the
+project key. The new UI password is recorded in
+`~/.cloudlens-vcontroller-creds-<resource-group>.json` (mode 600) before the
+change is requested and verified by logging in afterwards; the file is only
+trusted when it names this vController, so a redeploy into the same group does
+not inherit a dead password. With `--with-kvo` the run continues: Phase 12
+activates the codes in `CLOUDLENS_LICENSE_CODES` on the KVO (waiting for a KVO
+that is still booting), Phase 13 adopts the vController and creates its Cloud
+Config, Phase 14 adopts the vPB and Phase 15 prints the
+`scripts/vpb_wire_path.py` command that wires the traffic path, for you to run
+once the vPB data ports (eth1/eth2) are up. On the Azure Marketplace vPB image
+Phase 14 is skipped; `docs/AZURE_TAPPING_ARCHITECTURE.md` explains where the
+adoption stops on that image. An unlicensed KVO refuses every write, so set
+the codes before the run or re-run with `--resume` after setting them.
+
+**Where the sensors register.** With the admin CIDR left at `*` the sensors are
+pointed at the vController's public IP, which works from any VNet. Once the
+CIDR is narrowed the public IP is refused from inside the virtual network
+(Azure translates VNet-to-public traffic to a source outside the CIDR), so the
+deploy writes the vController's private IP into `customer_input.yaml` instead;
+it is reachable from `cloudlens-vnet` and every VNet peered to it. Workload VMs
+in an unpeered VNet need the public address and their egress IPs inside the
+admin CIDR: set `CLOUDLENS_SENSOR_MANAGER_ADDR` to that public IP before the
+run. The summary prints the chosen address as "Sensors register on".
+
 **Tear it down** when you are done, to remove everything that deployment
 created. Put your resource group name in. It audits first, shows what it
 found, and asks before deleting anything:
@@ -50,9 +77,9 @@ found, and asks before deleting anything:
 curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/deploy/teardown-stack.sh | bash -s -- --resource-group YOUR-RG
 ```
 
-Add `--audit` to see what it would delete and which CloudLens resources the
-group holds without deleting anything (it never touches the KVO), or
-`--dry-run` to print every command it would run.
+Add `--audit` (`--orphans` is an alias) to see what it would delete and which
+CloudLens resources the group holds without deleting anything (it never touches
+the KVO), or `--dry-run` to print every command it would run.
 
 If the group has a KVO, the script offers to release its licences before
 deleting anything. Once you have confirmed the teardown it lists what the KVO
@@ -75,7 +102,11 @@ disks, NICs, public IPs, NSGs and VNets the templates created for them go, and
 the group and everything else in it are left alone (`--keep-resource-group`
 forces that narrower scope even on a group the deploy created). Older deployments left OS disks and NICs
 behind when a VM was deleted; the templates now set `deleteOption` so they go
-with the VM, and the script removes such leftovers either way.
+with the VM, and the script removes such leftovers either way. A VNet that
+still carries NICs from outside the group, for example workload VMs you placed
+in `cloudlens-vnet` to reach the vController on its private address, or a
+customer VNet joined with `--vnet-name`, is left in place together with the
+group; the audit names the NICs that keep it.
 
 **Prerequisites the script handles for you:**
 - Azure CLI (`az`): auto-installed if missing (macOS via Homebrew, Debian via apt, RHEL via dnf)
@@ -109,13 +140,13 @@ terraform init && terraform apply
 
 ### Printable runbook
 
-[CloudLens_Stack_Deployment_Runbook.pdf](docs/CloudLens_Stack_Deployment_Runbook.pdf) is the executive-facing guide. Hand it to procurement or training teams.
+[CloudLens_Stack_Deployment_Runbook.pdf](docs/CloudLens_Stack_Deployment_Runbook.pdf) is the executive-facing guide (June 2026 edition: it predates the shared VNet, the admin CIDR prompt, the automatic project key and the teardown script; this README is current). Hand it to procurement or training teams.
 
-All three deploy the same Azure resources, accept Marketplace terms automatically, and chain through vController, KVO (optional), vPB, and sensor deployment.
+The bash script and the Terraform stack module create the same Azure resources: one resource group, one shared VNet, the vController, KVO (optional) and vPB. Only `deploy-stack.sh` accepts the Marketplace terms for you, creates the project key, licenses and wires KVO, and chains into the sensor install; after `terraform apply`, accept the terms once with the `az vm image terms accept` commands below and run `quickstart.sh` for the sensors. The runbook describes the bash flow.
 
-### Configuration & overrides (bash deploy-stack.sh)
+### Configuration & overrides (bash deploy/deploy-stack.sh)
 
-Every default is overridable three ways: **CLI flag wins over env var wins over hardcoded default**. Run `bash deploy-stack.sh --help` for the in-script reference, or use this table:
+Every default is overridable three ways: **CLI flag wins over env var wins over hardcoded default**. Run `bash deploy/deploy-stack.sh --help` for the in-script reference, or use this table:
 
 | Default | CLI flag | Env var | Notes |
 |---|---|---|---|
@@ -131,17 +162,22 @@ Every default is overridable three ways: **CLI flag wins over env var wins over 
 | `vpb` | `--vpb-name <name>` | `CLOUDLENS_VPB_NAME` | VM name prefix |
 | `Standard_D4s_v5` | `--vcontroller-size <sku>` | `CLOUDLENS_VCONTROLLER_SIZE` | Azure VM size |
 | `Standard_D4s_v5` | `--kvo-size <sku>` | `CLOUDLENS_KVO_SIZE` | Azure VM size |
-| `Standard_D8s_v3` | `--vpb-size <sku>` | `CLOUDLENS_VPB_SIZE` | D16s_v3+ needed for >3 NICs total |
+| `Standard_D8s_v3` | `--vpb-size <sku>` | `CLOUDLENS_VPB_SIZE` | Standard_D8s_v3 carries up to 4 NICs (1 mgmt + 3 data); more than 4 NICs total needs Standard_D16s_v3 or larger |
 | `1` | `--vcontroller-count <N>` | `CLOUDLENS_VCONTROLLER_COUNT` | 1-3 (HA / multi-region) |
 | `1` | `--kvo-count <N>` | `CLOUDLENS_KVO_COUNT` | 1-2 (HA pair) |
 | `1` | `--vpb-count <N>` | `CLOUDLENS_VPB_COUNT` | 1-5 (scale-out) |
 | `1` | `--vpb-ingress-nics <N>` | `CLOUDLENS_VPB_INGRESS_NICS` | 1-3 per vPB instance |
 | `1` | `--vpb-egress-nics <N>` | `CLOUDLENS_VPB_EGRESS_NICS` | 1-3 per vPB instance |
 | (toggle) | `--with-kvo` / `--no-kvo` | n/a | Default: interactive prompt |
-| (toggle) | `--no-vpb` | n/a | Skip vPB entirely |
+| (toggle) | `--with-vpb` / `--no-vpb` | n/a | Default: interactive prompt; `--no-vpb` skips the vPB entirely |
 | (toggle) | `--no-sensors` | n/a | Skip sensor playbook chain |
 | `false` | `--rollback` / `--no-rollback` | `CLOUDLENS_ROLLBACK_ON_FAIL` | On failure: delete RG we created. Never touches pre-existing RGs. |
 | `false` | `--dry-run` | n/a | Print every az command, touch nothing |
+| n/a | `--resume` | n/a | Re-run against the same resource group; appliances already there are detected and reused, so a run interrupted after a manual step picks up where it stopped |
+| public IP when admin CIDR is `*`, private IP otherwise | n/a | `CLOUDLENS_SENSOR_MANAGER_ADDR` | The vController address written into `customer_input.yaml` for the sensors to register on; set it to the public IP for workloads in an unpeered VNet (their egress IPs must then be inside the admin CIDR) |
+| (none) | n/a | `CLOUDLENS_LICENSE_CODES` | Comma- or space-separated KVO activation codes for Phase 12; without them KVO stays unlicensed and refuses every write, and Phases 13-15 cannot run |
+| `cloudlens-autopilot` | n/a | `CLOUDLENS_PROJECT` | Name of the vController project Phase 10 creates; its API key is the project key |
+| (from the creds file) | n/a | `CLOUDLENS_VC_PASSWORD` | vController UI password to use instead of the one recorded in `~/.cloudlens-vcontroller-creds-<rg>.json` |
 | `cloudlens` | `--discovery-tag-key <key>` | `CLOUDLENS_DISCOVERY_TAG_KEY` | Azure tag key that marks "install sensor here" (override if your team uses a different tagging convention) |
 | `yes` | `--discovery-tag-value <value>` | `CLOUDLENS_DISCOVERY_TAG_VALUE` | Azure tag value paired with the key above. Default pair: `cloudlens=yes` |
 
@@ -155,7 +191,7 @@ curl -sSL .../deploy-stack.sh | bash
 CLOUDLENS_RG=prod-rg CLOUDLENS_REGION=westeurope curl -sSL .../deploy-stack.sh | bash
 
 # 3. Full prod-style with flags
-bash deploy-stack.sh \
+bash deploy/deploy-stack.sh \
   --resource-group prod-rg --location westeurope \
   --vcontroller-count 2 --kvo-count 2 --vpb-count 3 \
   --vpb-ingress-nics 2 --vpb-egress-nics 3 --vpb-size Standard_D16s_v3 \
@@ -218,12 +254,14 @@ All three paths run the same Ansible engine. Same playbooks, same automation. Pi
 
 ![VM Compatibility Matrix](docs/assets/scenario-matrix.svg)
 
-| OS / Topology | Public IP direct | Private + Jumpbox | Azure Bastion | Cloud Shell |
-|---|:---:|:---:|:---:|:---:|
-| Ubuntu 20.04 / 22.04 / 24.04 | ✓ | ✓ | ✓ | ✓ |
-| RHEL 7 / 8 / 9 | ✓ | ✓ | ✓ | ✓ |
-| CentOS / Rocky / AlmaLinux | ✓ | ✓ | ✓ | ✓ |
-| Windows Server 2019 / 2022 | ✓ | (planned) | (planned) | ✓ |
+| OS / Topology | Public IP direct | Private + Jumpbox | Cloud Shell |
+|---|:---:|:---:|:---:|
+| Ubuntu 20.04 / 22.04 / 24.04 | ✓ | ✓ | ✓ |
+| RHEL 7 / 8 / 9 | ✓ | ✓ | ✓ |
+| CentOS / Rocky / AlmaLinux | ✓ | ✓ | ✓ |
+| Windows Server 2019 / 2022 | ✓ | (planned) | ✓ |
+
+Azure Bastion is not a supported connection mode: for VMs without public IPs use a jumpbox, or run the deploy from Cloud Shell or a VM inside the VNet (see the private-VM scenario below).
 
 ---
 
@@ -243,9 +281,10 @@ az vm update -g <RG> -n <VM> --set tags.cloudlens=yes tags.os=ubuntu tags.env=pr
 ```yaml
 connection:
   mode: "direct_public"
-clms:
-  ip: "10.0.0.10"
+cloudlens:
+  manager_ip_or_fqdn: "10.50.1.4"   # vController private IP inside or peered to its VNet; public IP only when the admin CIDR is *
   project_key: "<your-project-key>"
+  custom_tags: "Env=Azure Customer=Acme"
 ```
 
 **3. Deploy:**
@@ -259,11 +298,12 @@ Expected: Each VM gets `cloudlens-agent` container running, registered to CLMS w
 <details>
 <summary>🐧 Ubuntu VMs in private subnet (jumpbox required)</summary>
 
-**1. Tag your VMs and jumpbox:**
+**1. Tag your VMs:**
 ```bash
 az vm update -g <RG> -n <VM> --set tags.cloudlens=yes tags.os=ubuntu tags.env=prod
-az vm update -g <RG> -n <JUMPBOX> --set tags.cloudlens_role=jumpbox
 ```
+
+The jumpbox needs no tag: it is named in customer_input.yaml (`connection.jumpbox_host` / `connection.jumpbox_user`) and must be able to SSH to the private VMs with the same key as `linux.ssh_key_file`.
 
 **2. Set connection mode in customer_input.yaml:**
 ```yaml
@@ -271,9 +311,10 @@ connection:
   mode: "jumpbox"
   jumpbox_host: "jumpbox.example.com"
   jumpbox_user: "azureuser"
-clms:
-  ip: "10.0.0.10"
+cloudlens:
+  manager_ip_or_fqdn: "10.50.1.4"   # vController private IP inside or peered to its VNet; public IP only when the admin CIDR is *
   project_key: "<your-project-key>"
+  custom_tags: "Env=Azure Customer=Acme"
 ```
 
 **3. Deploy:**
@@ -296,11 +337,10 @@ az vm update -g <RG> -n <VM> --set tags.cloudlens=yes tags.os=rhel tags.env=prod
 ```yaml
 connection:
   mode: "direct_public"
-container:
-  runtime: "auto"
-clms:
-  ip: "10.0.0.10"
+cloudlens:
+  manager_ip_or_fqdn: "10.50.1.4"   # vController private IP inside or peered to its VNet; public IP only when the admin CIDR is *
   project_key: "<your-project-key>"
+  custom_tags: "Env=Azure Customer=Acme"
 ```
 
 **3. Deploy:**
@@ -309,6 +349,8 @@ bash quickstart.sh
 ```
 
 Expected: Playbook auto-detects Podman on RHEL 8/9 (or Docker if installed), launches sensor with the correct runtime, registers to CLMS.
+
+Runtime detection is automatic. To force one, pass `-e install_podman=true` or `-e install_docker=true` to ansible-playbook.
 </details>
 
 <details>
@@ -319,21 +361,21 @@ Expected: Playbook auto-detects Podman on RHEL 8/9 (or Docker if installed), lau
 az vm update -g <RG> -n <VM> --set tags.cloudlens=yes tags.os=windows tags.env=prod
 ```
 
-**2. Enable WinRM on each target (one-shot bootstrap if not already enabled):**
-```bash
-ansible-playbook playbooks/bootstrap_windows_winrm.yaml
-```
+**2. WinRM is enabled for you.** `deploy.yaml` runs `playbooks/bootstrap_windows_winrm.yaml` first, which uses `az vm run-command` (no WinRM needed) to enable WinRM and open NSG port 5985 on every tagged Windows VM. The control machine must be logged into the Azure CLI for that step.
 
 **3. Set connection mode in customer_input.yaml:**
 ```yaml
 connection:
   mode: "direct_public"
-  winrm_user: "azureuser"
-  winrm_password: "<secret>"
-clms:
-  ip: "10.0.0.10"
+windows:
+  ansible_user: "azureuser"
+cloudlens:
+  manager_ip_or_fqdn: "10.50.1.4"   # vController private IP inside or peered to its VNet; public IP only when the admin CIDR is *
   project_key: "<your-project-key>"
+  custom_tags: "Env=Azure Customer=Acme"
 ```
+
+Export the Windows admin password rather than writing it into the file: `export ANSIBLE_WINRM_PASSWORD='...'` (the playbook also accepts `windows.ansible_password` in `customer_input.yaml`, which is what `deploy-stack.sh` stubs out). Place the Windows installer downloaded from the vController in `files/` and set `windows.installer_path` / `windows.installer_filename` if its name differs from `cloudlens-win-sensor-6.13.0.359.exe`.
 
 **4. Deploy:**
 ```bash
@@ -360,12 +402,15 @@ az vm update -g <RG> -n <WIN_VM> --set tags.cloudlens=yes tags.os=windows tags.e
 ```yaml
 connection:
   mode: "direct_public"
-  winrm_user: "azureuser"
-  winrm_password: "<secret>"
-clms:
-  ip: "10.0.0.10"
+windows:
+  ansible_user: "azureuser"
+cloudlens:
+  manager_ip_or_fqdn: "10.50.1.4"   # vController private IP inside or peered to its VNet; public IP only when the admin CIDR is *
   project_key: "<your-project-key>"
+  custom_tags: "Env=Azure Customer=Acme"
 ```
+
+Export the Windows admin password rather than writing it into the file: `export ANSIBLE_WINRM_PASSWORD='...'` (the playbook also accepts `windows.ansible_password` in `customer_input.yaml`, which is what `deploy-stack.sh` stubs out). Place the Windows installer downloaded from the vController in `files/` and set `windows.installer_path` / `windows.installer_filename` if its name differs from `cloudlens-win-sensor-6.13.0.359.exe`.
 
 **3. Deploy:**
 ```bash
@@ -376,30 +421,19 @@ Expected: Single run fans out to all three OS lanes in parallel, each VM gets th
 </details>
 
 <details>
-<summary>🛡 Behind Azure Bastion (no public IPs allowed)</summary>
+<summary>🛡 Private VMs with no public IPs</summary>
 
-**1. Tag your VMs:**
-```bash
-az vm update -g <RG> -n <VM> --set tags.cloudlens=yes tags.os=ubuntu tags.env=prod
-```
+Azure Bastion is not a supported connection mode. Two paths work:
 
-**2. Set connection mode in customer_input.yaml:**
-```yaml
-connection:
-  mode: "bastion"
-  bastion_name: "<bastion-resource-name>"
-  bastion_rg: "<bastion-resource-group>"
-clms:
-  ip: "10.0.0.10"
-  project_key: "<your-project-key>"
-```
+**Cloud Shell or a VM inside the VNet (recommended):** run the deploy from a machine that can reach the private IPs, such as Azure Cloud Shell with VNet integration or a small Linux VM peered to the workload VNet, with `connection.mode: "direct_public"`; the inventory falls back to the private IP when a VM has no public one.
 
-**3. Deploy from Cloud Shell (recommended for Bastion-only orgs):**
+**Jumpbox:** set `connection.mode: "jumpbox"` with `jumpbox_host` and `jumpbox_user` as in the jumpbox scenario above; the jumpbox must reach the private VMs with the key in `linux.ssh_key_file`.
+
 ```bash
 curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azure/main/quickstart.sh | bash
 ```
 
-Expected: Ansible tunnels through Azure Bastion to each private VM, deploys sensor, registers to CLMS. No public IP ever exposed on the target VMs.
+Expected: sensors installed over the private addresses and registered to the vController. No public IP is needed on the target VMs.
 </details>
 
 ---
@@ -410,7 +444,7 @@ Expected: Ansible tunnels through Azure Bastion to each private VM, deploys sens
 
 ```mermaid
 graph LR
-    Customer[💻 Customer<br/>laptop / Cloud Shell] --> Auth{Service Principal<br/>or Managed Identity}
+    Customer[💻 Customer<br/>laptop / Cloud Shell] --> Auth{Service Principal<br/>or Azure CLI session}
     Auth --> Inventory[Azure Dynamic Inventory<br/>azure_rm plugin]
     Inventory -->|tag: cloudlens=yes| Discover[Tagged VMs]
     Discover --> Ubuntu[🐧 Ubuntu<br/>Docker engine<br/>Sensor container]
@@ -436,27 +470,31 @@ A single Ansible control point authenticates to Azure, discovers VMs by tag, and
 
 ---
 
-## Need CLMS or vPB first?
+## Need the appliances first?
 
-If you do not have CloudLens Manager or a Virtual Packet Broker running yet, deploy them from Azure Marketplace in one click. Each form now requires an admin source CIDR: the network allowed to reach SSH 22, vPB SSH 9022 and HTTPS 443 on the appliance; your own public address as a /32 is the usual answer.
+If you do not have a vController, KVO or Virtual Packet Broker running yet, deploy them from the Azure Portal. Every form asks for an admin source CIDR: the network allowed to reach SSH 22, vPB SSH 9022 and HTTPS 443 on the appliance; your own public address as a /32 is the usual answer. The full-stack form builds one shared VNet with five subnets and all three appliances in it.
 
 <p align="center">
-  <a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fclms-marketplace.json"><img src="https://img.shields.io/badge/▶_Deploy_CLMS-0078D4?style=for-the-badge&logo=microsoft-azure&logoColor=white" alt="Deploy CLMS"/></a>
-  <a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fvpb-marketplace.json"><img src="https://img.shields.io/badge/▶_Deploy_vPB-005A9E?style=for-the-badge&logo=microsoft-azure&logoColor=white" alt="Deploy vPB"/></a>
+  <a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fstack-marketplace.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fstack-createUiDefinition.json"><img src="https://img.shields.io/badge/▶_Deploy_CloudLens_Stack-0078D4?style=for-the-badge&logo=microsoft-azure&logoColor=white" alt="Deploy CloudLens Stack"/></a>
+  <a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fclms-marketplace.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fclms-createUiDefinition.json"><img src="https://img.shields.io/badge/▶_Deploy_vController-0078D4?style=for-the-badge&logo=microsoft-azure&logoColor=white" alt="Deploy vController"/></a>
+  <a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fkvo-marketplace.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fkvo-createUiDefinition.json"><img src="https://img.shields.io/badge/▶_Deploy_KVO-005A9E?style=for-the-badge&logo=microsoft-azure&logoColor=white" alt="Deploy KVO"/></a>
+  <a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fvpb-marketplace.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FKeysight-Tech%2Fcloudlens-ansible-azure%2Fmain%2Fdeploy%2Fvpb-createUiDefinition.json"><img src="https://img.shields.io/badge/▶_Deploy_vPB-005A9E?style=for-the-badge&logo=microsoft-azure&logoColor=white" alt="Deploy vPB"/></a>
 </p>
 
-| Component | Version | Marketplace |
+| Component | Version | Marketplace (publisher / offer / plan) |
 |---|---|---|
-| CLMS (CloudLens Manager) | 6.13.076 | keysight-technologies-cloudlens/keysight-cloudlens-manager-preview |
-| vPB (Virtual Packet Broker) | 3.15.01 | keysight-technologies-cloudlens/keysight-cloudlens-virtual-packet-broker |
+| vController (formerly CLMS) | 6.14.0_89 | keysight-technologies-cloudlens / keysight-cloudlens-vcontroller / cloudlens-vcontroller-6-14-0_89 |
+| KVO (Keysight Vision Orchestrator) | 3.0.0_55 | keysight-technologies-kvop / keysight-vision-orchestrator / keysight_vision_orchestrator_3-0-0_55 |
+| vPB (Virtual Packet Broker) | 3.15.0_1 | keysight-technologies-cloudlens / keysight-cloudlens-virtual-packet-broker / cloudlens-virtual-packet-broker-3-15-0_1 |
 
-> **Note about the marketplace name:** When accepting terms via the Azure Portal, the CLMS offer appears as **"CloudLens Manager (Preview)"** and the vPB offer appears as **"CloudLens Virtual Packet Broker"**. The Deploy buttons above point to the correct offer IDs automatically.
+> **Note about the marketplace names:** the legacy `keysight-cloudlens-manager-preview` offer is gone. The Deploy buttons above and `deploy-stack.sh` point at the offer IDs in this table.
 
-After CLMS deploys (about 15 minutes for initialization), open the UI, create a project, copy the project key, then run the sensor deployment using one of the three paths below.
+After the vController deploys (about 15 minutes to initialize), open the UI, complete the forced first-login password change, create a project, copy the project key, then run the sensor deployment using one of the three paths below. `deploy-stack.sh` does all of that for you (Phase 10).
 
-> First-time use of these images requires accepting Marketplace terms. Either click through the Marketplace acceptance dialog when deploying from the portal, or run:
+> First-time use of these images requires accepting Marketplace terms. Either click through the acceptance dialog when deploying from the portal, or run:
 > ```bash
-> az vm image terms accept --publisher keysight-technologies-cloudlens --offer keysight-cloudlens-manager-preview --plan clms-6-13-0_76
+> az vm image terms accept --publisher keysight-technologies-cloudlens --offer keysight-cloudlens-vcontroller --plan cloudlens-vcontroller-6-14-0_89
+> az vm image terms accept --publisher keysight-technologies-kvop --offer keysight-vision-orchestrator --plan keysight_vision_orchestrator_3-0-0_55
 > az vm image terms accept --publisher keysight-technologies-cloudlens --offer keysight-cloudlens-virtual-packet-broker --plan cloudlens-virtual-packet-broker-3-15-0_1
 > ```
 
@@ -488,9 +526,8 @@ Same marketplace images, same outputs. See [deploy/terraform/](deploy/terraform/
 <details>
 <summary>How it works</summary>
 
-- Provisions an ephemeral Ubuntu runner VM in your subscription
-- Runner authenticates via Managed Identity (no Service Principal to create)
-- Auto-discovers tagged VMs, deploys sensors, self-destructs after 1 hour
+- Provisions an Ubuntu runner VM with a system-assigned managed identity in your subscription, clones this repo and runs `quickstart.sh` with the vController address, project key and custom tags you enter in the form; discovery is fixed at `cloudlens=yes` and the `*_prod_vms` groups
+- Powers itself off after `selfDestructMinutes` (60 by default); delete the runner's resource group afterwards, the VM and its disk are not removed for you
 - Zero local tools required: runs entirely from your browser
 
 </details>
@@ -507,7 +544,7 @@ curl -sSL https://raw.githubusercontent.com/Keysight-Tech/cloudlens-ansible-azur
 <summary>How it works</summary>
 
 - Cloud Shell is pre-authenticated to Azure, so no Service Principal is needed
-- Wizard prompts for CLMS IP and project key
+- Wizard prompts for the vController IP and project key
 - Auto-tunes Ansible forks based on discovered VM count
 - All state lives in your Cloud Shell home directory; nothing installed locally
 
@@ -564,7 +601,7 @@ The dynamic inventory discovers VMs by Azure tag. Apply these three tags to ever
 |---|---|
 | `cloudlens` | `yes` |
 | `os` | `ubuntu` \| `rhel` \| `windows` |
-| `env` | `prod` (or `dev`, `qa`) |
+| `env` | `prod` (or `dev`) |
 
 Bulk-tag a resource group:
 
@@ -603,15 +640,14 @@ Auto-tunes based on discovered VM count. See [docs/SCALING.md](docs/SCALING.md) 
 
 ## Verified Against Real Azure
 
-| Scenario | Result | Time |
-|---|---|---|
-| Ubuntu 22.04 (private IP via jumpbox) | ✓ Sensor running | 4 min |
-| Ubuntu 22.04 (private IP via jumpbox) | ✓ Sensor running | 4 min |
-| Windows Server 2022 (WinRM direct) | ✓ Sensor running | 6 min |
-| CLMS 6.14.141 registration | ✓ All 3 sensors registered | <1 min |
-| **End-to-end** | **3/3 success** | **8 min** |
+| Scenario | Result |
+|---|---|
+| Ubuntu 22.04 (public IP, discovered by tag) | ✓ Sensor 6.14.0-475 registered |
+| RHEL 9 (public IP, Podman auto-detected) | ✓ Sensor 6.14.0-475 registered |
+| Windows Server 2022 (WinRM bootstrapped by run-command) | ✓ Sensor registered |
+| **End-to-end** | **3/3 in the vController registry** |
 
-Date verified: 2026-06-02. Subscription: CloudLensPublic (eastus2).
+Date verified: 2026-08-17 with `scripts/deploy-test-workload-vms.sh` (details in docs/AZURE_TAPPING_ARCHITECTURE.md). Subscription: CloudLensPublic (eastus2).
 
 ---
 
@@ -623,9 +659,10 @@ Date verified: 2026-06-02. Subscription: CloudLensPublic (eastus2).
 | SSH "Permission denied" | Public key not on target | Bootstrap via `az vm run-command invoke` |
 | WinRM timeout | WinRM disabled on Windows VM | Run `playbooks/bootstrap_windows_winrm.yaml` |
 | `apt_pkg.Error: Signed-By` | Stale Docker apt source | Playbook auto-cleans on next run |
-| Sensor not in CLMS UI | Wrong project key | Check CLMS → Projects → API Keys |
+| Sensor not in the vController UI | Wrong project key | Check vController > Projects > API Keys |
+| Sensor not in the vController UI, `docker pull <ip>/sensor` times out | Admin CIDR narrowed and `manager_ip_or_fqdn` is the public IP, which the NSG refuses from inside the VNet | Use the vController's private IP (the deploy summary's "Sensors register on"), or set `CLOUDLENS_SENSOR_MANAGER_ADDR` to the public IP and add the VMs' egress IPs to the admin CIDR |
 | Just deployed vPB, SSH not ready | Internal CLI service still initializing | Wait 10 to 15 minutes after the Azure deploy finishes, then SSH |
-| Just deployed CLMS, UI not ready | System initialization still running | UI on port 443 ready in ~60s, full init takes ~15 minutes |
+| Just deployed the vController, UI not ready | System initialization still running | UI on port 443 ready in ~60s, full init takes ~15 minutes |
 
 Full reference: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 

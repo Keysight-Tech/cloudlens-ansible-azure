@@ -18,7 +18,7 @@
       "type": "string",
       "defaultValue": "azureuser",
       "metadata": {
-        "description": "Linux admin username for SSH access to all three VMs. This is the OS-level account; vController and KVO web UIs and the vPB CLI each have their own separate credentials."
+        "description": "Linux admin username for SSH access to all three VMs. This is the OS-level account; the vController and KVO web UIs have their own separate logins. The vPB CLI has no separate password: SSH to the vPB on port 9022, then run sudo vpb."
       }
     },
     "adminPassword": {
@@ -64,7 +64,7 @@
       "type": "string",
       "defaultValue": "10.50.0.0/16",
       "metadata": {
-        "description": "Shared VNet address space (CIDR). The stack carves out five /24 subnets from this range. Must not overlap with VNets you plan to peer with."
+        "description": "Shared VNet address space (CIDR). The five subnet prefixes are fixed in this template and are not derived from this value: vcontroller-subnet 10.50.1.0/24, kvo-subnet 10.50.2.0/24, vpb-mgmt 10.50.10.0/24, vpb-ingress 10.50.11.0/24, vpb-egress 10.50.12.0/24. The address space must contain all five; keep the default 10.50.0.0/16 or enter a wider range that includes them. A range that does not contain them fails at deploy time. Must not overlap with VNets you plan to peer with."
       }
     },
     "_artifactsBaseUri": {

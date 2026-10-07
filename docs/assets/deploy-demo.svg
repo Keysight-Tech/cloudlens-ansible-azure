@@ -87,7 +87,7 @@
       <g opacity="1">
         <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.15;0.167;0.95;1" dur="30s" repeatCount="indefinite"/>
         <text x="20" y="178" fill="#22C55E">✓</text>
-        <text x="36" y="178" fill="#E5E7EB">Authenticated via managed identity</text>
+        <text x="36" y="178" fill="#E5E7EB">Authenticated via Azure CLI session</text>
       </g>
 
       <!-- Ansible installed (5.0s) -->
@@ -104,7 +104,7 @@
         <text x="36" y="214" fill="#E5E7EB">Discovered </text>
         <text x="106" y="214" fill="#FCD34D">3 VMs</text>
         <text x="142" y="214" fill="#E5E7EB"> matching tag </text>
-        <text x="230" y="214" fill="#A78BFA">cloudlens=true</text>
+        <text x="230" y="214" fill="#A78BFA">cloudlens=yes</text>
       </g>
 
       <!-- VM list line 1 (6.0s) -->
@@ -177,7 +177,7 @@
       <g opacity="1">
         <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.333;0.35;0.95;1" dur="30s" repeatCount="indefinite"/>
         <text x="20" y="416" fill="#22C55E" font-weight="600">✓ Done</text>
-        <text x="68" y="416" fill="#E5E7EB"> — </text>
+        <text x="68" y="416" fill="#E5E7EB">: </text>
         <text x="88" y="416" fill="#FCD34D" font-weight="600">3 sensors</text>
         <text x="156" y="416" fill="#E5E7EB"> registered to CLMS in </text>
         <text x="306" y="416" fill="#FCD34D" font-weight="600">8 minutes</text>

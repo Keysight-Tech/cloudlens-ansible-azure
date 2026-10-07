@@ -25,11 +25,19 @@ ansible-inventory -i inventory/azure_rm.yaml --graph
 az vm update -g <RG> -n <VM> --set tags.cloudlens=yes tags.os=ubuntu tags.env=prod
 ```
 
-### `Unable to find Service Principal` / `AuthenticationFailed`
+### `Unable to find Service Principal` / `AuthenticationFailed` / `name 'client_secret' is not defined`
 
-**Cause:** SP credentials not exported.
+**Cause:** the inventory plugin is trying service-principal auth without the
+variables, or the az login session has expired.
 
-**Fix:**
+**Fix (Cloud Shell, laptop, quickstart.sh):** no service principal is needed.
+`az login`, then run `quickstart.sh`, which sets `ANSIBLE_AZURE_AUTH_SOURCE=cli`
+when no `AZURE_CLIENT_ID` is in the environment. For a manual ansible-playbook
+run, export that variable yourself.
+
+**Fix (Docker, CI, scripts/deploy.sh):** these need a service principal.
+`bash scripts/setup_azure_sp.sh` creates one and writes `scripts/load_sp_creds.sh`
+(git-ignored, it holds the secret); then:
 
 ```bash
 source scripts/load_sp_creds.sh
@@ -80,9 +88,19 @@ ssh azureuser@<vm> "docker logs cloudlens-agent --tail 50"
 ```
 
 Common causes:
-- Wrong `project_key` (check CLMS → Projects)
-- VM can't reach CLMS on port 443 (check NSG outbound rules)
-- DNS doesn't resolve CLMS FQDN (use IP instead)
+- The VM is inside (or peered to) the vController's VNet and `manager_ip_or_fqdn`
+  is the vController's PUBLIC IP while the admin CIDR is narrowed. Azure
+  SNATs VNet-to-public traffic, so the NSG sees a source outside the admin
+  CIDR and drops it. Use the PRIVATE IP (deploy-stack.sh writes it and the
+  summary shows it as "Sensors register on"; `CLOUDLENS_SENSOR_MANAGER_ADDR`
+  overrides). A VM with no route to the private IP must use the public IP and
+  its egress IP must be inside the admin CIDR (`--admin-cidr`, or the
+  `adminSourceCidr` template parameter).
+- Wrong `project_key` (vController > Projects > API Keys; deploy-stack.sh
+  Phase 10 creates project `cloudlens-autopilot` and prints its key)
+- VM cannot reach the vController on port 443 (check NSG outbound rules, and
+  `curl -kv https://<address>/` from the VM)
+- DNS does not resolve the vController FQDN (use the IP instead)
 
 ## RHEL/Podman Issues
 
@@ -139,15 +157,20 @@ az network nsg rule create \
   --access Allow --protocol Tcp --direction Inbound
 ```
 
-### `MSI install fails with exit code 1603`
+### Installer exits with a non-zero code (1603 or other)
 
-**Cause:** Generic install failure. Check the MSI log on the VM:
+**Cause:** generic install failure. The playbook runs the exe with
+`/install /quiet Server=... Project_Key=...` and accepts exit codes 0, 3010
+and 1641. Check the installer log it leaves in `C:\temp` (the playbook deletes
+it after a successful run) and the sensor's own log folder:
 
 ```powershell
-Get-Content C:\Windows\Temp\MSI*.log | Select-String "Error"
+Get-ChildItem C:\temp -Filter "*cloudlens*.log*" | Get-Content | Select-String "Error"
+Get-Content C:\ProgramData\CloudLens\Logs\*.log -Tail 50
+Test-Path C:\ProgramData\CloudLens\Config\agent.yml   # False = install never configured the sensor
 ```
 
-Most common: wrong CLMS IP/project key.
+Most common: wrong vController address or project key.
 
 ### Sensor service exits immediately after install
 
@@ -179,17 +202,24 @@ If CLMS is in a different VNet:
 - ExpressRoute / VPN, OR
 - CLMS public IP with NSG allowing your VM subnets
 
-### Bastion-only access (no public IPs)
+### Private-only VMs (no public IPs)
 
-Switch dynamic inventory to private IPs:
+Nothing to change in the inventory: `inventory/azure_rm.yaml` already uses a
+VM's private IP when it has no public one. Reach them through a Linux jumpbox
+in the VNet by setting, in `customer_input.yaml`:
 
 ```yaml
-# inventory/azure_rm.yaml
-hostnames:
-  - private_ipv4_addresses
+connection:
+  mode: "jumpbox"
+  jumpbox_host: "<jumpbox public IP>"
+  jumpbox_user: "azureuser"
+  jumpbox_ssh_key: "~/.ssh/id_rsa"
 ```
 
-Then run Ansible from a jumpbox INSIDE the VNet, or configure SSH ProxyCommand via Bastion in `~/.ssh/config`.
+`inventory/group_vars/all.yaml` turns this into an SSH `ProxyJump`. Or run
+Ansible from a VM inside the VNet (Cloud Shell with a VNet-injected session, a
+runner VM, or the Docker image on a jumpbox). Azure Bastion is not a supported
+connection mode. Windows VMs still need a reachable WinRM port 5985.
 
 ## Cleanup / Re-deployment
 
@@ -198,8 +228,16 @@ Then run Ansible from a jumpbox INSIDE the VNet, or configure SSH ProxyCommand v
 The playbook detects healthy installs and skips reinstall. To force a clean redeploy:
 
 ```bash
-./scripts/cleanup.sh                    # remove sensors
-./scripts/deploy.sh                     # deploy fresh
+# Cloud Shell / laptop
+bash scripts/cleanup.sh                 # remove sensors (prompts first)
+bash quickstart.sh                      # deploy fresh
+
+# Docker: same mounts and env as the deploy command, with the mode changed
+docker run ... ghcr.io/keysight-tech/cloudlens-ansible-azure:latest cleanup
+docker run ... ghcr.io/keysight-tech/cloudlens-ansible-azure:latest deploy
+
+# scripts/deploy.sh is the service-principal variant and needs
+# AZURE_SUBSCRIPTION_ID, AZURE_TENANT, AZURE_CLIENT_ID and AZURE_SECRET exported
 ```
 
 ### Cleanup leaves Docker installed
@@ -212,6 +250,49 @@ ansible-playbook cleanup.yaml \
   -e "remove_docker=true" \
   -i inventory/azure_rm.yaml
 ```
+
+## Stack deploy and image issues
+
+### quickstart.sh warns `galaxy.ansible.com unreachable; continuing`
+
+Harmless: the three collections (azure.azcollection, ansible.windows,
+community.windows) were already installed and the install is only a refresh.
+If one is missing the script stops and names it; fix the proxy, certificate or
+route to galaxy.ansible.com and re-run.
+
+### `[license] KVO not ready yet (...); retrying in 15 s`
+
+A KVO that just booted or just accepted its EULA answers 502/503 while
+Keycloak starts. `kvo_license.py` waits up to ten minutes, re-accepting the
+EULA each attempt. Only `auth failed` after that wait is a real failure.
+
+### Phase 13 `[kvo-adopt] CLMS login failed (HTTP 401)`
+
+The vController web password is not the VM's OS password. Phase 10 rotated it
+and recorded it in `~/.cloudlens-vcontroller-creds-<resource-group>.json`;
+Phase 13 reads that file. A file left in the same group by a previous
+vController (it names a different address) is ignored and the factory default
+is sent instead. Set `CLOUDLENS_VC_PASSWORD` to pass a known value, or
+complete the first login in the UI and re-run with `--resume`.
+
+### `Missing sudo password` on Linux VMs created with password authentication
+
+SSH works but `become` fails. Set `linux.ansible_password` in
+`customer_input.yaml`; `inventory/group_vars/ubuntu_prod_vms.yaml` and
+`inventory/group_vars/redhat_prod_vms.yaml` pass it as `ansible_become_pass` too.
+
+### Docker: `customer_input.yaml is a directory, not your file`
+
+Docker created an empty folder because the file you mounted did not exist.
+Delete that folder, `cd` to the folder that holds `customer_input.yaml`, and
+mount it with `-v "$(pwd)/customer_input.yaml:/work/customer_input.yaml:ro"`.
+
+### Shard summary says `FAILED, ran against no hosts`
+
+The shard's `--limit` matched nothing: the discovery tags or
+`azure.tag_filters` changed between inventory rendering and the run, or the
+VMs are not in the ubuntu/redhat/windows_prod_vms groups. Check
+`./logs/shards/shard_NNN.log` and `ansible-inventory --graph`.
 
 ## Where to get help
 

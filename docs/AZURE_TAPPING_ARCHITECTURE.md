@@ -84,8 +84,10 @@ in the project:
     test-rhel-1     6.14.0-475
     test-windows-1  registered
 
-Registration needs only a route to the vController, so the per-product VNet
-isolation that blocks Marketplace vPB adoption does NOT affect this path. Which
+Registration needs only a route to the vController. The deploy now builds one
+shared VNet for every appliance (or joins yours with `--vnet-name`), and the
+Marketplace vPB adoption blocker described at the end of this document lives
+inside the image, not in the network, so neither affects this path. Which
 address that is depends on the admin CIDR: the public IP works from anywhere
 only while the CIDR is left at `*`. Once it is narrowed, the public IP is
 refused from inside the VNet (Azure SNATs VNet-to-public traffic, so it arrives
@@ -130,8 +132,12 @@ because there is no vTAP to feed it.
 | Adopt the vPB | `scripts/vpb_kvo_adopt.py` | yes |
 | vPB traffic path + policy | `scripts/vpb_wire_path.py` | yes |
 
-These four are byte-identical to the AWS repo's copies and are kept in sync
-deliberately. `vpb_wire_path.py` carries the egress fix: the egress tool must be
+These four started as copies of the AWS repo's scripts and are meant to stay
+close to them, but they are no longer byte-identical: `vpb_kvo_adopt.py` adds
+the Azure transport (`--azure-rg/--azure-vm`, the CLI driven through the VM
+agent with no SSH key), and the other three have drifted on timeouts and
+argument handling. Diff them against the AWS repo before porting a fix either
+way. `vpb_wire_path.py` carries the egress fix: the egress tool must be
 **REMOTE / reachableFrom DEVICE_CONFIG** with an IP on the egress port, or the
 vPB inspects traffic and forwards none of it.
 
@@ -148,18 +154,36 @@ Whatever the mechanism, the proof is the same: packets arriving at the tool.
 
     scripts/prove_traffic_aws.sh --help
 
-On Azure the equivalent check is a tcpdump on the tool VM for the encapsulation
-in use (VXLAN UDP/4789 for the vTAP demo topology, L2GRE proto 47 for the
-sensor/collector topology). **Confirm which encapsulation your path uses before
-setting the filter**: an SE playbook that said VXLAN on a GRE path captured
-nothing and the demo looked broken while the tap worked perfectly.
+On Azure the equivalent check is a tcpdump on the tool VM for the
+encapsulation in use, and on Azure that is VXLAN: the vPB User Guide's Azure
+chapter states "Azure does not support GRE traffic" (citing Microsoft's VNet
+FAQ on supported protocols) and that the vPB terminates VXLAN or GENEVE
+instead. Filter on `udp port 4789` for the sensor and vTAP topologies and
+`udp port 10800 or udp port 10801` behind the GWLB. `scripts/vpb_wire_path.py`
+defaults the vPB egress and capture tunnels to L2GRE because that is what the
+AWS lab carried; on Azure pass `--capture-encap VXLAN`, or the vPB will
+originate GRE that the VNet drops. The sensor -> collector -> vPB leg has not
+been exercised on Azure in this lab (see above), so its encapsulation is
+unconfirmed here. **Confirm which encapsulation your path uses before setting
+the filter**: an SE playbook that said VXLAN on a GRE path captured nothing
+and the demo looked broken while the tap worked perfectly.
 
 
 ## Marketplace vPB on Azure: adoption blocked inside the image (2026-08-17)
 
-Phases 1-13 of the deploy run unattended. Phase 14 (adopt the vPB) reaches the
-device, clears its EULA, and writes the KVO target, and then fails INSIDE the
-Marketplace image (3.15.0-1):
+Phases 1-13 of the deploy run unattended. Phase 14 (adopt the vPB) as
+`deploy-stack.sh` runs it looks for an SSH key (`CLOUDLENS_KEY_PEM`, default
+`~/.ssh/vpb.pem`, user `keysight`) and skips when there is none, which is
+always the case for the Marketplace image because it is deployed with password
+authentication. Run the adoption by hand with the Azure transport instead:
+
+    python3 scripts/vpb_kvo_adopt.py --kvo <kvo-ip> --vpb <vpb-ip> \
+      --azure-rg <resource-group> --azure-vm <vpb-vm-name> \
+      --kvo-internal-ip <kvo-private-ip> --vpb-mgmt-ip <vpb-private-ip> \
+      --device-name cloudlens-vpb --accept-eula --insecure
+
+That reaches the device through the VM agent, clears its EULA, and writes the
+KVO target, and then fails INSIDE the Marketplace image (3.15.0-1):
 
     vpb-shim CrashLoopBackOff:  panic: Could not read mgmt IP address
 

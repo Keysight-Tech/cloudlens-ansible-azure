@@ -6,7 +6,7 @@
     "config": {
       "isWizard": true,
       "basics": {
-        "description": "Deploy a Keysight CloudLens Virtual Packet Broker (vPB) v3.15.0 from Azure Marketplace. vPB aggregates, filters, and forwards mirrored network traffic to monitoring tools. After deployment, SSH is reachable in about 60 seconds and full vPB initialization completes in 5 to 10 minutes. Default CLI credentials: admin / ixia (change immediately).",
+        "description": "Deploy a Keysight CloudLens Virtual Packet Broker (vPB) v3.15.0 from Azure Marketplace. vPB aggregates, filters, and forwards mirrored network traffic to monitoring tools. Allow 10 to 15 minutes after the deployment reports success for the vPB to be fully up. Access: ssh -p 9022 <admin username>@<public IP> with the password set below, then run sudo vpb for the vPB CLI. There is no separate CLI password on v3.15 (admin / ixia on port 2222 belong to v3.14 and on-prem builds).",
         "subscription": {},
         "resourceGroup": {
           "allowExisting": true
@@ -46,7 +46,7 @@
             "type": "Microsoft.Compute.UserNameTextBox",
             "label": "Linux admin username",
             "defaultValue": "azureuser",
-            "toolTip": "OS-level admin user for SSH on port 9022 (KCOS images do NOT use port 22). The vPB CLI uses its own separate admin account (admin / ixia) reachable via two-hop SSH on port 2222 from inside the OS shell.",
+            "toolTip": "OS-level admin user for SSH on port 9022 (KCOS images do NOT use port 22). Log in as this user with the password set below, then run sudo vpb to open the vPB CLI. On v3.15 there is no separate CLI account or password and nothing listens on port 2222.",
             "osPlatform": "Linux",
             "constraints": {
               "required": true
@@ -58,7 +58,7 @@
             "visible": true,
             "options": {
               "icon": "Info",
-              "text": "Heads-up: the password below is for **OS-level access** on the underlying VM (only used for low-level troubleshooting). The vPB **CLI** runs inside a Kubernetes pod and uses a separate set of credentials configured during initialization. See the OPERATIONS doc."
+              "text": "Heads-up: the password below is for **OS-level SSH** on port 9022 to the underlying VM. On v3.15 the vPB **CLI** runs inside a Kubernetes pod and is opened from that shell with sudo vpb; it has no separate password and only asks you to accept its EULA once. Allow 10 to 15 minutes after deployment before the vPB is fully up. See docs/OPERATIONS.md."
             }
           },
           {
