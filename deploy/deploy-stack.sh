@@ -138,6 +138,28 @@ VPB_VM_SIZE="${CLOUDLENS_VPB_SIZE:-Standard_D8s_v3}"
 DISCOVERY_TAG_KEY="${CLOUDLENS_DISCOVERY_TAG_KEY:-cloudlens}"
 DISCOVERY_TAG_VALUE="${CLOUDLENS_DISCOVERY_TAG_VALUE:-yes}"
 
+# Kubernetes (AKS) pod tapping: a second workload class beside the VM sensors.
+# Pods talk to each other inside a node, where no VM sensor ever looks, so the
+# CloudLens K8s sensor (a DaemonSet per node, or a sidecar per pod) is the only
+# thing that sees that traffic. Blank means off: there is no interview question
+# for it on Azure, the flags and env vars are the switch.
+DEPLOY_AKS="${CLOUDLENS_DEPLOY_AKS:-}"
+AKS_CLUSTER="${CLOUDLENS_AKS_CLUSTER:-}"
+AKS_SAMPLE="${CLOUDLENS_AKS_SAMPLE:-false}"
+AKS_MODE="${CLOUDLENS_AKS_MODE:-daemonset}"
+AKS_SENSOR_IMAGE="${CLOUDLENS_AKS_SENSOR_IMAGE:-}"
+AKS_SENSOR_TAR="${CLOUDLENS_AKS_SENSOR_TAR:-}"
+# Which pods the KVO collection selects (a pod-name regex). Unset = every pod,
+# and each selected pod consumes one credit (vTAP UG), so the sample app gets
+# a selector of its own two deployments in Phase 13b.
+AKS_POD_SELECTOR="${CLOUDLENS_AKS_POD_SELECTOR:-}"
+# Where the sample cluster's nodes go. Phase 5b builds the portal template's
+# five subnets and none of them is for workloads, so the nodes sit beside the
+# vController: that subnet always has a route to its private address, the one
+# the pods must register on (Azure SNATs VNet-to-public traffic and the NSG
+# then refuses it). Name another subnet of the shared VNet to move them.
+AKS_SUBNET="${CLOUDLENS_AKS_SUBNET:-$SUBNET_VCONTROLLER}"
+
 # Rollback behavior: when ROLLBACK_ON_FAIL=true, the on_error trap will
 # delete the resource group on failure - BUT only if we created it ourselves
 # this run (CREATED_RG=true). Pre-existing RGs supplied via --resource-group
@@ -172,6 +194,8 @@ DEPLOYED_VPB=false
 CLMS_PUBLIC_IP=""
 KVO_PUBLIC_IP=""
 VPB_PUBLIC_IP=""
+AKS_CLUSTER_NAME=""
+AKS_REGISTER_ADDR=""
 ADMIN_USERNAME="azureuser"
 ADMIN_PASSWORD=""
 
@@ -376,6 +400,23 @@ Sensor discovery (which workload VMs get the sensor):
                             monitoring=enabled. Asked interactively when
                             sensors are chained and neither is given.
 
+Kubernetes (AKS) pod tapping:
+  --with-aks / --no-aks     Tap Kubernetes pods in AKS with CloudLens sensors.
+  --aks-cluster NAME        Tap THIS existing AKS cluster in the resource
+                            group (implies --with-aks).
+  --aks-sample              Create a small test cluster (2x Standard_D4s_v3,
+                            Azure CNI on the shared VNet, ~10 min) plus a
+                            sample traffic app (implies --with-aks).
+  --aks-mode M              daemonset (default: one sensor per node, automated)
+                            or sidecar (per-pod; customer pods get a rendered
+                            snippet, never an automatic restart).
+  --aks-sensor-image URI    Sensor image already in a registry the nodes reach.
+  --aks-sensor-tar PATH     CloudLens-Sensor-<ver>.tar to push to ACR instead
+                            (default: the newest one under ~/Downloads).
+  --aks-pod-selector REGEX  Which pods the KVO collection taps, by pod name
+                            (e.g. '^(payments|checkout)'). Default: every pod,
+                            warned, since each tapped pod costs a credit.
+
 Toggles:
   --no-kvo                  Skip KVO deployment
   --with-kvo                Deploy KVO (skip interactive prompt)
@@ -397,7 +438,10 @@ Env-var overrides (alternative to flags, useful for curl | bash):
   CLOUDLENS_VPB_NAME / _SIZE / _COUNT,
   CLOUDLENS_VPB_INGRESS_NICS, CLOUDLENS_VPB_EGRESS_NICS,
   CLOUDLENS_DISCOVERY_TAG_KEY / _VALUE (same as --discovery-tag-key / -value),
-  CLOUDLENS_ROLLBACK_ON_FAIL=true (same as --rollback; default: false)
+  CLOUDLENS_ROLLBACK_ON_FAIL=true (same as --rollback; default: false),
+  CLOUDLENS_DEPLOY_AKS=true (same as --with-aks), CLOUDLENS_AKS_CLUSTER,
+  CLOUDLENS_AKS_SAMPLE=true, CLOUDLENS_AKS_MODE, CLOUDLENS_AKS_SENSOR_IMAGE,
+  CLOUDLENS_AKS_SENSOR_TAR, CLOUDLENS_AKS_POD_SELECTOR (same as the --aks-* flags)
 
   With no flag equivalent:
   CLOUDLENS_SENSOR_MANAGER_ADDR  Address sensors register on (default: public IP
@@ -419,6 +463,8 @@ Env-var overrides (alternative to flags, useful for curl | bash):
                                  (default: ~/.ssh/<vpb-name>.pem)
   CLOUDLENS_VPB_SSH_USER         SSH user for that key (default: keysight, the
                                  Azure Marketplace vPB login on port 9022)
+  CLOUDLENS_AKS_SUBNET           Subnet of the shared VNet the --aks-sample nodes
+                                 join (default: vcontroller-subnet)
 
 Example (full prod-style invocation):
   CLOUDLENS_RG=prod-cloudlens-rg CLOUDLENS_REGION=westeurope \\
@@ -441,11 +487,14 @@ What it does (phases):
  11. Sensor chain (optional, runs quickstart.sh)
  12. KVO product licensing (an unlicensed KVO refuses every write)
  13. Adopt the vController into KVO + create its Cloud Config
+ 13b. AKS pod tapping (--with-aks, --aks-cluster or --aks-sample)
  14. Adopt the vPB into KVO
  15. vPB traffic path + monitoring policy
  16. Final summary written to cloudlens-deploy-summary.txt
 
 Phases 12-15 need KVO (--with-kvo); 14-15 also need the vPB (--with-vpb).
+Phase 13b runs with or without KVO: with it the pods register into the
+Kubernetes cluster's own vController project, without it into Phase 10's.
 Their scripts under scripts/ started as copies of the AWS repo's and have since
 drifted (Azure transport in vpb_kvo_adopt.py, timeouts and argument handling in
 the other three): read docs/AZURE_TAPPING_ARCHITECTURE.md before porting a fix.
@@ -471,6 +520,16 @@ while [[ $# -gt 0 ]]; do
     --no-vpb) DEPLOY_VPB=false; shift ;;
     --with-vpb) DEPLOY_VPB=true; shift ;;
     --no-sensors) CHAIN_SENSORS=false; shift ;;
+
+    # Kubernetes (AKS) pod tapping
+    --with-aks) DEPLOY_AKS=true; shift ;;
+    --no-aks) DEPLOY_AKS=false; shift ;;
+    --aks-cluster) DEPLOY_AKS=true; AKS_CLUSTER="$2"; shift 2 ;;
+    --aks-sample) DEPLOY_AKS=true; AKS_SAMPLE=true; shift ;;
+    --aks-mode) AKS_MODE="$2"; shift 2 ;;
+    --aks-sensor-image) AKS_SENSOR_IMAGE="$2"; shift 2 ;;
+    --aks-sensor-tar) AKS_SENSOR_TAR="$2"; shift 2 ;;
+    --aks-pod-selector) AKS_POD_SELECTOR="$2"; shift 2 ;;
 
     # Rollback control
     --rollback) ROLLBACK_ON_FAIL=true; shift ;;
@@ -533,6 +592,15 @@ fi
 if [[ ! "$VNET_CIDR" =~ ^[0-9]+\.[0-9]+\.0\.0/16$ ]]; then
   fail "--vnet-cidr / CLOUDLENS_VNET_CIDR must be a /16 written a.b.0.0/16 (got '$VNET_CIDR'): the five subnets are carved from it as a.b.1/2/10/11/12.0/24."
 fi
+# AKS: blank means off, and the mode is one of the two the engine knows, in
+# either spelling. A typo here would otherwise surface an hour in, after the
+# vController is up, as the engine's "bad input" exit.
+if [[ -z "$DEPLOY_AKS" ]]; then DEPLOY_AKS=false; fi
+AKS_MODE="$(to_lower "$AKS_MODE")"
+case "$AKS_MODE" in
+  daemonset|sidecar) ;;
+  *) fail "--aks-mode / CLOUDLENS_AKS_MODE must be daemonset or sidecar (got '$AKS_MODE')." ;;
+esac
 
 # Use ADMIN_USERNAME (already declared) for the OS admin user from now on
 ADMIN_USERNAME="$DEFAULT_ADMIN_USER"
@@ -2026,7 +2094,18 @@ if [[ "$DEPLOYED_KVO" != "true" && "$DRY_RUN" != "true" ]]; then
   fi
 fi
 
+# One answer to "is there a KVO to talk to", read three times below: by the
+# licensing and adoption pair, by the AKS step choosing its project key, and
+# by the vPB pair after it.
+KVO_CHAIN_OK=false
 if [[ "$DEPLOYED_KVO" == "true" && -n "${KVO_PUBLIC_IP:-}" && "$KVO_PUBLIC_IP" != "unknown" ]]; then
+  KVO_CHAIN_OK=true
+fi
+# Set by Phase 13 once the vController is adopted. Phase 13b wires the
+# Kubernetes presence only then: the presence hangs off that device.
+KVO_VC_ADOPTED=false
+
+if [[ "$KVO_CHAIN_OK" == "true" ]]; then
 
   # --- Phase 12: licensing. Everything else in KVO is gated behind this. -----
   # An unlicensed KVO refuses EVERY write mutation with "Not Authorised!",
@@ -2087,76 +2166,222 @@ if [[ "$DEPLOYED_KVO" == "true" && -n "${KVO_PUBLIC_IP:-}" && "$KVO_PUBLIC_IP" !
   elif [[ -z "$ADOPT_SCRIPT" ]] || ! py_ready; then
     warn "scripts/kvo_adopt_clms.py unavailable; skipping adoption."
   else
-    python3 "$ADOPT_SCRIPT" --kvo "$KVO_PUBLIC_IP" --clms "$CLMS_PUBLIC_IP" \
-      --clms-admin-pass "$VC_ADMIN_PASS" --name "$KVO_CLM_NAME" \
-      --cloud-config "$KVO_CLOUD_CONFIG" --accept-eula --insecure \
-      && ok "vController adopted as ${KVO_CLM_NAME}." \
-      || warn "vController adoption did not complete; see above."
+    if python3 "$ADOPT_SCRIPT" --kvo "$KVO_PUBLIC_IP" --clms "$CLMS_PUBLIC_IP" \
+         --clms-admin-pass "$VC_ADMIN_PASS" --name "$KVO_CLM_NAME" \
+         --cloud-config "$KVO_CLOUD_CONFIG" --accept-eula --insecure; then
+      ok "vController adopted as ${KVO_CLM_NAME}."
+      KVO_VC_ADOPTED=true
+    else
+      warn "vController adoption did not complete; see above."
+    fi
+  fi
+fi
+
+# =====================================================================
+# Phase 13b: AKS pod tapping
+# =====================================================================
+# Kubernetes pods talk to each other INSIDE a node, so neither the VM sensor on
+# that node nor anything Azure could mirror ever sees the traffic. The
+# CloudLens K8s sensor does (a DaemonSet per node, or a sidecar per pod),
+# registering into the vController project KVO provisions for the Kubernetes
+# Cluster presence, so the pod collection can select the pods and the vPB path
+# treats them like VMs. scripts/deploy-aks-tapping.sh is the engine and works
+# standalone with the same flags; this phase settles the three inputs only the
+# deploy knows: the project key, the address the pods register on, the subnet.
+if [[ "$DEPLOY_AKS" == "true" ]]; then
+  step "Phase 13b: AKS pod tapping (${AKS_MODE})"
+  AKS_SCRIPT="$(find_script scripts/deploy-aks-tapping.sh || true)"
+  K8SWIRE_SCRIPT="$(find_script scripts/kvo_k8s_config.py || true)"
+  # The engine names a sample cluster <stack-name>-aks; the KVO presence is
+  # named after whichever cluster the sensors land in.
+  AKS_CLUSTER_NAME="${AKS_CLUSTER:-${RESOURCE_GROUP}-aks}"
+  AKS_K8S_NAME="k8s-${AKS_CLUSTER_NAME}"
+
+  # Which pods the KVO collection selects: the operator's regex, else the
+  # sample app's two deployments, else every pod (each one costs a credit).
+  AKS_SEL_VALUE=""
+  if [[ -n "$AKS_POD_SELECTOR" ]]; then
+    AKS_SEL_VALUE="pod-name=${AKS_POD_SELECTOR}"
+  elif [[ "$AKS_SAMPLE" == "true" ]]; then
+    AKS_SEL_VALUE='pod-name=^(web|loadgen)'
+  fi
+  AKS_SEL_ARGS=()
+  if [[ -n "$AKS_SEL_VALUE" ]]; then AKS_SEL_ARGS=(--pod-selector "$AKS_SEL_VALUE"); fi
+
+  # Pods reach the vController over the network the CLUSTER has. A cluster in
+  # the shared VNet must use the PRIVATE address: Azure SNATs VNet-to-public
+  # traffic, so a pod that goes out to the public address arrives from a
+  # public source the NSG refuses, the same rule sensor_manager_addr follows
+  # for VMs. --aks-sample always lands in the shared VNet; an existing cluster
+  # is asked which subnet its first node pool sits in. A cluster elsewhere
+  # uses the public address and needs its egress IPs inside the admin CIDR,
+  # which the engine's reachability probe surfaces.
+  AKS_REGISTER_ADDR="$CLMS_PUBLIC_IP"
+  if [[ "$AKS_SAMPLE" == "true" && -n "${CLMS_PRIVATE_IP:-}" ]]; then
+    AKS_REGISTER_ADDR="$CLMS_PRIVATE_IP"
+  elif [[ -n "$AKS_CLUSTER" && -n "${CLMS_PRIVATE_IP:-}" ]]; then
+    aks_subnet_id="$(az aks show -g "$RESOURCE_GROUP" -n "$AKS_CLUSTER" \
+                       --query 'agentPoolProfiles[0].vnetSubnetId' -o tsv 2>/dev/null || true)"
+    if [[ "$aks_subnet_id" == *"/virtualNetworks/${VNET_NAME}/"* ]]; then
+      AKS_REGISTER_ADDR="$CLMS_PRIVATE_IP"
+    fi
   fi
 
-  # --- Phase 14: adopt the vPB ---------------------------------------------
-  if [[ "$DEPLOYED_VPB" == "true" && -n "${VPB_PUBLIC_IP:-}" && "$VPB_PUBLIC_IP" != "unknown" ]]; then
-    step "Phase 14: Adopt the vPB into KVO"
-    VPB_ADOPT_SCRIPT="$(find_script scripts/vpb_kvo_adopt.py || true)"
-    VPB_DEVICE_NAME="${CLOUDLENS_VPB_DEVICE_NAME:-cloudlens-vpb}"
-    if [[ "$DRY_RUN" == "true" ]]; then
-      dryrun_say "would adopt vPB ${VPB_PUBLIC_IP} into KVO as ${VPB_DEVICE_NAME}"
-    elif [[ -z "$VPB_ADOPT_SCRIPT" ]] || ! py_ready; then
-      warn "scripts/vpb_kvo_adopt.py unavailable; skipping vPB adoption."
-    else
-      # --key and --kvo-internal-ip are REQUIRED by the script: without them it
-      # exits on an argparse error before doing anything. Adoption drives the
-      # vPB CLI over SSH, and KVO must be given the address the DEVICE can reach
-      # it on, which is the private IP, not the public one.
-      #
-      # The user differs from AWS. vPB UG v3.16 login matrix:
-      #   AWS Marketplace    port 9022, user admin
-      #   Azure Marketplace  port 9022, user keysight
-      # There is no universal vPB login; getting this wrong looks like the
-      # device being unreachable.
-      VPB_SSH_KEY="${CLOUDLENS_KEY_PEM:-$HOME/.ssh/${DEFAULT_VPB_NAME}.pem}"
-      VPB_SSH_USER="${CLOUDLENS_VPB_SSH_USER:-keysight}"
-      VPB_PRIVATE_IP="$(az vm list-ip-addresses -g "$RESOURCE_GROUP" -n "$DEFAULT_VPB_NAME" \
-                          --query '[0].virtualMachine.network.privateIpAddresses[0]' -o tsv 2>/dev/null)"
-      KVO_PRIVATE_IP="$(az vm list-ip-addresses -g "$RESOURCE_GROUP" -n "$DEFAULT_KVO_NAME" \
-                          --query '[0].virtualMachine.network.privateIpAddresses[0]' -o tsv 2>/dev/null)"
-      if [[ ! -f "$VPB_SSH_KEY" ]]; then
-        warn "No SSH key at ${VPB_SSH_KEY}, and adoption drives the vPB CLI over SSH."
-        note "Point CLOUDLENS_KEY_PEM at the key used for this deployment, then re-run."
-      elif [[ -z "$KVO_PRIVATE_IP" ]]; then
-        warn "Could not resolve the KVO private IP from Azure; skipping vPB adoption."
-        note "KVO must be registered on the address the vPB can reach, not its public IP."
+  # aks_engine_args KEY: the engine's argument list into AKS_ARGS. One place
+  # builds it so the dry run prints exactly what the live run executes.
+  aks_engine_args() {
+    AKS_ARGS=(--resource-group "$RESOURCE_GROUP" --location "$LOCATION" \
+              --clms-ip "$AKS_REGISTER_ADDR" --project-key "$1" \
+              --mode "$AKS_MODE" --stack-name "$RESOURCE_GROUP" \
+              --custom-tags "platform=aks,stack=${RESOURCE_GROUP}" --yes)
+    if [[ -n "$AKS_CLUSTER" ]]; then AKS_ARGS+=(--cluster "$AKS_CLUSTER"); fi
+    if [[ "$AKS_SAMPLE" == "true" ]]; then
+      AKS_ARGS+=(--create-sample --vnet-name "$VNET_NAME" \
+                 --vnet-resource-group "${VNET_RG:-$RESOURCE_GROUP}" \
+                 --subnet-name "$AKS_SUBNET" --sample-app)
+    fi
+    if [[ -n "$AKS_SENSOR_IMAGE" ]]; then AKS_ARGS+=(--sensor-image "$AKS_SENSOR_IMAGE"); fi
+    if [[ -n "$AKS_SENSOR_TAR" ]]; then AKS_ARGS+=(--sensor-tar "$AKS_SENSOR_TAR"); fi
+  }
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    if [[ "$KVO_CHAIN_OK" == "true" ]]; then
+      dryrun_say "python3 scripts/kvo_k8s_config.py --kvo ${KVO_PUBLIC_IP} --name ${AKS_K8S_NAME} --vcontroller ${KVO_CLM_NAME:-cloudlens-vcontroller}${AKS_SEL_VALUE:+ --pod-selector '${AKS_SEL_VALUE}'} --no-policy --key-out <tmpfile> --accept-eula --insecure"
+    fi
+    aks_engine_args "<key>"
+    dryrun_say "bash scripts/deploy-aks-tapping.sh ${AKS_ARGS[*]}"
+    note "The K8s sensors would register on ${AKS_REGISTER_ADDR}."
+  elif [[ -z "$AKS_SCRIPT" ]]; then
+    warn "scripts/deploy-aks-tapping.sh not found; skipping the AKS step."
+  else
+    # KVO side FIRST. The Kubernetes Cluster presence provisions its own
+    # vController project, and the KVO UG (Kubernetes Cluster Cloud Configs)
+    # says the config's creation "was the condition to populate the deployment
+    # data for the sensor": the DaemonSet must register with THAT project's
+    # key, or its pods show up under the VM sensors' project and the pod
+    # collection selects nothing. The Phase 10 key is only the fallback for a
+    # run without KVO, or one where the wiring failed.
+    aks_key="$PROJECT_KEY"
+    if [[ "$KVO_VC_ADOPTED" == "true" ]]; then
+      if [[ -z "$K8SWIRE_SCRIPT" ]] || ! py_ready; then
+        warn "scripts/kvo_k8s_config.py or python3+requests unavailable; the K8s"
+        warn "sensors use the Phase 10 key, so their pods are visible via the"
+        warn "vController but not selectable by a Kubernetes cloud config."
       else
-        python3 "$VPB_ADOPT_SCRIPT" --kvo "$KVO_PUBLIC_IP" --vpb "$VPB_PUBLIC_IP" \
-          --key "$VPB_SSH_KEY" --vpb-user "$VPB_SSH_USER" \
-          --kvo-internal-ip "$KVO_PRIVATE_IP" --vpb-mgmt-ip "$VPB_PRIVATE_IP" \
-          --device-name "$VPB_DEVICE_NAME" --accept-eula --insecure \
-          && ok "vPB adopted as ${VPB_DEVICE_NAME}." \
-          || warn "vPB adoption did not complete; see above."
+        aks_keyfile="$(mktemp)"
+        if python3 "$K8SWIRE_SCRIPT" --kvo "$KVO_PUBLIC_IP" --name "$AKS_K8S_NAME" \
+             --vcontroller "$KVO_CLM_NAME" ${AKS_SEL_ARGS[@]+"${AKS_SEL_ARGS[@]}"} \
+             --no-policy --key-out "$aks_keyfile" --accept-eula --insecure; then
+          ok "KVO Kubernetes presence, cloud config and pod collection wired."
+          k8s_key="$(tr -d '[:space:]' < "$aks_keyfile")"
+          if [[ -n "$k8s_key" ]]; then
+            aks_key="$k8s_key"
+          else
+            warn "KVO returned no project key for '${AKS_K8S_NAME}'; the K8s sensors use the Phase 10 key."
+          fi
+        else
+          warn "The KVO Kubernetes wiring did not complete (its output says why,"
+          warn "including the manual UI steps). The K8s sensors use the Phase 10"
+          warn "key, so their pods are visible via the vController but not"
+          warn "selectable by the Kubernetes cloud config until it exists."
+        fi
+        rm -f "$aks_keyfile"
+      fi
+    elif [[ "$KVO_CHAIN_OK" == "true" ]]; then
+      warn "The vController is not adopted into KVO (Phase 13 above), so the"
+      warn "Kubernetes presence cannot be wired; the K8s sensors use the Phase 10 key."
+    fi
+    if [[ -z "$aks_key" ]]; then
+      warn "No vController project key (neither the Kubernetes presence nor Phase 10"
+      warn "produced one), so the K8s sensors would have nothing to register to."
+      note "Skipping. Re-run with --resume once the key exists."
+    else
+      aks_engine_args "$aks_key"
+      if bash "$AKS_SCRIPT" "${AKS_ARGS[@]}"; then
+        ok "AKS pod tapping deployed: ${AKS_CLUSTER_NAME}, ${AKS_MODE}, registering on ${AKS_REGISTER_ADDR}."
+        ok "The K8s sensors follow the same tool path as the VM sensors."
+      else
+        aks_rc=$?
+        # The engine's exit codes, so the operator reads a cause, not a number.
+        case "$aks_rc" in
+          2) aks_why="bad input" ;;
+          3) aks_why="no cluster access (az aks get-credentials / kubectl)" ;;
+          4) aks_why="no sensor image (pass --aks-sensor-image or --aks-sensor-tar)" ;;
+          5) aks_why="cluster or node pool creation failed" ;;
+          6) aks_why="deployment failed (DaemonSet not ready or pods not registering)" ;;
+          *) aks_why="exit ${aks_rc}" ;;
+        esac
+        warn "The AKS tapping step did not complete: ${aks_why}. The rest of the run continues."
+        note "Re-run just this step: bash scripts/deploy-aks-tapping.sh $(printf '%s ' "${AKS_ARGS[@]}" | sed 's/--project-key [^ ]*/--project-key <key>/')"
       fi
     fi
+  fi
+fi
 
-    # --- Phase 15: the traffic path ----------------------------------------
-    # HONEST WARNING, do not soften it: this cannot complete on a fresh vPB.
-    # The device config has no ports until eth1/eth2 are up as DPDK data ports
-    # ON the vPB, and that bring-up is not automated anywhere in this repo.
-    step "Phase 15: vPB traffic path + monitoring policy"
-    WIRE_SCRIPT="$(find_script scripts/vpb_wire_path.py || true)"
-    if [[ "$DRY_RUN" == "true" ]]; then
-      dryrun_say "would wire C2DL -> vPB ingress -> vPB -> egress -> tool"
-    elif [[ -z "$WIRE_SCRIPT" ]] || ! py_ready; then
-      warn "scripts/vpb_wire_path.py unavailable; skipping the traffic path."
+# =====================================================================
+# Phases 14-15: the vPB half of the KVO chain
+# =====================================================================
+if [[ "$KVO_CHAIN_OK" == "true" && "$DEPLOYED_VPB" == "true" && -n "${VPB_PUBLIC_IP:-}" && "$VPB_PUBLIC_IP" != "unknown" ]]; then
+  step "Phase 14: Adopt the vPB into KVO"
+  VPB_ADOPT_SCRIPT="$(find_script scripts/vpb_kvo_adopt.py || true)"
+  VPB_DEVICE_NAME="${CLOUDLENS_VPB_DEVICE_NAME:-cloudlens-vpb}"
+  if [[ "$DRY_RUN" == "true" ]]; then
+    dryrun_say "would adopt vPB ${VPB_PUBLIC_IP} into KVO as ${VPB_DEVICE_NAME}"
+  elif [[ -z "$VPB_ADOPT_SCRIPT" ]] || ! py_ready; then
+    warn "scripts/vpb_kvo_adopt.py unavailable; skipping vPB adoption."
+  else
+    # --key and --kvo-internal-ip are REQUIRED by the script: without them it
+    # exits on an argparse error before doing anything. Adoption drives the
+    # vPB CLI over SSH, and KVO must be given the address the DEVICE can reach
+    # it on, which is the private IP, not the public one.
+    #
+    # The user differs from AWS. vPB UG v3.16 login matrix:
+    #   AWS Marketplace    port 9022, user admin
+    #   Azure Marketplace  port 9022, user keysight
+    # There is no universal vPB login; getting this wrong looks like the
+    # device being unreachable.
+    VPB_SSH_KEY="${CLOUDLENS_KEY_PEM:-$HOME/.ssh/${DEFAULT_VPB_NAME}.pem}"
+    VPB_SSH_USER="${CLOUDLENS_VPB_SSH_USER:-keysight}"
+    VPB_PRIVATE_IP="$(az vm list-ip-addresses -g "$RESOURCE_GROUP" -n "$DEFAULT_VPB_NAME" \
+                        --query '[0].virtualMachine.network.privateIpAddresses[0]' -o tsv 2>/dev/null)"
+    KVO_PRIVATE_IP="$(az vm list-ip-addresses -g "$RESOURCE_GROUP" -n "$DEFAULT_KVO_NAME" \
+                        --query '[0].virtualMachine.network.privateIpAddresses[0]' -o tsv 2>/dev/null)"
+    if [[ ! -f "$VPB_SSH_KEY" ]]; then
+      warn "No SSH key at ${VPB_SSH_KEY}, and adoption drives the vPB CLI over SSH."
+      note "Point CLOUDLENS_KEY_PEM at the key used for this deployment, then re-run."
+    elif [[ -z "$KVO_PRIVATE_IP" ]]; then
+      warn "Could not resolve the KVO private IP from Azure; skipping vPB adoption."
+      note "KVO must be registered on the address the vPB can reach, not its public IP."
     else
-      note "This needs eth1/eth2 up as DPDK data ports on the vPB itself."
-      note "On a fresh vPB the port bind has nothing to bind and will say so."
-      note "Run it directly once the data ports are up:"
-      note "  python3 scripts/vpb_wire_path.py --kvo ${KVO_PUBLIC_IP} \\"
-      note "    --device ${VPB_DEVICE_NAME} --collection ${KVO_CLOUD_CONFIG} \\"
-      note "    --cloud-config ${KVO_CLOUD_CONFIG} --ingress-ip <vpb-eth1-ip> \\"
-      note "    --egress-ip <vpb-eth2-ip> --capture-ip <tool-ip> --insecure"
-      note "The egress arguments are NOT optional: an egress port with no IP"
-      note "forwards nothing, and the counters read Inspected N / Passed 0."
+      python3 "$VPB_ADOPT_SCRIPT" --kvo "$KVO_PUBLIC_IP" --vpb "$VPB_PUBLIC_IP" \
+        --key "$VPB_SSH_KEY" --vpb-user "$VPB_SSH_USER" \
+        --kvo-internal-ip "$KVO_PRIVATE_IP" --vpb-mgmt-ip "$VPB_PRIVATE_IP" \
+        --device-name "$VPB_DEVICE_NAME" --accept-eula --insecure \
+        && ok "vPB adopted as ${VPB_DEVICE_NAME}." \
+        || warn "vPB adoption did not complete; see above."
     fi
+  fi
+
+  # --- Phase 15: the traffic path ----------------------------------------
+  # HONEST WARNING, do not soften it: this cannot complete on a fresh vPB.
+  # The device config has no ports until eth1/eth2 are up as DPDK data ports
+  # ON the vPB, and that bring-up is not automated anywhere in this repo.
+  step "Phase 15: vPB traffic path + monitoring policy"
+  WIRE_SCRIPT="$(find_script scripts/vpb_wire_path.py || true)"
+  if [[ "$DRY_RUN" == "true" ]]; then
+    dryrun_say "would wire C2DL -> vPB ingress -> vPB -> egress -> tool"
+  elif [[ -z "$WIRE_SCRIPT" ]] || ! py_ready; then
+    warn "scripts/vpb_wire_path.py unavailable; skipping the traffic path."
+  else
+    note "This needs eth1/eth2 up as DPDK data ports on the vPB itself."
+    note "On a fresh vPB the port bind has nothing to bind and will say so."
+    note "Run it directly once the data ports are up:"
+    note "  python3 scripts/vpb_wire_path.py --kvo ${KVO_PUBLIC_IP} \\"
+    note "    --device ${VPB_DEVICE_NAME} --collection ${KVO_CLOUD_CONFIG} \\"
+    note "    --cloud-config ${KVO_CLOUD_CONFIG} --ingress-ip <vpb-eth1-ip> \\"
+    note "    --egress-ip <vpb-eth2-ip> --capture-ip <tool-ip> --insecure"
+    note "The egress arguments are NOT optional: an egress port with no IP"
+    note "forwards nothing, and the counters read Inspected N / Passed 0."
   fi
 fi
 
@@ -2217,6 +2442,11 @@ Note:               SSH is reachable 10 to 15 minutes after deploy
 VSUMMARY
   fi
 
+  if [[ "$DEPLOY_AKS" == "true" ]]; then
+    echo "AKS pod tapping:    ${AKS_CLUSTER_NAME}, ${AKS_MODE}, registers to ${AKS_REGISTER_ADDR}"
+    echo
+  fi
+
   cat <<EOM
 --- Next steps ---
 1. Open https://${CLMS_PUBLIC_IP} and change the default vController password
@@ -2250,6 +2480,7 @@ echo "Log saved to:        ${LOG_FILE}"
 echo "vController UI:      https://${CLMS_PUBLIC_IP}"
 [[ "$DEPLOY_KVO" == "true" ]] && echo "KVO UI:              https://${KVO_PUBLIC_IP}"
 [[ "$DEPLOY_VPB" == "true" ]] && echo "vPB management:      ${VPB_PUBLIC_IP}"
+[[ "$DEPLOY_AKS" == "true" ]] && echo "AKS pod tapping:     ${AKS_CLUSTER_NAME}, ${AKS_MODE}, registers to ${AKS_REGISTER_ADDR}"
 echo
 note "Network: ${VNET_NAME} in ${VNET_RG} (${SUBNET_VCONTROLLER}, ${SUBNET_KVO}, ${SUBNET_VPB_MGMT}, ${SUBNET_VPB_INGRESS}, ${SUBNET_VPB_EGRESS})"
 note "Tear down: curl -sSL ${REPO_RAW}/deploy/teardown-stack.sh | bash -s -- --resource-group ${RESOURCE_GROUP}"
