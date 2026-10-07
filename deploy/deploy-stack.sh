@@ -2166,7 +2166,11 @@ if [[ "$KVO_CHAIN_OK" == "true" ]]; then
   elif [[ -z "$ADOPT_SCRIPT" ]] || ! py_ready; then
     warn "scripts/kvo_adopt_clms.py unavailable; skipping adoption."
   else
+    # KVO is told the vController's PRIVATE address: the public one is refused
+    # by the NSG from inside the VNet and the discovery times out (live
+    # 2026-10-07). This script still talks to the public address itself.
     if python3 "$ADOPT_SCRIPT" --kvo "$KVO_PUBLIC_IP" --clms "$CLMS_PUBLIC_IP" \
+         --clms-internal-ip "${CLMS_PRIVATE_IP:-$CLMS_PUBLIC_IP}" \
          --clms-admin-pass "$VC_ADMIN_PASS" --name "$KVO_CLM_NAME" \
          --cloud-config "$KVO_CLOUD_CONFIG" --accept-eula --insecure; then
       ok "vController adopted as ${KVO_CLM_NAME}."

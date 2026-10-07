@@ -326,7 +326,14 @@ def kvo_create_cloud_config(base, token, clm_uid, cc_name, verify):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--clms", required=True, help="CLMS/vController IP or host")
+    ap.add_argument("--clms", required=True, help="CLMS/vController IP or host, as THIS script reaches it")
+    # KVO discovers the vController from INSIDE the VNet. Handing it the public
+    # address sends the request out through Azure's public path, where the NSG
+    # admits only the admin CIDR, and the discovery times out ("NatsError:
+    # Request timed out", seen live 2026-10-07). Give it the private address.
+    ap.add_argument("--clms-internal-ip", default=None,
+                    help="address KVO uses to reach the vController (default: --clms); "
+                         "pass the private IP when KVO and the vController share the VNet")
     ap.add_argument("--clms-admin-pass", required=True, help="CLMS admin password (known value)")
     ap.add_argument("--kvo", required=True, help="KVO IP or host")
     ap.add_argument("--name", default="cloudlens-manager", help="name for the CLM inside KVO")
@@ -375,7 +382,7 @@ def main():
         return 4
 
     # 4-5. adopt + commit
-    adopted = kvo_adopt(kvo, ktok_probe, args.name, args.clms,
+    adopted = kvo_adopt(kvo, ktok_probe, args.name, args.clms_internal_ip or args.clms,
                         args.kvo_user_email, args.kvo_user_pass, verify)
     if not adopted: return 5
     if adopted == "EXISTS":

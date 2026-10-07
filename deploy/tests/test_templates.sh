@@ -51,6 +51,11 @@ PRODUCTS = {
     "kvo-marketplace.json": {"admin": {"22", "443"}, "sensor": set()},
     "vpb-marketplace.json": {"admin": {"22", "9022", "443"}, "sensor": SENSOR_PORTS},
 }
+VNET_PORTS = {
+    "clms-marketplace.json": {"443"},
+    "kvo-marketplace.json": {"443", "7443"},
+    "vpb-marketplace.json": {"443"},
+}
 STACK = "stack-marketplace.json"
 UI_FILES = {
     "clms-createUiDefinition.json": False,
@@ -99,12 +104,16 @@ def nsg_rules(doc):
 
 
 def check_sources(fname, rules, ports, ref, label):
-    missing = sorted(p for p in ports if not any(p in rp for _, rp, _ in rules))
+    missing = sorted(p for p in ports
+                     if not any(p in rp and ref in src for _, rp, src in rules))
     bad = []
     for name, rp, src in rules:
         if not (rp & ports):
             continue
-        if src.strip() == "*" or ref not in src:
+        # VirtualNetwork is the in-VNet path (KVO, sensors and pods reaching the
+        # appliances); it is a service tag, not a wildcard, and it must sit
+        # BESIDE the admin rule, never replace it (checked below).
+        if src.strip() == "*" or (ref not in src and src.strip() != "VirtualNetwork"):
             bad.append("%s source=%r" % (name, src))
     detail = "; ".join(
         (["no rule on port(s) %s" % ", ".join(missing)] if missing else []) + bad)
@@ -134,6 +143,13 @@ def check_product(fname, spec):
         report("sensorSourcePrefix" in params, fname, "parameter sensorSourcePrefix exists")
 
     rules = nsg_rules(doc)
+    vnet_ports = VNET_PORTS.get(fname, set())
+    if vnet_ports:
+        vrules = [(n, rp, src) for n, rp, src in rules if src.strip() == "VirtualNetwork"]
+        vmissing = sorted(p for p in vnet_ports if not any(p in rp for _, rp, _ in vrules))
+        report(not vmissing, fname,
+               "in-VNet rule(s) from VirtualNetwork on %s" % ", ".join(sorted(vnet_ports)),
+               ("missing: " + ", ".join(vmissing)) if vmissing else "")
     check_sources(fname, rules, spec["admin"], ADMIN_REF,
                   "NSG rules on 22/9022/443 take their source from adminSourceCidr")
     if spec["sensor"]:

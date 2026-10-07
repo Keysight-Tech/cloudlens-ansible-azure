@@ -143,6 +143,32 @@
               "destinationAddressPrefix": "*",
               "destinationPortRange": "443"
             }
+          },
+          {
+            "name": "AllowHTTPSFromVNet",
+            "properties": {
+              "priority": 120,
+              "protocol": "Tcp",
+              "access": "Allow",
+              "direction": "Inbound",
+              "sourceAddressPrefix": "VirtualNetwork",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "443"
+            }
+          },
+          {
+            "name": "AllowKvoFromVNet",
+            "properties": {
+              "priority": 121,
+              "protocol": "Tcp",
+              "access": "Allow",
+              "direction": "Inbound",
+              "sourceAddressPrefix": "VirtualNetwork",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "7443"
+            }
           }
         ]
       }
