@@ -213,7 +213,12 @@ case "$cmd" in
     for nic in $(vnet_nics "$n"); do
       gone "$(rid "$nic" "$NIC_T")" && continue
       printf '%s/ipConfigurations/ipconfig1\n' "$(rid "$nic" "$NIC_T")"
-    done ;;
+    done
+    # STUB_FOREIGN_NIC=1: a customer NIC from ANOTHER resource group sits in
+    # the shared VNet. Nothing in cl-rg is "other", only the VNet knows.
+    if [[ "$n" == "cloudlens-vnet" && "${STUB_FOREIGN_NIC:-0}" == "1" ]]; then
+      printf '%s\n' "/subscriptions/sub/resourceGroups/other-rg/providers/Microsoft.Network/networkInterfaces/customer-nic/ipConfigurations/ipconfig1"
+    fi ;;
   "network public-ip")
     echo "20.1.2.3" ;;
   *)
@@ -287,7 +292,7 @@ begin_case() {
   CASE_TITLE="$1"; CASE_OK=true; CASE_NOTES=""
   : > "$AZ_LOG"; : > "$LIC_LOG"; : > "$SEQ_FILE"; : > "$OUT"
   # behaviour defaults, overridden per case before run_teardown
-  export LIST_COUNT=0 RELEASE_RC=0 STUB_NO_TAG=0 STUB_OTHER=0 STUB_DELETE_OPTION=0 STUB_SHARED_VNET=0
+  export LIST_COUNT=0 RELEASE_RC=0 STUB_NO_TAG=0 STUB_OTHER=0 STUB_DELETE_OPTION=0 STUB_SHARED_VNET=0 STUB_FOREIGN_NIC=0
   unset CLOUDLENS_KVO_ADMIN_USER CLOUDLENS_KVO_ADMIN_PASS 2>/dev/null || true
 }
 end_case() {
@@ -534,6 +539,17 @@ begin_case "14: with the shared VNet the tagged group still holds nothing but Cl
   out_has "    cloudlens-vnet "
   out_has "every resource is CloudLens"
   az_has "group delete"
+end_case
+
+begin_case "15: a NIC from another group sits in the tagged shared VNet: per-resource plan, VMs go, the VNet is kept, no group delete"
+  LIST_COUNT=0 STUB_SHARED_VNET=1 STUB_FOREIGN_NIC=1
+  run_teardown --resource-group cl-rg --yes
+  rc_is 0
+  az_lacks "group delete"
+  az_has "vm delete"
+  az_lacks "resource delete --ids .*virtualNetworks/cloudlens-vnet"
+  out_has "keeping VNet cloudlens-vnet"
+  out_has "from outside the group"
 end_case
 
 echo

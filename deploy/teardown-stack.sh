@@ -754,6 +754,27 @@ while IFS=$'\t' read -r _rn _rt _rid; do
   esac
 done <<< "$RES_LINES"
 
+# vnet_other_users NAME: the ipConfiguration ids still in NAME's subnets that
+# do NOT belong to a CloudLens NIC. Anything printed means another NIC,
+# possibly from another group, still lives in the VNet and it must stay.
+# Works before and after our own NICs are deleted, so --dry-run can answer
+# it too. Empty on a failed probe, which reads as "no other user": the
+# delete itself then fails on Azure's own dependency check and is reported,
+# so a lost probe cannot delete anything Azure would not.
+vnet_other_users() {
+  local ids="" id="" nic="" nicl="" out=""
+  ids="$(ro_az network vnet show -g "$RESOURCE_GROUP" -n "$1" --query "subnets[].ipConfigurations[].id" -o tsv)"
+  for id in $(tokens "$ids"); do
+    # .../networkInterfaces/<nic>/ipConfigurations/<cfg>
+    nic="${id%/ipConfigurations/*}"
+    nicl="$(to_lower "$nic")"
+    if printf '%s\n' "$CL_NIC_IDS" | tr '[:upper:]' '[:lower:]' | grep -qx -- "$nicl" 2>/dev/null; then continue; fi
+    out="${out}${out:+ }$(id_name "$nic")"
+  done
+  printf '%s' "$out"
+  return 0
+}
+
 # ---- the plan ------------------------------------------------------------
 if [[ "$KEEP_RG" == "true" ]]; then
   PLAN="resources"; PLAN_WHY="--keep-resource-group was given"
@@ -762,7 +783,24 @@ elif [[ "$RG_DEPLOYED_BY" != "$DEPLOYED_BY_TAG" ]]; then
 elif [[ -n "$OTHER_RES_LINES" ]]; then
   PLAN="resources"; PLAN_WHY="the group holds $(count_lines "$OTHER_RES_LINES") resource(s) that are not CloudLens"
 else
-  PLAN="group"; PLAN_WHY="deploy-stack.sh created the group and nothing but CloudLens is in it"
+  # A NIC from ANOTHER group can sit in the deploy's VNet (a customer workload
+  # placed in cloudlens-vnet to reach the vController on its private address).
+  # Nothing in this group is theirs, so the group plan would be chosen, and
+  # Azure then refuses the group delete on the in-use subnet: the poll in
+  # Phase 5 would wait the whole DELETE_TIMEOUT and report "still deleting".
+  # Ask the VNets now, exactly as the per-resource path does before it deletes
+  # a VNet, and take that path instead: it keeps a VNet others still use.
+  OUTSIDE_VNET_USERS=""
+  while IFS=$'\t' read -r _vname _vid; do
+    if [[ -z "${_vname:-}" ]]; then continue; fi
+    _u="$(vnet_other_users "$_vname")"
+    if [[ -n "$_u" ]]; then OUTSIDE_VNET_USERS="${OUTSIDE_VNET_USERS}${OUTSIDE_VNET_USERS:+; }${_vname}: ${_u}"; fi
+  done <<< "$CL_VNET_LINES"
+  if [[ -n "$OUTSIDE_VNET_USERS" ]]; then
+    PLAN="resources"; PLAN_WHY="NIC(s) from outside the group still use its CloudLens VNet(s) (${OUTSIDE_VNET_USERS}); az group delete would fail on the in-use subnet, so the VNet(s) and the group stay"
+  else
+    PLAN="group"; PLAN_WHY="deploy-stack.sh created the group and nothing but CloudLens is in it"
+  fi
 fi
 
 # =====================================================================
@@ -1250,27 +1288,6 @@ fi
 # =====================================================================
 step "Phase 5: Delete"
 
-# vnet_other_users NAME: the ipConfiguration ids still in NAME's subnets that
-# do NOT belong to a CloudLens NIC. Anything printed means another NIC,
-# possibly from another group, still lives in the VNet and it must stay.
-# Works before and after our own NICs are deleted, so --dry-run can answer
-# it too. Empty on a failed probe, which reads as "no other user": the
-# delete itself then fails on Azure's own dependency check and is reported,
-# so a lost probe cannot delete anything Azure would not.
-vnet_other_users() {
-  local ids="" id="" nic="" nicl="" out=""
-  ids="$(ro_az network vnet show -g "$RESOURCE_GROUP" -n "$1" --query "subnets[].ipConfigurations[].id" -o tsv)"
-  for id in $(tokens "$ids"); do
-    # .../networkInterfaces/<nic>/ipConfigurations/<cfg>
-    nic="${id%/ipConfigurations/*}"
-    nicl="$(to_lower "$nic")"
-    if printf '%s\n' "$CL_NIC_IDS" | tr '[:upper:]' '[:lower:]' | grep -qx -- "$nicl" 2>/dev/null; then continue; fi
-    out="${out}${out:+ }$(id_name "$nic")"
-  done
-  printf '%s' "$out"
-  return 0
-}
-
 wait_for_group_gone() {
   local waited=0 interval=15 last_report=0 st=""
   if [[ "$DRY_RUN" == "true" ]]; then
@@ -1310,8 +1327,10 @@ if [[ "$PLAN" == "group" ]]; then
     DELETED_VNETS="$(count_lines "$CL_VNET_LINES")"
   else
     warn "Resource group ${RESOURCE_GROUP} still exists after $(( DELETE_TIMEOUT / 60 )) minutes."
-    note "Azure is usually still deleting it. Check with: az group show -n ${RESOURCE_GROUP}"
-    note "Re-run this teardown later: it removes whatever is left."
+    note "Azure may still be deleting it, or the delete failed on a dependency it found"
+    note "(a resource outside the group still using one inside it). Check with:"
+    note "  az group show -n ${RESOURCE_GROUP}    and    az resource list -g ${RESOURCE_GROUP} -o table"
+    note "Re-run this teardown later: it removes whatever is left and keeps what others still use."
     record_failure "$RESOURCE_GROUP" "still present after ${DELETE_TIMEOUT}s"
   fi
 else

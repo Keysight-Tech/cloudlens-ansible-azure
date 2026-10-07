@@ -28,7 +28,11 @@ azure:
 
 # === CloudLens Configuration ===
 cloudlens:
-  # vController (CLMS) IP or FQDN: sensors register here
+  # vController (CLMS) IP or FQDN: sensors register here. Use the private IP
+  # when the workload VMs are in, or peered to, the vController's VNet and the
+  # admin CIDR is narrowed (the public IP is refused from inside the VNet);
+  # the public IP only when the admin CIDR is * or the VMs' egress IPs are
+  # inside it.
   manager_ip_or_fqdn: "clms.customer.example.com"
 
   # Project key from CLMS → Projects → API Keys

@@ -99,7 +99,31 @@ pip install --quiet \
 # with "unrecognized arguments" (rc=2) and prints usage, and the old
 # "| tail -2" swallowed exactly that, so runs continued with NO collections
 # and failed later pointing anywhere but here.
-ansible-galaxy collection install azure.azcollection ansible.windows community.windows --upgrade 2>&1 | tail -3
+# Galaxy being unreachable (proxy, TLS hiccup, no route, an outage) must not
+# end a run that already has every collection from an earlier install: with
+# pipefail the old bare pipeline did exactly that. The install is a refresh;
+# only a collection that is truly absent is fatal.
+_gal_log="$(mktemp 2>/dev/null || echo /tmp/cl-galaxy.$$)"
+if ! ansible-galaxy collection install azure.azcollection ansible.windows community.windows --upgrade >"$_gal_log" 2>&1; then
+  sed -n '1,12p' "$_gal_log" | sed 's/^/      /'
+  # No -p here: this script installs to ~/.ansible/collections (REQ_FILE below
+  # reads from there) and a bare list walks every configured collections path.
+  _have="$(ansible-galaxy collection list 2>/dev/null | awk 'NF==2 && $1 ~ /\./ {print $1}' | sort -u || true)"
+  _missing=""
+  for _c in azure.azcollection ansible.windows community.windows; do
+    echo "$_have" | grep -qx "$_c" || _missing="${_missing} ${_c}"
+  done
+  if [[ -z "$_missing" ]]; then
+    warn "galaxy.ansible.com unreachable; continuing with the collections already installed on this machine"
+  else
+    rm -f "$_gal_log"
+    fail "ansible-galaxy could not install the required collections (output above), and these are not installed:${_missing}
+  Usually a proxy, an expired certificate, or no route to galaxy.ansible.com."
+  fi
+else
+  tail -3 "$_gal_log"
+fi
+rm -f "$_gal_log"
 
 # azcollection's FULL Python requirements are NOT optional. The azure_rm
 # inventory plugin silently fails to load AzureCliCredential when any of

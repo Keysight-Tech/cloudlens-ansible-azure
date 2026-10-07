@@ -83,6 +83,10 @@ azure:
     - "eastus2"
 
 cloudlens:
+  # Private IP when the workload VMs are in, or peered to, the vController's
+  # VNet and the admin CIDR is narrowed (the public IP is refused from inside
+  # the VNet). Public IP only when the admin CIDR is * or the VMs' egress IPs
+  # are inside it. The deploy summary prints it as "Sensors register on".
   manager_ip_or_fqdn: "20.x.x.x"        # ← from CLMS deployment
   project_key: "<FROM_CLMS_UI>"          # ← Projects → API Keys
   custom_tags: "Env=Azure Region=eastus2 Customer=Acme"

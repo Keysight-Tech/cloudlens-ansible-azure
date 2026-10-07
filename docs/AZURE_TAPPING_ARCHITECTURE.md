@@ -84,8 +84,15 @@ in the project:
     test-rhel-1     6.14.0-475
     test-windows-1  registered
 
-Registration needs only the vController's public IP, so the per-product VNet
-isolation that blocks Marketplace vPB adoption does NOT affect this path. The
+Registration needs only a route to the vController, so the per-product VNet
+isolation that blocks Marketplace vPB adoption does NOT affect this path. Which
+address that is depends on the admin CIDR: the public IP works from anywhere
+only while the CIDR is left at `*`. Once it is narrowed, the public IP is
+refused from inside the VNet (Azure SNATs VNet-to-public traffic, so it arrives
+from a source outside the CIDR), and the sensors use the private IP instead,
+which AllowVnetInBound admits from this VNet and every VNet peered to it;
+deploy-stack.sh picks the right one and `CLOUDLENS_SENSOR_MANAGER_ADDR`
+overrides it. The
 Windows installer exe is deliberately not in the repo (66 MB, gitignored):
 copy it into files/ first, as DEPLOYMENT_GUIDE.md says, or the play fails at
 "Transfer CloudLens installer". Running the chain from macOS also needs the

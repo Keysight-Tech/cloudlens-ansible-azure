@@ -384,6 +384,7 @@ Env-var overrides (alternative to flags, useful for curl | bash):
   CLOUDLENS_KVO_NAME / _SIZE / _COUNT,
   CLOUDLENS_VPB_NAME / _SIZE / _COUNT,
   CLOUDLENS_VPB_INGRESS_NICS, CLOUDLENS_VPB_EGRESS_NICS
+  CLOUDLENS_SENSOR_MANAGER_ADDR (address sensors register on; default: public IP with admin CIDR *, private IP otherwise)
 
 Example (full prod-style invocation):
   CLOUDLENS_RG=prod-cloudlens-rg CLOUDLENS_REGION=westeurope \\
@@ -1468,6 +1469,41 @@ done
 # later phases (sensor wait, summary write, manual project-key prompt).
 CLMS_PUBLIC_IP="${CLMS_PUBLIC_IPS[0]:-unknown}"
 
+# The address the sensors register on and pull their image from.
+# With the admin CIDR left at * the vController's PUBLIC address is reachable
+# from everywhere, including a VNet that is not peered to ours (the README's
+# test fixture, scripts/deploy-test-workload-vms.sh, builds its own
+# test-vms-vnet), so it stays the default in that case.
+# Once the admin CIDR is narrowed the public address is refused from inside
+# the virtual network: Azure SNATs VNet-to-public-IP traffic, so the packet
+# reaches the NSG from a public source that matches neither the admin CIDR on
+# the 443 rule nor the VirtualNetwork tag. The PRIVATE address is allowed by
+# the default AllowVnetInBound rule, in this VNet and in every VNet peered to
+# it, so it becomes the default. Workloads with no route to it (an unpeered
+# VNet) must use the public address and sit inside the admin CIDR:
+# CLOUDLENS_SENSOR_MANAGER_ADDR names that address and overrides both.
+CLMS_PRIVATE_IP=""
+if [[ "$DRY_RUN" == "true" ]]; then
+  CLMS_PRIVATE_IP="10.50.1.4"
+else
+  CLMS_PRIVATE_IP="$(az vm list-ip-addresses -g "$RESOURCE_GROUP" -n "$(clms_vm_name_at 1)" \
+                      --query '[0].virtualMachine.network.privateIpAddresses[0]' -o tsv 2>/dev/null || true)"
+fi
+sensor_manager_addr() {
+  if [[ -n "${CLOUDLENS_SENSOR_MANAGER_ADDR:-}" ]]; then
+    printf '%s' "$CLOUDLENS_SENSOR_MANAGER_ADDR"
+  elif [[ "$ADMIN_CIDR" == "*" ]]; then
+    printf '%s' "$CLMS_PUBLIC_IP"
+  else
+    printf '%s' "${CLMS_PRIVATE_IP:-$CLMS_PUBLIC_IP}"
+  fi
+}
+[[ -n "$CLMS_PRIVATE_IP" ]] && ok "vController private address ${CLMS_PRIVATE_IP}"
+if [[ "$ADMIN_CIDR" != "*" && -z "${CLOUDLENS_SENSOR_MANAGER_ADDR:-}" ]]; then
+  note "Admin CIDR is ${ADMIN_CIDR}: sensors will register on the private address $(sensor_manager_addr)."
+  note "Workload VMs must be in ${VNET_NAME} or a VNet peered to it; otherwise set CLOUDLENS_SENSOR_MANAGER_ADDR=${CLMS_PUBLIC_IP} and add their egress IPs to the admin CIDR."
+fi
+
 # =====================================================================
 # Phase 7: Wait for vController init
 # =====================================================================
@@ -1633,26 +1669,44 @@ step "Phase 10: Get project key from vController"
 # AWS repo's phase 9 does.
 PROJECT_KEY=""
 VC_CREDS_FILE="${VC_CREDS_FILE:-$HOME/.cloudlens-vcontroller-creds-${RESOURCE_GROUP}.json}"
-VC_ADMIN_PASS="${CLOUDLENS_VC_PASSWORD:-}"
-if [[ -z "$VC_ADMIN_PASS" && -f "$VC_CREDS_FILE" ]]; then
-  VC_ADMIN_PASS=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("password",""))' \
-                    "$VC_CREDS_FILE" 2>/dev/null || echo "")
-  [[ -n "$VC_ADMIN_PASS" ]] && note "Reusing the vController password recorded in ${VC_CREDS_FILE}."
-fi
+# The vController password this run can trust: an explicit override, else
+# what the creds file recorded, else empty. The file is named per resource
+# group and teardown never removes it, so after a teardown and a redeploy into
+# the same group it still holds the PREVIOUS vController's password. It is
+# only read when it names this vController's address (the script writes the
+# login URL into it), otherwise it is ignored.
+vc_password_now() {
+  local p="${CLOUDLENS_VC_PASSWORD:-}"
+  if [[ -z "$p" && -f "$VC_CREDS_FILE" && -n "${CLMS_PUBLIC_IP:-}" ]] \
+     && ! grep -q "$CLMS_PUBLIC_IP" "$VC_CREDS_FILE" 2>/dev/null; then
+    printf '%s' ""; return 0
+  fi
+  if [[ -z "$p" && -f "$VC_CREDS_FILE" ]]; then
+    p="$(python3 -c 'import json,sys
+try: print(json.load(open(sys.argv[1])).get("password",""))
+except Exception: pass' "$VC_CREDS_FILE" 2>/dev/null)" || p=""
+  fi
+  printf '%s' "$p"
+}
+VC_ADMIN_PASS="$(vc_password_now)"
+[[ -n "$VC_ADMIN_PASS" && -z "${CLOUDLENS_VC_PASSWORD:-}" ]] && note "Reusing the vController password recorded in ${VC_CREDS_FILE} for ${CLMS_PUBLIC_IP}."
 VC_ADMIN_PASS="${VC_ADMIN_PASS:-$ADMIN_PASSWORD}"
 PK_SCRIPT="$(find_script scripts/vcontroller_project_key.py || true)"
 if [[ "$DRY_RUN" == "true" ]]; then
   dryrun_say "would rotate the vController password and create project ${CLOUDLENS_PROJECT:-cloudlens-autopilot}"
 elif [[ -n "$PK_SCRIPT" ]] && py_ready; then
+  # --creds-file makes the script record the password BEFORE it asks the
+  # appliance to change it, and afterwards whichever value it verified is in
+  # force. This block used to write the file itself, after the fact and with
+  # the REQUESTED value, so a change that timed out or was refused left the
+  # file and the appliance disagreeing. stderr stays visible: it carries the
+  # script's log and the working login.
   PROJECT_KEY="$(python3 "$PK_SCRIPT" --host "$CLMS_PUBLIC_IP" \
                    --project "${CLOUDLENS_PROJECT:-cloudlens-autopilot}" \
-                   --new-password "$VC_ADMIN_PASS" --wait 300 --insecure 2>/dev/null || echo "")"
+                   --new-password "$VC_ADMIN_PASS" --creds-file "$VC_CREDS_FILE" \
+                   --wait 300 --insecure || echo "")"
   if [[ -n "$PROJECT_KEY" ]]; then
-    ok "Project key obtained, and the vController password is now the one in the summary."
-    umask 077
-    printf '{"host":"%s","username":"admin","password":"%s","project":"%s"}\n' \
-      "$CLMS_PUBLIC_IP" "$VC_ADMIN_PASS" "${CLOUDLENS_PROJECT:-cloudlens-autopilot}" > "$VC_CREDS_FILE"
-    note "Credentials saved to ${VC_CREDS_FILE} (mode 600). Phase 13 reads it."
+    ok "Project key obtained; the vController login is in ${VC_CREDS_FILE} (mode 600). Phase 13 reads it."
   else
     warn "Could not complete vController first-login setup automatically."
     note "Adoption in phase 13 WILL fail with a 401 until this is done by hand,"
@@ -1757,6 +1811,11 @@ if [[ "$CHAIN_SENSORS" == "true" ]] || [[ "$CHAIN_SENSORS" == "write_yaml_only" 
 #   - Your workload VMs use a different ansible_user than azureuser
 #   - You want to monitor Windows VMs too (uncomment the windows: block)
 #   - You want to filter by more tags than just cloudlens=yes
+#   - manager_ip_or_fqdn is the vController's private address when the admin
+#     CIDR was narrowed (the public one is refused from inside the VNet) and
+#     the public address ${CLMS_PUBLIC_IP} when the CIDR is *. Workload VMs in
+#     an unpeered VNet need the public address AND their egress IPs inside the
+#     admin CIDR, or set CLOUDLENS_SENSOR_MANAGER_ADDR before running.
 
 azure:
   subscription_id: "${SUB_ID}"
@@ -1765,7 +1824,7 @@ azure:
     ${DISCOVERY_TAG_KEY}: "${DISCOVERY_TAG_VALUE}"
 
 cloudlens:
-  manager_ip_or_fqdn: "${CLMS_PUBLIC_IP}"
+  manager_ip_or_fqdn: "$(sensor_manager_addr)"
   project_key: "${PROJECT_KEY}"
   custom_tags: "DeployedBy=stack Region=${LOCATION}"
   registry_type: "insecure"
@@ -1976,12 +2035,11 @@ if [[ "$DEPLOYED_KVO" == "true" && -n "${KVO_PUBLIC_IP:-}" && "$KVO_PUBLIC_IP" !
   # Same resolution order as the AWS repo, so the two behave identically:
   # explicit override, then whatever was saved when the password was changed,
   # then the factory default.
-  VC_ADMIN_PASS="${VC_ADMIN_PASS:-${CLOUDLENS_VC_PASSWORD:-}}"
-  VC_CREDS_FILE="${VC_CREDS_FILE:-$HOME/.cloudlens-vcontroller-creds-${RESOURCE_GROUP}.json}"
-  if [[ -z "$VC_ADMIN_PASS" && -f "$VC_CREDS_FILE" ]]; then
-    VC_ADMIN_PASS=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("password",""))' \
-                      "$VC_CREDS_FILE" 2>/dev/null || echo "")
-  fi
+  # Read back what Phase 10 actually set for THIS vController (the helper
+  # ignores a creds file left by another stack). The value Phase 10 requested
+  # is not used here: when its change did not apply, the appliance is still on
+  # the factory default and that is what adoption must send.
+  VC_ADMIN_PASS="$(vc_password_now)"
   VC_ADMIN_PASS="${VC_ADMIN_PASS:-Cl0udLens@dm!n}"
 
   step "Phase 13: Adopt the vController into KVO"
@@ -2085,9 +2143,11 @@ Region:             ${LOCATION}
 --- vController (formerly CLMS) ---
 Name:               ${DEFAULT_CLMS_NAME}
 Public IP:          ${CLMS_PUBLIC_IP}
+Private IP:         ${CLMS_PRIVATE_IP:-unknown}
+Sensors register on: $(sensor_manager_addr)
 Web UI:             https://${CLMS_PUBLIC_IP}
 SSH:                ssh ${ADMIN_USERNAME}@${CLMS_PUBLIC_IP}
-Default UI creds:   admin / Cl0udLens@dm!n  (change on first login)
+UI login:           admin / password in ${VC_CREDS_FILE}  (Phase 10 replaced the factory default Cl0udLens@dm!n; if that file is missing the default still applies)
 OS-level user:      ${ADMIN_USERNAME}
 OS-level password:  ${ADMIN_PASSWORD}
 

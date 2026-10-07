@@ -180,6 +180,8 @@ az group delete -n cloudlens-test-vms-rg --yes --no-wait
 
 Phase 10 will print `Workload VMs tagged monitoring=enabled: 3` and Phase 11 will install sensors on all three. Useful for SE demos, CI validation, or proving the dynamic-tag plumbing on a customer's first call.
 
+The fixture builds its own VNet (`test-vms-vnet`), which is not peered to the stack's, so its VMs can only reach the vController's public IP. Run the stack with the admin CIDR at `*`: answer `*` at the admin CIDR prompt, or pass `--admin-cidr '*'` (a run with no terminal at all keeps `*` by default). Otherwise set `CLOUDLENS_SENSOR_MANAGER_ADDR` to the vController's public IP and add the fixture VMs' egress IPs to the admin CIDR.
+
 ---
 
 ## Which path?
