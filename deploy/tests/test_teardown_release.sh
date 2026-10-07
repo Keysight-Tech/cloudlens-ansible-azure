@@ -60,7 +60,27 @@ cat > "$STUB_BIN/az" <<'AZSTUB'
 # STUB_OTHER=1 (a customer VM, NIC and storage account share the group),
 # STUB_DELETE_OPTION=1 (the VM's disk, NICs and public IP go with the VM),
 # STUB_SHARED_VNET=1 (the deploy's one shared VNet, cloudlens-vnet, tagged
-# deployedBy=cloudlens-stack, holds every CloudLens NIC).
+# deployedBy=cloudlens-stack, holds every CloudLens NIC), STUB_AKS=1 (the
+# sample AKS cluster cloudlens-aks-rg-aks and the registry cloudlens0ba7fd8f
+# of Phase 13b share the group, both tagged deployedBy=cloudlens-stack and
+# cloudlens:stack=cl-rg, the cluster's scale set with an ipConfiguration in
+# cloudlens-vnet from its node group MC_cl-rg_cloudlens-aks-rg-aks_eastus2),
+# STUB_AKS_UNTAGGED=1 (with STUB_AKS: the same cluster and registry carry
+# no tags at all), STUB_AKS_ONETAG=db|st (with STUB_AKS: they carry only
+# deployedBy=cloudlens-stack, or only cloudlens:stack=cl-rg),
+# STUB_AKS_SHOW_FAIL=1 (`az aks show` fails, so the node resource group
+# cannot be read), STUB_AKS_DELETE_FAIL=1 (`az aks delete` is refused and
+# records nothing), STUB_NODE_RG_TARGET=1 (the group asked for is a
+# cluster's node resource group: `az group show` returns the
+# aks-managed-cluster-name/-rg tags), STUB_RES_LIST_FAIL=1 (every
+# `az resource list` of the group, the count included, answers nothing: a
+# slow or failed az), STUB_EMPTY_GROUP=1 (the group exists and holds no
+# resource at all, so the listing is empty and the count answers 0),
+# STUB_GROUP_SHOW_FAIL=1 (`az group show` answers nothing: a failed or slow
+# call), STUB_AKS_DELETE_NOTFOUND=1 (the cluster was removed by hand after
+# the listing: `az aks delete` answers ResourceNotFound and its node group is
+# already gone), STUB_NODE_RG_LAG=N (the node group is still reported for N
+# `az group exists` calls after the cluster delete, as Azure finishes it).
 set -u
 LOG="${AZ_LOG:?}"; SEQ="${SEQ_FILE:?}"
 next_seq() { local n; n="$(cat "$SEQ" 2>/dev/null || echo 0)"; n=$((n+1)); printf '%s' "$n" > "$SEQ"; printf '%s' "$n"; }
@@ -68,10 +88,16 @@ rec() { printf '%s az %s\n' "$(next_seq)" "$*" >> "$LOG"; }
 # every line in LOG is a delete, so any line naming the id means it is gone.
 # With STUB_DELETE_OPTION=1 the templates' deleteOption is emulated: a disk,
 # NIC or public IP whose VM (its name prefix) was deleted is gone with it.
+# A cluster or registry is deleted by NAME (az aks delete -n / az acr
+# delete -n), so those are matched on the name, not the id.
 gone() {
   local id="$1" n vm
   if grep -qF -- "$id" "$LOG" 2>/dev/null; then return 0; fi
   if grep -q "az group delete" "$LOG" 2>/dev/null; then return 0; fi
+  case "$id" in
+    */managedClusters/*) n="${id##*/}"; if grep -q "aks delete .* -n ${n}\( \|$\)" "$LOG" 2>/dev/null; then return 0; fi ;;
+    */registries/*)      n="${id##*/}"; if grep -q "acr delete .* -n ${n}\( \|$\)" "$LOG" 2>/dev/null; then return 0; fi ;;
+  esac
   if [[ "${STUB_DELETE_OPTION:-0}" == "1" ]]; then
     case "$id" in
       */disks/*|*/networkInterfaces/*|*/publicIPAddresses/*)
@@ -88,6 +114,21 @@ P="/subscriptions/${SUB}/resourceGroups/${RG}/providers"
 VM_T="Microsoft.Compute/virtualMachines"; DISK_T="Microsoft.Compute/disks"
 NIC_T="Microsoft.Network/networkInterfaces"; PIP_T="Microsoft.Network/publicIPAddresses"
 NSG_T="Microsoft.Network/networkSecurityGroups"; VNET_T="Microsoft.Network/virtualNetworks"
+AKS_T="Microsoft.ContainerService/managedClusters"; ACR_T="Microsoft.ContainerRegistry/registries"
+AKS_NAME="cloudlens-aks-rg-aks"; ACR_NAME="cloudlens0ba7fd8f"
+AKS_NODE_RG="MC_${RG}_${AKS_NAME}_eastus2"
+# the two tag columns of the teardown's extended listing: deployedBy, cloudlens:stack
+res_tags() {
+  case "$1" in
+    "$AKS_NAME"|"$ACR_NAME")
+      if [[ "${STUB_AKS_UNTAGGED:-0}" == "1" ]]; then printf 'None\tNone'
+      elif [[ "${STUB_AKS_ONETAG:-}" == "db" ]]; then printf 'cloudlens-stack\tNone'
+      elif [[ "${STUB_AKS_ONETAG:-}" == "st" ]]; then printf 'None\t%s' "$RG"
+      else printf 'cloudlens-stack\t%s' "$RG"; fi ;;
+    cloudlens-vnet) printf 'cloudlens-stack\tNone' ;;
+    *) printf 'None\tNone' ;;
+  esac
+}
 
 # name|type, one per line: what the three product templates create.
 RES="vcontroller|$VM_T
@@ -120,6 +161,12 @@ customer-web01|$VM_T
 customer-nic|$NIC_T
 customerstorage|Microsoft.Storage/storageAccounts"
 fi
+if [[ "${STUB_AKS:-0}" == "1" ]]; then
+  RES="$RES
+${AKS_NAME}|$AKS_T
+${ACR_NAME}|$ACR_T"
+fi
+if [[ "${STUB_EMPTY_GROUP:-0}" == "1" ]]; then RES=""; fi
 rid() { printf '%s/%s/%s' "$P" "$2" "$1"; }
 
 # per-VM facts: product, OS disk, NICs
@@ -163,10 +210,37 @@ case "$cmd" in
   "account show")
     printf 'Stub Subscription\n%s\n' "$SUB" ;;
   "group exists")
-    if grep -q "az group delete" "$LOG" 2>/dev/null; then echo false; else echo true; fi ;;
+    n="$(argval -n "$@")"
+    if [[ "$n" == "$AKS_NODE_RG" ]]; then
+      # the node group goes when the AKS service deletes the cluster, never
+      # with cl-rg's own delete
+      if [[ "${STUB_AKS_DELETE_NOTFOUND:-0}" == "1" ]]; then echo false
+      elif grep -q "aks delete .* -n ${AKS_NAME}\( \|$\)" "$LOG" 2>/dev/null; then
+        lagf="${LOG}.nodergcalls"; c="$(cat "$lagf" 2>/dev/null || echo 0)"; c=$((c+1)); printf '%s' "$c" > "$lagf"
+        if (( c <= ${STUB_NODE_RG_LAG:-0} )); then echo true; else echo false; fi
+      else echo true; fi
+    elif grep -q "az group delete" "$LOG" 2>/dev/null; then echo false; else echo true; fi ;;
+  "aks show")
+    n="$(argval -n "$@")"
+    if [[ "${STUB_AKS_SHOW_FAIL:-0}" == "1" ]]; then echo "Request timed out" >&2; exit 1; fi
+    if gone "$(rid "$n" "$AKS_T")"; then echo "ResourceNotFound" >&2; exit 1; fi
+    echo "$AKS_NODE_RG" ;;
+  "aks delete")
+    if [[ "${STUB_AKS_DELETE_FAIL:-0}" == "1" ]]; then
+      echo "(OperationNotAllowed) The cluster is locked by a scope lock" >&2; exit 1
+    fi
+    if [[ "${STUB_AKS_DELETE_NOTFOUND:-0}" == "1" ]]; then
+      echo "(ResourceNotFound) The Resource 'Microsoft.ContainerService/managedClusters/${AKS_NAME}' under resource group 'cl-rg' was not found." >&2; exit 1
+    fi
+    shift 2; rec aks delete "$@" ;;
+  "acr delete")
+    shift 2; rec acr delete "$@" ;;
   "group show")
+    # four columns: deployedBy, location, aks-managed-cluster-name, -rg
+    if [[ "${STUB_GROUP_SHOW_FAIL:-0}" == "1" ]]; then exit 0; fi
     if [[ "${STUB_NO_TAG:-0}" == "1" ]]; then echo None; else echo cloudlens-stack; fi
-    echo eastus2 ;;
+    echo eastus2
+    if [[ "${STUB_NODE_RG_TARGET:-0}" == "1" ]]; then printf '%s\n%s\n' "$AKS_NAME" "$RG"; else printf 'None\nNone\n'; fi ;;
   "group list")
     printf 'cl-rg\teastus2\n' ;;
   "group delete")
@@ -201,10 +275,32 @@ case "$cmd" in
       fi
       exit 0
     fi
+    # STUB_RES_LIST_FAIL=1: az did not answer. Every listing of the group,
+    # the count the teardown asks for on an empty answer included, is empty.
+    if [[ "${STUB_RES_LIST_FAIL:-0}" == "1" ]]; then exit 0; fi
+    # The count the teardown asks for when the listing came back empty: a
+    # real empty group answers 0, which is what tells it from a failed call.
+    if [[ "$(argval --query "$@")" == "length(@)" ]]; then
+      c=0
+      while IFS='|' read -r n t; do
+        [[ -n "$n" ]] || continue
+        gone "$(rid "$n" "$t")" && continue
+        c=$((c+1))
+      done <<< "$RES"
+      echo "$c"; exit 0
+    fi
+    # The Phase 2 listing asks for two tag columns on top of name, type, id
+    # (the deploy stamp); the re-listings in Phases 5 and 6 ask for three.
+    want_tags=0
+    if printf '%s\n' "$(argval --query "$@")" | grep -q 'tags\.'; then want_tags=1; fi
     while IFS='|' read -r n t; do
       [[ -n "$n" ]] || continue
       gone "$(rid "$n" "$t")" && continue
-      printf '%s\t%s\t%s\n' "$n" "$t" "$(rid "$n" "$t")"
+      if [[ "$want_tags" == "1" ]]; then
+        printf '%s\t%s\t%s\t%s\n' "$n" "$t" "$(rid "$n" "$t")" "$(res_tags "$n")"
+      else
+        printf '%s\t%s\t%s\n' "$n" "$t" "$(rid "$n" "$t")"
+      fi
     done <<< "$RES" ;;
   "resource delete")
     shift 2; rec resource delete "$@" ;;
@@ -218,6 +314,11 @@ case "$cmd" in
     # the shared VNet. Nothing in cl-rg is "other", only the VNet knows.
     if [[ "$n" == "cloudlens-vnet" && "${STUB_FOREIGN_NIC:-0}" == "1" ]]; then
       printf '%s\n' "/subscriptions/sub/resourceGroups/other-rg/providers/Microsoft.Network/networkInterfaces/customer-nic/ipConfigurations/ipconfig1"
+    fi
+    # STUB_AKS=1: the cluster's scale set (Azure CNI) has an address in the
+    # shared VNet from its node resource group, until the cluster is deleted.
+    if [[ "$n" == "cloudlens-vnet" && "${STUB_AKS:-0}" == "1" ]] && ! gone "$(rid "$AKS_NAME" "$AKS_T")"; then
+      printf '%s\n' "/subscriptions/${SUB}/resourceGroups/${AKS_NODE_RG}/providers/Microsoft.Compute/virtualMachineScaleSets/aks-nodepool1-12345678-vmss/virtualMachines/0/networkInterfaces/aks-nodepool1-12345678-vmss/ipConfigurations/ipconfig1"
     fi ;;
   "network public-ip")
     echo "20.1.2.3" ;;
@@ -293,6 +394,14 @@ begin_case() {
   : > "$AZ_LOG"; : > "$LIC_LOG"; : > "$SEQ_FILE"; : > "$OUT"
   # behaviour defaults, overridden per case before run_teardown
   export LIST_COUNT=0 RELEASE_RC=0 STUB_NO_TAG=0 STUB_OTHER=0 STUB_DELETE_OPTION=0 STUB_SHARED_VNET=0 STUB_FOREIGN_NIC=0
+  export STUB_AKS=0 STUB_AKS_UNTAGGED=0 STUB_AKS_ONETAG="" STUB_AKS_SHOW_FAIL=0 STUB_AKS_DELETE_FAIL=0 STUB_NODE_RG_TARGET=0
+  export STUB_RES_LIST_FAIL=0 STUB_EMPTY_GROUP=0
+  export STUB_GROUP_SHOW_FAIL=0 STUB_AKS_DELETE_NOTFOUND=0 STUB_NODE_RG_LAG=0
+  rm -f "${AZ_LOG}.nodergcalls"
+  # A scratch HOME of its own for every case, never the real one: the
+  # teardown removes $HOME/.kube/cloudlens-aks-<cluster> after a cluster
+  # delete, and the stub cluster carries the live lab's name.
+  TEST_HOME="$WORK/home-$((PASS+FAIL+1))"; mkdir -p "$TEST_HOME"
   unset CLOUDLENS_KVO_ADMIN_USER CLOUDLENS_KVO_ADMIN_PASS 2>/dev/null || true
 }
 end_case() {
@@ -316,11 +425,16 @@ end_case() {
 # a failed assertion marks the case; the message names what was expected
 flunk() { CASE_OK=false; CASE_NOTES="${CASE_NOTES}      expected: $1"$'\n'; }
 
+# TEST_HOME (set by begin_case) is the HOME the teardown sees: the deploy's
+# kubeconfig lives at $HOME/.kube/cloudlens-aks-<cluster>, and the real one
+# must never be touched by a test.
 run_teardown() {
   RC=0
+  HOME="$TEST_HOME" \
   PATH="$STUB_BIN:$PATH" \
   CLOUDLENS_KVO_LICENSE_PY="$WORK/kvo_license_stub.py" \
   CLOUDLENS_KVO_HTTP_TIMEOUT=2 CLOUDLENS_KVO_RELEASE_TIMEOUT=5 CLOUDLENS_PROBE_TIMEOUT=20 \
+  CLOUDLENS_NODE_RG_WAIT="${NODE_RG_WAIT_T:-3}" CLOUDLENS_NODE_RG_POLL=1 \
   python3 "$WORK/nosetty.py" bash "$TEARDOWN_STACK_SH" "$@" </dev/null >"$OUT" 2>&1 || RC=$?
 }
 
@@ -552,7 +666,297 @@ begin_case "15: a NIC from another group sits in the tagged shared VNet: per-res
   out_has "from outside the group"
 end_case
 
+# ---------------------------------------------------------------------
+# Evidence class 4: the deploy-stamped AKS cluster and ACR of Phase 13b.
+# The live failure of 2026-10-07: both were listed under "Other" and kept
+# the group and the shared VNet.
+# ---------------------------------------------------------------------
+begin_case "16: deploy-created group with a stamped AKS cluster + ACR: cluster deleted BEFORE the group, the group goes, nothing is 'other'"
+  LIST_COUNT=0 STUB_AKS=1 STUB_SHARED_VNET=1
+  run_teardown --resource-group cl-rg --yes
+  rc_is 0
+  out_has "Deploy-stamped resources (tagged deployedBy=cloudlens-stack and cloudlens:stack=<value>): deleted with the stack"
+  out_has "    cloudlens-aks-rg-aks "
+  out_has "node resource group MC_cl-rg_cloudlens-aks-rg-aks_eastus2"
+  out_has "    cloudlens0ba7fd8f "
+  out_lacks "Other resources in the group"
+  out_has "every resource is CloudLens"
+  out_has "delete the whole resource group cl-rg"
+  az_has "az aks delete -g cl-rg -n cloudlens-aks-rg-aks --yes"
+  az_has "az group delete -n cl-rg --yes --no-wait"
+  s_aks="$(seq_of "$AZ_LOG" 'aks delete')"; s_grp="$(seq_of "$AZ_LOG" 'group delete')"
+  if [[ -z "$s_aks" || -z "$s_grp" ]]; then flunk "both an aks delete and a group delete stamped"
+  elif (( s_aks >= s_grp )); then flunk "aks delete (seq $s_aks) stamped before group delete (seq $s_grp)"; fi
+  out_has "deleted AKS cluster cloudlens-aks-rg-aks"
+  out_has "Resource group cl-rg deleted"
+  out_has "node resource group MC_cl-rg_cloudlens-aks-rg-aks_eastus2 no longer exists"
+  out_has "AKS clusters:       1 (node resource group(s) gone: MC_cl-rg_cloudlens-aks-rg-aks_eastus2)"
+  out_has "Registries:         1"
+  out_lacks "Some resources could not be removed"
+end_case
+
+begin_case "17: per-resource plan with a stamped cluster + ACR: VMs, then aks delete, then acr delete, then the shared VNet (the scale set's address does not keep it)"
+  LIST_COUNT=0 STUB_AKS=1 STUB_SHARED_VNET=1 STUB_NO_TAG=1
+  run_teardown --resource-group cl-rg --yes
+  rc_is 0
+  az_lacks "group delete"
+  az_has "vm delete"
+  az_has "az aks delete -g cl-rg -n cloudlens-aks-rg-aks --yes"
+  az_has "az acr delete -g cl-rg -n cloudlens0ba7fd8f --yes"
+  az_has "resource delete --ids .*virtualNetworks/cloudlens-vnet"
+  out_lacks "keeping VNet cloudlens-vnet"
+  s_vm="$(seq_of "$AZ_LOG" 'vm delete')"; s_aks="$(seq_of "$AZ_LOG" 'aks delete')"
+  s_acr="$(seq_of "$AZ_LOG" 'acr delete')"; s_vnet="$(seq_of "$AZ_LOG" 'virtualNetworks/cloudlens-vnet')"
+  if [[ -z "$s_vm" || -z "$s_aks" || -z "$s_acr" || -z "$s_vnet" ]]; then flunk "vm, aks, acr and VNet deletes all stamped"
+  else
+    (( s_vm < s_aks ))  || flunk "VM delete (seq $s_vm) before aks delete (seq $s_aks)"
+    (( s_aks < s_acr )) || flunk "aks delete (seq $s_aks) before acr delete (seq $s_acr)"
+    (( s_aks < s_vnet )) || flunk "aks delete (seq $s_aks) before the shared VNet delete (seq $s_vnet)"
+  fi
+  out_has "deleted registry cloudlens0ba7fd8f"
+  out_has "node resource group MC_cl-rg_cloudlens-aks-rg-aks_eastus2 no longer exists"
+  out_has "Nothing left in cl-rg"
+  out_lacks "Some resources could not be removed"
+end_case
+
+begin_case "18: an UNTAGGED cluster and registry: never deleted, listed under Other, the group and the VNet they use are kept"
+  LIST_COUNT=0 STUB_AKS=1 STUB_AKS_UNTAGGED=1 STUB_SHARED_VNET=1
+  run_teardown --resource-group cl-rg --yes
+  rc_is 0
+  out_has "Other resources in the group (NOT CloudLens, never deleted by this script):"
+  out_before "Other resources in the group" "    cloudlens-aks-rg-aks "
+  out_has "    cloudlens0ba7fd8f "
+  out_lacks "Deploy-stamped resources"
+  out_has "the group holds 2 resource(s) that are not CloudLens"
+  az_lacks "aks delete"
+  az_lacks "acr delete"
+  az_lacks "group delete"
+  az_lacks "cloudlens-aks-rg-aks"
+  az_lacks "cloudlens0ba7fd8f"
+  az_has "vm delete"
+  az_lacks "resource delete --ids .*virtualNetworks/cloudlens-vnet"
+  out_has "keeping VNet cloudlens-vnet: still used by NIC(s) that are not CloudLens: aks-nodepool1-12345678-vmss"
+end_case
+
+begin_case "19: --dry-run with a stamped cluster + ACR: 'would delete' for both, the kubeconfig left alone, zero delete calls"
+  LIST_COUNT=0 STUB_AKS=1 STUB_SHARED_VNET=1 STUB_NO_TAG=1
+  mkdir -p "$TEST_HOME/.kube"
+  : > "$TEST_HOME/.kube/cloudlens-aks-cloudlens-aks-rg-aks"
+  run_teardown --resource-group cl-rg --dry-run
+  rc_is 0
+  out_has "[dry-run] az aks delete -g cl-rg -n cloudlens-aks-rg-aks --yes"
+  out_has "would delete AKS cluster cloudlens-aks-rg-aks"
+  out_has "[dry-run] az acr delete -g cl-rg -n cloudlens0ba7fd8f --yes"
+  out_has "would delete registry cloudlens0ba7fd8f"
+  out_match '\[dry-run\] az resource delete --ids .*virtualNetworks/cloudlens-vnet'
+  out_has "would delete VNet cloudlens-vnet"
+  out_has "would remove the deploy's kubeconfig $TEST_HOME/.kube/cloudlens-aks-cloudlens-aks-rg-aks"
+  out_lacks "removed the deploy's kubeconfig"
+  [[ -f "$TEST_HOME/.kube/cloudlens-aks-cloudlens-aks-rg-aks" ]] || flunk "the kubeconfig to still exist after a dry run"
+  out_has "would check with 'az group exists' that each cluster's node resource group is gone"
+  out_has "DRY RUN: nothing above was actually deleted"
+  az_empty
+  lic_empty
+end_case
+
+begin_case "20: --audit lists the stamped cluster (with its node group) and the ACR under their own heading, plans the whole group, deletes nothing"
+  LIST_COUNT=0 STUB_AKS=1 STUB_SHARED_VNET=1
+  run_teardown --resource-group cl-rg --audit
+  rc_is 0
+  out_has "AUDIT MODE"
+  out_has "Deploy-stamped resources (tagged deployedBy=cloudlens-stack and cloudlens:stack=<value>): deleted with the stack"
+  out_before "Deploy-stamped resources" "    cloudlens-aks-rg-aks "
+  out_has "node resource group MC_cl-rg_cloudlens-aks-rg-aks_eastus2 (removed by the AKS service with the cluster)"
+  out_has "    cloudlens0ba7fd8f "
+  out_has "is removed from this machine once the cluster is gone"
+  out_lacks "Other resources in the group"
+  out_has "every resource is CloudLens"
+  out_has "(includes 2 deploy-stamped: 1 AKS cluster(s), 1 registry(ies))"
+  out_has "Other resources:       0"
+  out_has "Would delete:          the whole group"
+  out_has "delete the whole resource group cl-rg"
+  out_has "Audit complete"
+  az_empty
+  lic_empty
+end_case
+
+begin_case "21: the deploy's kubeconfig under HOME is removed after the cluster delete, and said so"
+  LIST_COUNT=0 STUB_AKS=1 STUB_SHARED_VNET=1
+  mkdir -p "$TEST_HOME/.kube"
+  : > "$TEST_HOME/.kube/cloudlens-aks-cloudlens-aks-rg-aks"
+  : > "$TEST_HOME/.kube/config"
+  run_teardown --resource-group cl-rg --yes
+  rc_is 0
+  az_has "az aks delete -g cl-rg -n cloudlens-aks-rg-aks --yes"
+  out_has "removed the deploy's kubeconfig $TEST_HOME/.kube/cloudlens-aks-cloudlens-aks-rg-aks"
+  [[ ! -e "$TEST_HOME/.kube/cloudlens-aks-cloudlens-aks-rg-aks" ]] || flunk "the deploy's kubeconfig to be removed"
+  [[ -f "$TEST_HOME/.kube/config" ]] || flunk "the default kubeconfig to be left alone"
+end_case
+
+# The stamp is BOTH tags. One alone is a customer's cluster that happens to
+# carry a key the deploy also uses, and it is "other".
+begin_case "22: a cluster and registry carrying ONLY deployedBy=cloudlens-stack: other, never deleted, the group is kept"
+  LIST_COUNT=0 STUB_AKS=1 STUB_AKS_ONETAG=db STUB_SHARED_VNET=1
+  run_teardown --resource-group cl-rg --yes
+  rc_is 0
+  out_has "Other resources in the group (NOT CloudLens, never deleted by this script):"
+  out_before "Other resources in the group" "    cloudlens-aks-rg-aks "
+  out_has "    cloudlens0ba7fd8f "
+  out_lacks "Deploy-stamped resources"
+  out_has "the group holds 2 resource(s) that are not CloudLens"
+  az_lacks "aks delete"
+  az_lacks "acr delete"
+  az_lacks "group delete"
+  az_has "vm delete"
+end_case
+
+begin_case "23: a cluster and registry carrying ONLY cloudlens:stack: other, never deleted, the group is kept"
+  LIST_COUNT=0 STUB_AKS=1 STUB_AKS_ONETAG=st STUB_SHARED_VNET=1
+  run_teardown --resource-group cl-rg --yes
+  rc_is 0
+  out_has "Other resources in the group (NOT CloudLens, never deleted by this script):"
+  out_before "Other resources in the group" "    cloudlens-aks-rg-aks "
+  out_has "    cloudlens0ba7fd8f "
+  out_lacks "Deploy-stamped resources"
+  out_has "the group holds 2 resource(s) that are not CloudLens"
+  az_lacks "aks delete"
+  az_lacks "acr delete"
+  az_lacks "group delete"
+  az_has "vm delete"
+end_case
+
+begin_case "24: 'az aks show' fails: the cluster is still deleted, its scale set is told apart by the MC_ name shape, the group plan holds, the node group is reported unverified"
+  LIST_COUNT=0 STUB_AKS=1 STUB_AKS_SHOW_FAIL=1 STUB_SHARED_VNET=1
+  run_teardown --resource-group cl-rg --yes
+  rc_is 0
+  out_has "node resource group of cloudlens-aks-rg-aks could not be read"
+  out_has "node resource group: could not be read; its removal is not verified in Phase 6"
+  out_lacks "from outside the group"
+  out_has "every resource is CloudLens"
+  out_has "delete the whole resource group cl-rg"
+  az_has "az aks delete -g cl-rg -n cloudlens-aks-rg-aks --yes"
+  az_has "az group delete -n cl-rg --yes --no-wait"
+  s_aks="$(seq_of "$AZ_LOG" 'aks delete')"; s_grp="$(seq_of "$AZ_LOG" 'group delete')"
+  if [[ -z "$s_aks" || -z "$s_grp" ]]; then flunk "both an aks delete and a group delete stamped"
+  elif (( s_aks >= s_grp )); then flunk "aks delete (seq $s_aks) stamped before group delete (seq $s_grp)"; fi
+  out_has "Resource group cl-rg deleted"
+  out_has "node resource group of cloudlens-aks-rg-aks was not read in Phase 2; check for MC_cl-rg_cloudlens-aks-rg-aks_eastus2 by hand"
+  out_has "AKS clusters:       1 (node resource group(s) not verified: cloudlens-aks-rg-aks)"
+  out_lacks "Some resources could not be removed"
+end_case
+
+begin_case "25: the cluster delete is refused in the group plan: no group delete, the VMs and the ACR still go, the VNet is kept, the failure is reported"
+  LIST_COUNT=0 STUB_AKS=1 STUB_AKS_DELETE_FAIL=1 STUB_SHARED_VNET=1
+  run_teardown --resource-group cl-rg --yes
+  rc_is 2
+  out_has "delete the whole resource group cl-rg"
+  out_has "could not delete AKS cluster cloudlens-aks-rg-aks: (OperationNotAllowed)"
+  out_has "the whole-group delete is not asked for"
+  az_lacks "group delete"
+  az_lacks "aks delete"
+  az_has "vm delete"
+  az_has "az acr delete -g cl-rg -n cloudlens0ba7fd8f --yes"
+  az_lacks "resource delete --ids .*virtualNetworks/cloudlens-vnet"
+  out_has "keeping VNet cloudlens-vnet: still used by NIC(s) that are not CloudLens (or belong to the cluster that could not be deleted): aks-nodepool1-12345678-vmss"
+  # tried once, whichever plan: the fallback must not ask the cluster again
+  n_tries="$(grep -c "could not delete AKS cluster" "$OUT")"
+  [[ "$n_tries" == "1" ]] || flunk "exactly one refused cluster delete, got $n_tries"
+  out_has "node resource group MC_cl-rg_cloudlens-aks-rg-aks_eastus2 still exists"
+  out_has "Resource group:     cl-rg (kept: the AKS cluster delete was refused"
+  out_has "AKS clusters:       0"
+  out_has "Some resources could not be removed"
+  out_has "  AKS cluster cloudlens-aks-rg-aks: (OperationNotAllowed)"
+end_case
+
+begin_case "26: pointed at a cluster's MC_ node resource group: refused by name before Phase 2, nothing deleted"
+  LIST_COUNT=0 STUB_AKS=1 STUB_NODE_RG_TARGET=1
+  run_teardown --resource-group MC_cl-rg_cloudlens-aks-rg-aks_eastus2 --yes
+  rc_nonzero
+  out_has "MC_cl-rg_cloudlens-aks-rg-aks_eastus2 is the node resource group of cluster cloudlens-aks-rg-aks in group cl-rg"
+  out_has "bash deploy/teardown-stack.sh --resource-group cl-rg"
+  out_lacks "Phase 3"
+  az_empty
+  lic_empty
+end_case
+
+# ---------------------------------------------------------------------
+# An empty listing is unknown, never "nothing but CloudLens". The resource
+# listing failing twice on a deploy-created group used to leave OTHER
+# empty and fall through to the whole-group plan.
+# ---------------------------------------------------------------------
+begin_case "27: 'az resource list' answers nothing twice on a deploy-created group: refused before the plan, nothing deleted, no group delete"
+  LIST_COUNT=2 STUB_RES_LIST_FAIL=1
+  run_teardown --resource-group cl-rg --yes --release-licences
+  rc_nonzero
+  out_has "returned nothing twice and the count did not answer"
+  out_has "Refusing to guess: this script deletes things"
+  out_has "az resource list -g cl-rg -o table"
+  out_lacks "Phase 3"
+  out_lacks "every resource is CloudLens"
+  out_lacks "delete the whole resource group"
+  az_empty
+  lic_empty
+end_case
+
+begin_case "28: a deploy-created group that really is empty (count answers 0): the whole group goes, nothing else is called"
+  LIST_COUNT=0 STUB_EMPTY_GROUP=1
+  run_teardown --resource-group cl-rg --yes
+  rc_is 0
+  out_has "holds no resources (confirmed by count)"
+  out_has "No CloudLens VM in cl-rg"
+  out_has "every resource is CloudLens"
+  out_has "delete the whole resource group cl-rg"
+  az_has "az group delete -n cl-rg --yes --no-wait"
+  az_lacks "vm delete"
+  az_lacks "resource delete"
+  out_has "Resource group cl-rg deleted"
+  lic_empty
+end_case
+
 echo
+begin_case "29: 'az group show' answers nothing: refused before any classification, nothing deleted, no licence call"
+  LIST_COUNT=0 STUB_AKS=1 STUB_GROUP_SHOW_FAIL=1
+  run_teardown --resource-group cl-rg --yes
+  rc_nonzero
+  out_has "'az group show -n cl-rg' did not answer"
+  out_lacks "Phase 3"
+  az_empty
+  lic_empty
+end_case
+
+begin_case "30: the cluster is already gone at delete time (ResourceNotFound): counted as gone, its kubeconfig still removed, no failure"
+  LIST_COUNT=0 STUB_AKS=1 STUB_SHARED_VNET=1 STUB_AKS_DELETE_NOTFOUND=1
+  mkdir -p "$TEST_HOME/.kube"
+  : > "$TEST_HOME/.kube/cloudlens-aks-cloudlens-aks-rg-aks"
+  : > "$TEST_HOME/.kube/config"
+  run_teardown --resource-group cl-rg --yes
+  rc_is 0
+  out_has "AKS cluster cloudlens-aks-rg-aks was already gone"
+  out_has "removed the deploy's kubeconfig $TEST_HOME/.kube/cloudlens-aks-cloudlens-aks-rg-aks"
+  [[ ! -e "$TEST_HOME/.kube/cloudlens-aks-cloudlens-aks-rg-aks" ]] || flunk "the deploy's kubeconfig to be removed"
+  [[ -f "$TEST_HOME/.kube/config" ]] || flunk "the default kubeconfig to be left alone"
+  out_lacks "Some resources could not be removed"
+end_case
+
+begin_case "31: the node group is still reported twice after a successful cluster delete: waited for, then gone, no failure"
+  LIST_COUNT=0 STUB_AKS=1 STUB_SHARED_VNET=1 STUB_NODE_RG_LAG=2 NODE_RG_WAIT_T=10
+  run_teardown --resource-group cl-rg --yes
+  NODE_RG_WAIT_T=""
+  rc_is 0
+  out_has "node resource group MC_cl-rg_cloudlens-aks-rg-aks_eastus2 still exists; waiting up to"
+  out_has "node resource group MC_cl-rg_cloudlens-aks-rg-aks_eastus2 no longer exists"
+  out_lacks "Some resources could not be removed"
+end_case
+
+begin_case "32: the node group outlives the wait after a successful cluster delete: reported, the run says so"
+  LIST_COUNT=0 STUB_AKS=1 STUB_SHARED_VNET=1 STUB_NODE_RG_LAG=100 NODE_RG_WAIT_T=2
+  run_teardown --resource-group cl-rg --yes
+  NODE_RG_WAIT_T=""
+  rc_nonzero
+  out_has "node resource group MC_cl-rg_cloudlens-aks-rg-aks_eastus2 still exists (Azure may still be removing it"
+  out_has "Some resources could not be removed"
+end_case
+
 echo "${PASS} PASS, ${FAIL} FAIL"
 if (( FAIL > 0 )); then exit 1; fi
 exit 0

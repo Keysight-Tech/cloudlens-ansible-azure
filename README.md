@@ -123,7 +123,15 @@ with the VM, and the script removes such leftovers either way. A VNet that
 still carries NICs from outside the group, for example workload VMs you placed
 in `cloudlens-vnet` to reach the vController on its private address, or a
 customer VNet joined with `--vnet-name`, is left in place together with the
-group; the audit names the NICs that keep it.
+group; the audit names the NICs that keep it. What the AKS step stamped with
+both `deployedBy=cloudlens-stack` and `cloudlens:stack=<stack>` goes too: the
+sample AKS cluster (deleted through the AKS service, which removes its
+`MC_` node resource group), the ACR, and the kubeconfig the deploy wrote at
+`~/.kube/cloudlens-aks-<cluster>`. An untagged cluster or registry is left
+alone and keeps the group, like any other resource that is not CloudLens.
+Pointed at a cluster's `MC_` node resource group, the script refuses and
+names the group the cluster is in; a cluster delete that Azure refuses keeps
+the group too, so the group delete cannot hang on it.
 
 **Prerequisites the script handles for you:**
 - Azure CLI (`az`): auto-installed if missing (macOS via Homebrew, Debian via apt, RHEL via dnf)

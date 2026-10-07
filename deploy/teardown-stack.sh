@@ -36,7 +36,7 @@
 # SCOPING RULE. This is the one rule the whole script rests on.
 #
 # Nothing is deleted unless Azure itself ties it to CloudLens, by one of
-# exactly three pieces of evidence, none of which is a guess:
+# exactly four pieces of evidence, none of which is a guess:
 #
 #   1. Marketplace plan: the VM's plan.product is one of the three CloudLens
 #      products (vController, KVO, vPB). Fixed by the image, whatever the VM
@@ -49,6 +49,14 @@
 #      templates name them (<vm>-pip, <vm>-mgmt-nic, <vm>_OsDisk_1_..., and
 #      so on). Only those five types: a storage account called kvo-backups
 #      is reported as "other" and never touched.
+#   4. Deploy stamp: the resource carries BOTH tags the deploy writes on what
+#      it builds outside the templates, deployedBy=cloudlens-stack AND
+#      cloudlens:stack=<stack>. Today that is the sample AKS cluster and the
+#      ACR of Phase 13b (scripts/deploy-aks-tapping.sh). Both tags, because
+#      each alone is weaker: deployedBy is also on the shared VNet and on a
+#      group, and cloudlens:stack is the key a customer might copy onto their
+#      own things to find them later. An untagged cluster or registry is
+#      "other", whatever it was named, and keeps the group.
 #
 # The whole resource group is deleted only when ALL of these hold: the
 # deploy created it (it carries the deployedBy=cloudlens-stack tag the
@@ -108,6 +116,8 @@ ARG_KVO_ADDRESS=""
 # read-only call and still bounds a hung one.
 PROBE_TIMEOUT="${CLOUDLENS_PROBE_TIMEOUT:-45}"
 DELETE_TIMEOUT="${CLOUDLENS_DELETE_TIMEOUT:-1800}"   # 30 minutes for a group delete
+NODE_RG_WAIT="${CLOUDLENS_NODE_RG_WAIT:-300}"       # a deleted cluster's node group, Phase 6
+NODE_RG_POLL="${CLOUDLENS_NODE_RG_POLL:-15}"
 KVO_HTTP_TIMEOUT="${CLOUDLENS_KVO_HTTP_TIMEOUT:-15}"        # per HTTP call to the KVO
 KVO_RELEASE_TIMEOUT="${CLOUDLENS_KVO_RELEASE_TIMEOUT:-600}" # the whole release, overall
 
@@ -165,11 +175,24 @@ CL_ATTACHED_IDS=""    # OS disks + NICs the VMs report attached, lower-cased
 PREFIX_NAMES=""       # the VM names resources are matched against
 PREFIX_ASSUMED=false  # true when PREFIX_NAMES came from the deploy defaults
 
-# Everything in the group, one per line: name<TAB>type<TAB>id
+# Everything in the group, one per line:
+#   name<TAB>type<TAB>id<TAB>tags.deployedBy<TAB>tags."cloudlens:stack"
+# The two tag columns ride along on the one listing so the deploy stamp
+# (evidence 4) costs no call per resource; a shared group can hold hundreds.
 RES_LINES=""
-CL_RES_LINES=""       # the CloudLens set (VMs included), same layout
+CL_RES_LINES=""       # the CloudLens set (VMs and stamped resources included): name<TAB>type<TAB>id
 CL_TAGGED_VNET_IDS="" # VNets the deploy built and tagged deployedBy=cloudlens-stack
-OTHER_RES_LINES=""    # everything else, same layout
+OTHER_RES_LINES=""    # everything else: name<TAB>type<TAB>id
+# The deploy-stamped set (evidence 4), each one id per line:
+#   CL_AKS_LINES      name<TAB>id<TAB>node-resource-group (empty when the read failed)
+#   CL_ACR_LINES      name<TAB>id
+#   CL_STAMPED_LINES  name<TAB>type<TAB>id        (any other stamped type)
+# CL_STAMPED_IDS is the lower-cased ids of all three, for the audit.
+CL_AKS_LINES=""
+CL_ACR_LINES=""
+CL_STAMPED_LINES=""
+CL_STAMPED_IDS=""
+STAMP_TAG_KEY="cloudlens:stack"
 # The CloudLens set split by type for the per-resource delete, one id per
 # line (ids carry no spaces, but a VNet's name is needed for the in-use
 # check, so VNets carry name<TAB>id).
@@ -183,6 +206,9 @@ PLAN=""               # "group" or "resources"
 PLAN_WHY=""
 
 DELETED_VMS=0; DELETED_DISKS=0; DELETED_NICS=0; DELETED_PIPS=0; DELETED_NSGS=0; DELETED_VNETS=0
+DELETED_AKS=0; DELETED_ACRS=0; DELETED_STAMPED=0
+AKS_DELETE_DONE=false    # del_stamped_aks ran (it runs once, whichever plan)
+AKS_DELETE_FAILED=false  # at least one cluster delete was refused
 KEPT_VNETS=""
 GROUP_GONE=false
 FAILED_ITEMS=""
@@ -421,15 +447,21 @@ Scoping (why this is safe to run in a shared group):
   A VM is CloudLens when its Marketplace plan says so, whatever it is named.
   Its OS disk and NICs are taken from the VM itself while they are attached.
   Disks, NICs, public IPs, NSGs and VNets named from a CloudLens VM the way
-  the product templates name them are CloudLens too. Nothing else is: every
-  other resource in the group is listed and left alone, and its presence
-  keeps the group itself from being deleted. The group is deleted only when
+  the product templates name them are CloudLens too. So is anything the
+  deploy stamped with BOTH tags deployedBy=cloudlens-stack and
+  cloudlens:stack=<stack>: the sample AKS cluster (with the node resource
+  group Azure made for it and the kubeconfig the deploy wrote) and the ACR
+  of the AKS step. Nothing else is: every other resource in the group,
+  an untagged cluster or registry included, is listed and left alone, and
+  its presence keeps the group itself from being deleted. The group is deleted only when
   deploy-stack.sh created it (deployedBy=cloudlens-stack) AND nothing but
   CloudLens resources is inside AND --keep-resource-group was not given.
 
 Env-var overrides:
   CLOUDLENS_RG, CLOUDLENS_PROBE_TIMEOUT (per read-only az call, 45s),
   CLOUDLENS_DELETE_TIMEOUT (wait for a group delete, 1800s),
+  CLOUDLENS_NODE_RG_WAIT (wait for a deleted cluster's node group, 300s),
+  CLOUDLENS_NODE_RG_POLL (how often to ask, 15s),
   CLOUDLENS_KVO_ADMIN_USER, CLOUDLENS_KVO_ADMIN_PASS,
   CLOUDLENS_KVO_HTTP_TIMEOUT (per call, 15s), CLOUDLENS_KVO_RELEASE_TIMEOUT
   (the whole release, 600s), CLOUDLENS_KVO_LICENSE_PY (path to
@@ -468,10 +500,13 @@ Order of operations:
      KVO clear means nothing is stranded and step 4b is skipped.
   4b. Warn about stranded KVO licences and take the licence-loss
      confirmation (the typed resource group name, or --accept-licence-loss).
-  5. Delete: the group, then wait for it to go; or the VMs, then their
-     disks, NICs, public IPs, NSGs and VNets in that order.
-  6. Verify what is left and report what was deleted, what failed and why,
-     and whether the licences were released.
+  5. Delete: the stamped AKS clusters, then the group, then wait for it to
+     go; or the VMs, then the stamped AKS clusters, ACRs and other stamped
+     resources, then the disks, NICs, public IPs, NSGs and VNets in that
+     order.
+  6. Verify what is left (the clusters' node resource groups included) and
+     report what was deleted, what failed and why, and whether the licences
+     were released.
 HLP
 }
 
@@ -609,9 +644,36 @@ esac
 # =====================================================================
 step "Phase 2: Discover what is in ${RESOURCE_GROUP} (read-only)"
 
-_rg="$(ro_az group show -n "$RESOURCE_GROUP" --query "[tags.deployedBy,location]" -o tsv)"
+# Two more columns on the same call: the tags the AKS service writes on a
+# cluster's node resource group (MC_<rg>_<cluster>_<location>). That group
+# also carries the deploy's two tags, copied from the cluster, so to
+# evidence 4 it would read as deploy-created and its scale set, load
+# balancer and public IP as stamped: a whole-group plan on a group the AKS
+# service owns, while the cluster lives on in the group next door. Refuse
+# it by name and point at the group the cluster is in.
+_rg="$(ro_az group show -n "$RESOURCE_GROUP" --query "[tags.deployedBy,location,tags.\"aks-managed-cluster-name\",tags.\"aks-managed-cluster-rg\"]" -o tsv)"
 RG_DEPLOYED_BY="$(det_clean "$(nth_line 1 "$_rg")")"
 RG_LOCATION="$(det_clean "$(nth_line 2 "$_rg")")"
+RG_AKS_CLUSTER="$(det_clean "$(nth_line 3 "$_rg")")"
+RG_AKS_CLUSTER_RG="$(det_clean "$(nth_line 4 "$_rg")")"
+# A group with no tags still answers four lines (None for each absent tag),
+# so nothing at all means the call failed or timed out. Read as "not
+# deploy-created" that would be safe for the group, but not for the guard
+# above: a node resource group whose tags were never read would pass it,
+# and its scale set, load balancer and NSG, which carry the cluster's two
+# tags, would then be deleted one by one as stamped. Stop instead.
+if [[ -z "$_rg" ]]; then
+  fail "'az group show -n ${RESOURCE_GROUP}' did not answer (a failed or slow call).
+  Its tags decide whether this is a deploy-created group or an AKS node
+  resource group, and this script deletes things. Check with:
+    az group show -n ${RESOURCE_GROUP} -o table"
+fi
+if [[ -n "$RG_AKS_CLUSTER" || -n "$RG_AKS_CLUSTER_RG" ]]; then
+  fail "${RESOURCE_GROUP} is the node resource group of cluster ${RG_AKS_CLUSTER:-<unknown>} in group ${RG_AKS_CLUSTER_RG:-<unknown>}.
+  The AKS service owns it and removes it with the cluster. Tear down the cluster's
+  own group instead:
+    bash deploy/teardown-stack.sh --resource-group ${RG_AKS_CLUSTER_RG:-<group>}"
+fi
 if [[ "$RG_DEPLOYED_BY" == "$DEPLOYED_BY_TAG" ]]; then
   ok "Group tag deployedBy=${RG_DEPLOYED_BY}: deploy-stack.sh created this group"
 else
@@ -628,13 +690,41 @@ _vms="$(ro_az vm list -g "$RESOURCE_GROUP" \
   --query "[].[name, plan.product, id, storageProfile.osDisk.managedDisk.id, join(' ', networkProfile.networkInterfaces[].id)]" -o tsv)"
 
 # ---- everything in the group --------------------------------------------
-_res="$(ro_az resource list -g "$RESOURCE_GROUP" --query "[].[name, type, id]" -o tsv)"
+# The two tag columns are the deploy stamp (evidence 4). The key has a colon
+# in it, so JMESPath needs it quoted: tags."cloudlens:stack". Read on this
+# one listing, never with a call per resource.
+RES_QUERY="[].[name, type, id, tags.deployedBy, tags.\"${STAMP_TAG_KEY}\"]"
+_res="$(ro_az resource list -g "$RESOURCE_GROUP" --query "$RES_QUERY" -o tsv)"
 if [[ -z "$_res" ]]; then
   # An empty group and a probe that failed look the same. Ask once more
   # before believing "empty".
-  _res="$(ro_az resource list -g "$RESOURCE_GROUP" --query "[].[name, type, id]" -o tsv)"
+  _res="$(ro_az resource list -g "$RESOURCE_GROUP" --query "$RES_QUERY" -o tsv)"
 fi
 RES_LINES="$_res"
+
+# Still empty after the retry. Phase 1 already proved the group exists, so
+# this is either a group with nothing in it or a listing that failed twice
+# (probe swallows the exit status, so the two look alike). The difference
+# matters: with nothing listed, nothing is "other", and the plan below would
+# fall through to "delete the whole group" on a deploy-created group, taking
+# whatever a customer put there after the deploy and that the failed listing
+# never showed. Ask for the count instead: a real empty group prints 0, a
+# failed call prints nothing, and nothing is a stop, the same way the
+# `az group exists` probe is a stop. Empty reads as unknown, never as
+# "nothing but CloudLens".
+if [[ -z "$RES_LINES" ]]; then
+  _cnt="$(det_clean "$(first_line "$(ro_az resource list -g "$RESOURCE_GROUP" --query "length(@)" -o tsv)")")"
+  if [[ "$_cnt" == "0" ]]; then
+    ok "Resource group '${RESOURCE_GROUP}' holds no resources (confirmed by count)"
+  else
+    if [[ -n "$_cnt" ]]; then _cnt_said="the count reports ${_cnt} resource(s)"; else _cnt_said="the count did not answer"; fi
+    fail "'az resource list -g ${RESOURCE_GROUP}' returned nothing twice and ${_cnt_said}.
+  An empty answer cannot be told from a failed call, and on a deploy-created group
+  an empty listing would read as \"nothing but CloudLens\" and plan a whole-group
+  delete. Refusing to guess: this script deletes things. Check with:
+    az resource list -g ${RESOURCE_GROUP} -o table"
+  fi
+fi
 
 # The VM listing failing while the resource listing shows VMs would make
 # every VM "other" and, worse, hide the KVO from the licence gate. Fail
@@ -719,10 +809,22 @@ CL_TAGGED_VNET_IDS="$(to_lower "$(tokens "$(ro_az resource list -g "$RESOURCE_GR
   --query "[?tags.deployedBy=='${DEPLOYED_BY_TAG}'].id" -o tsv)")")"
 
 # ---- classify every resource in the group -------------------------------
-while IFS=$'\t' read -r _rn _rt _rid; do
+# The type rules come first and the deploy stamp is the fallback for what
+# they leave as "other". Why the stamp is needed at all: on 2026-10-07 a
+# teardown of cloudlens-aks-rg listed the sample AKS cluster and its ACR,
+# both tagged by the deploy, under "Other resources ... never deleted",
+# planned to keep the group because of them, and would have left two
+# Standard_D4s_v3 nodes, the MC_ node group and the registry billing. It
+# could not have deleted cloudlens-vnet either: the cluster's scale set
+# still had ipConfigurations in vcontroller-subnet.
+while IFS=$'\t' read -r _rn _rt _rid _rdb _rst; do
   if [[ -z "${_rn:-}" ]]; then continue; fi
   _rtl="$(to_lower "${_rt:-}")"
   _ridl="$(to_lower "${_rid:-}")"
+  _rdb="$(det_clean "${_rdb:-}")"
+  _rst="$(det_clean "${_rst:-}")"
+  _stamped=false
+  if [[ "$_rdb" == "$DEPLOYED_BY_TAG" && -n "$_rst" ]]; then _stamped=true; fi
   _cls="other"
   case "$_rtl" in
     microsoft.compute/virtualmachines)
@@ -741,6 +843,13 @@ while IFS=$'\t' read -r _rn _rt _rid; do
       # Deleted with its VM; listed so the audit is complete.
       if name_from_cl_vm "$_rn"; then _cls="ext"; fi ;;
   esac
+  if [[ "$_cls" == "other" && "$_stamped" == "true" ]]; then
+    case "$_rtl" in
+      microsoft.containerservice/managedclusters) _cls="aks" ;;
+      microsoft.containerregistry/registries)     _cls="acr" ;;
+      *)                                          _cls="stamped" ;;
+    esac
+  fi
   case "$_cls" in
     other) OTHER_RES_LINES="${OTHER_RES_LINES}${OTHER_RES_LINES:+$'\n'}${_rn}"$'\t'"${_rt}"$'\t'"${_rid}" ;;
     *)     CL_RES_LINES="${CL_RES_LINES}${CL_RES_LINES:+$'\n'}${_rn}"$'\t'"${_rt}"$'\t'"${_rid}" ;;
@@ -751,8 +860,45 @@ while IFS=$'\t' read -r _rn _rt _rid; do
     pip)  CL_PIP_IDS="${CL_PIP_IDS}${CL_PIP_IDS:+$'\n'}${_rid}" ;;
     nsg)  CL_NSG_IDS="${CL_NSG_IDS}${CL_NSG_IDS:+$'\n'}${_rid}" ;;
     vnet) CL_VNET_LINES="${CL_VNET_LINES}${CL_VNET_LINES:+$'\n'}${_rn}"$'\t'"${_rid}" ;;
+    aks)
+      # The node resource group (MC_<rg>_<cluster>_<location>) is a group of
+      # its own that Azure made for the cluster and removes with it. Read
+      # its name now so Phase 6 can check it really went; a failed read
+      # leaves the column empty and the check is skipped with a note.
+      _nrg="$(det_clean "$(first_line "$(ro_az aks show -g "$RESOURCE_GROUP" -n "$_rn" --query nodeResourceGroup -o tsv)")")"
+      CL_AKS_LINES="${CL_AKS_LINES}${CL_AKS_LINES:+$'\n'}${_rn}"$'\t'"${_rid}"$'\t'"${_nrg}"
+      CL_STAMPED_IDS="${CL_STAMPED_IDS}${CL_STAMPED_IDS:+ }${_ridl}" ;;
+    acr)
+      CL_ACR_LINES="${CL_ACR_LINES}${CL_ACR_LINES:+$'\n'}${_rn}"$'\t'"${_rid}"
+      CL_STAMPED_IDS="${CL_STAMPED_IDS}${CL_STAMPED_IDS:+ }${_ridl}" ;;
+    stamped)
+      CL_STAMPED_LINES="${CL_STAMPED_LINES}${CL_STAMPED_LINES:+$'\n'}${_rn}"$'\t'"${_rt}"$'\t'"${_rid}"
+      CL_STAMPED_IDS="${CL_STAMPED_IDS}${CL_STAMPED_IDS:+ }${_ridl}" ;;
   esac
 done <<< "$RES_LINES"
+
+# The node resource groups of the stamped clusters, lower-cased and space
+# separated: what vnet_other_users needs to tell a cluster's own scale set
+# from a customer's NIC.
+# When the read failed the name is unknown but its shape is not: Azure
+# names the group MC_<rg>_<cluster>_<location> unless the cluster was made
+# with a name of its own, so the prefix mc_<rg>_<cluster>_ is kept for
+# those (CL_AKS_NODE_RG_PREFIXES) and matched by aks_own_scaleset below.
+CL_AKS_NODE_RGS=""
+CL_AKS_NODE_RG_PREFIXES=""
+while IFS=$'\t' read -r _an _aid _anrg; do
+  if [[ -z "${_an:-}" ]]; then continue; fi
+  if [[ -n "${_anrg:-}" ]]; then
+    CL_AKS_NODE_RGS="${CL_AKS_NODE_RGS}${CL_AKS_NODE_RGS:+ }$(to_lower "$_anrg")"
+  else
+    CL_AKS_NODE_RG_PREFIXES="${CL_AKS_NODE_RG_PREFIXES}${CL_AKS_NODE_RG_PREFIXES:+ }$(to_lower "mc_${RESOURCE_GROUP}_${_an}_")"
+    note "node resource group of ${_an} could not be read; its scale set is told from a"
+    note "customer NIC by the MC_${RESOURCE_GROUP}_${_an}_* name shape, for the VNet check only."
+  fi
+done <<< "$CL_AKS_LINES"
+if [[ -n "$CL_AKS_LINES" || -n "$CL_ACR_LINES" || -n "$CL_STAMPED_LINES" ]]; then
+  ok "Deploy-stamped resources (deployedBy=${DEPLOYED_BY_TAG} and ${STAMP_TAG_KEY}): $(count_words "$CL_STAMPED_IDS")"
+fi
 
 # vnet_other_users NAME: the ipConfiguration ids still in NAME's subnets that
 # do NOT belong to a CloudLens NIC. Anything printed means another NIC,
@@ -761,14 +907,49 @@ done <<< "$RES_LINES"
 # it too. Empty on a failed probe, which reads as "no other user": the
 # delete itself then fails on Azure's own dependency check and is reported,
 # so a lost probe cannot delete anything Azure would not.
+#
+# A stamped AKS cluster's nodes are a scale set in its node resource group,
+# and with Azure CNI their ipConfigurations sit in the deploy's subnet. They
+# are ours: the cluster is deleted before any VNet (Phase 5) and takes them
+# with it. Without this exception the live group above would have kept
+# cloudlens-vnet for a cluster this same run was about to delete, and the
+# group plan would never be chosen while a stamped cluster exists.
+#
+# The exception is known by the node group's name, or, when `az aks show`
+# did not answer in Phase 2, by its shape: an address in a group named
+# mc_<rg>_<cluster>_* under .../virtualMachineScaleSets/ is that cluster's
+# own node. Without the fallback a slow read turned the cluster's own node
+# into a "NIC from outside the group", kept an empty deploy-created group
+# and blamed a foreign NIC for it. Only the exception rests on the guess,
+# never a delete: a VNet that is in use still fails Azure's own check.
+aks_own_scaleset() {
+  local rg="$1" nicl="$2" p=""
+  case "$nicl" in */virtualmachinescalesets/*) ;; *) return 1 ;; esac
+  for p in $CL_AKS_NODE_RG_PREFIXES; do
+    case "$rg" in "$p"*) return 0 ;; esac
+  done
+  return 1
+}
+# list_without WORD LIST: LIST with every WORD removed (space separated).
+list_without() {
+  local needle="$1" hay="$2" out="" w=""
+  for w in $hay; do
+    if [[ "$w" != "$needle" ]]; then out="${out}${out:+ }${w}"; fi
+  done
+  printf '%s' "$out"
+}
 vnet_other_users() {
-  local ids="" id="" nic="" nicl="" out=""
+  local ids="" id="" nic="" nicl="" out="" rg=""
   ids="$(ro_az network vnet show -g "$RESOURCE_GROUP" -n "$1" --query "subnets[].ipConfigurations[].id" -o tsv)"
   for id in $(tokens "$ids"); do
     # .../networkInterfaces/<nic>/ipConfigurations/<cfg>
     nic="${id%/ipConfigurations/*}"
     nicl="$(to_lower "$nic")"
     if printf '%s\n' "$CL_NIC_IDS" | tr '[:upper:]' '[:lower:]' | grep -qx -- "$nicl" 2>/dev/null; then continue; fi
+    # .../resourceGroups/<rg>/providers/...: the group the NIC lives in
+    rg="${nicl#*/resourcegroups/}"; rg="${rg%%/*}"
+    if [[ -n "$CL_AKS_NODE_RGS" ]] && in_list "$rg" "$CL_AKS_NODE_RGS"; then continue; fi
+    if [[ -n "$CL_AKS_NODE_RG_PREFIXES" ]] && aks_own_scaleset "$rg" "$nicl"; then continue; fi
     out="${out}${out:+ }$(id_name "$nic")"
   done
   printf '%s' "$out"
@@ -833,11 +1014,39 @@ if [[ -n "$CL_RES_LINES" ]]; then
   fi
   while IFS=$'\t' read -r _rn _rt _rid; do
     if [[ -z "${_rn:-}" ]]; then continue; fi
+    # the stamped ones have their own heading below
+    if [[ -n "$CL_STAMPED_IDS" ]] && in_list "$(to_lower "$_rid")" "$CL_STAMPED_IDS"; then continue; fi
     printf '    %-44s %s\n' "$_rn" "$_rt"
   done <<< "$CL_RES_LINES"
   note "Deleting a VM never deletes its NSG or VNet, and on stacks deployed before"
   note "the templates set deleteOption it leaves the disk, NICs and public IPs too."
   note "The teardown removes them by name; whatever went with the VM is skipped."
+fi
+
+if [[ -n "$CL_STAMPED_IDS" ]]; then
+  echo
+  echo "  Deploy-stamped resources (tagged deployedBy=${DEPLOYED_BY_TAG} and ${STAMP_TAG_KEY}=<value>): deleted with the stack"
+  while IFS=$'\t' read -r _an _aid _anrg; do
+    if [[ -z "${_an:-}" ]]; then continue; fi
+    printf '    %-44s %s\n' "$_an" "Microsoft.ContainerService/managedClusters"
+    if [[ -n "${_anrg:-}" ]]; then
+      printf '    %-44s node resource group %s (removed by the AKS service with the cluster)\n' "" "$_anrg"
+    else
+      printf '    %-44s node resource group: could not be read; its removal is not verified in Phase 6\n' ""
+    fi
+  done <<< "$CL_AKS_LINES"
+  while IFS=$'\t' read -r _cn _cid; do
+    if [[ -z "${_cn:-}" ]]; then continue; fi
+    printf '    %-44s %s\n' "$_cn" "Microsoft.ContainerRegistry/registries"
+  done <<< "$CL_ACR_LINES"
+  while IFS=$'\t' read -r _sn _st _sid; do
+    if [[ -z "${_sn:-}" ]]; then continue; fi
+    printf '    %-44s %s\n' "$_sn" "$_st"
+  done <<< "$CL_STAMPED_LINES"
+  if [[ -n "$CL_AKS_LINES" ]]; then
+    note "The kubeconfig the deploy wrote for each cluster (\$HOME/.kube/cloudlens-aks-<cluster>)"
+    note "is removed from this machine once the cluster is gone."
+  fi
 fi
 
 echo
@@ -862,7 +1071,12 @@ if [[ "$PLAN" == "group" ]]; then
   echo "    because ${PLAN_WHY}."
 else
   echo "    delete only the CloudLens resources listed above, in dependency order"
-  echo "    (VMs, then disks, NICs, public IPs, NSGs, VNets), and leave the group"
+  if [[ -n "$CL_STAMPED_IDS" ]]; then
+    echo "    (VMs, then the deploy-stamped AKS clusters, registries and other stamped"
+    echo "    resources, then disks, NICs, public IPs, NSGs, VNets), and leave the group"
+  else
+    echo "    (VMs, then disks, NICs, public IPs, NSGs, VNets), and leave the group"
+  fi
   echo "    and everything else in it alone, because ${PLAN_WHY}."
 fi
 
@@ -871,7 +1085,7 @@ if [[ "$AUDIT_ONLY" == "true" ]]; then
   step "Audit complete"
   echo "  Resource group:        ${RESOURCE_GROUP} (${RG_LOCATION:-location unknown}, deployedBy=${RG_DEPLOYED_BY:-none})"
   echo "  CloudLens VMs:         $(count_words "$CL_VM_NAMES")$(if [[ "$HAS_KVO" == "true" ]]; then printf ' (includes a KVO: %s)' "$KVO_VM_NAME"; fi)"
-  echo "  CloudLens resources:   $(count_lines "$CL_RES_LINES")"
+  echo "  CloudLens resources:   $(count_lines "$CL_RES_LINES")$(if [[ -n "$CL_STAMPED_IDS" ]]; then printf ' (includes %s deploy-stamped: %s AKS cluster(s), %s registry(ies))' "$(count_words "$CL_STAMPED_IDS")" "$(count_lines "$CL_AKS_LINES")" "$(count_lines "$CL_ACR_LINES")"; fi)"
   echo "  Other resources:       $(count_lines "$OTHER_RES_LINES")"
   echo "  Would delete:          $(if [[ "$PLAN" == "group" ]]; then printf 'the whole group'; else printf 'only the CloudLens resources'; fi)"
   echo
@@ -1048,7 +1262,14 @@ if [[ "$PLAN" == "group" ]]; then
 else
   echo "    - $(count_words "$CL_VM_NAMES") CloudLens VM(s) in ${RESOURCE_GROUP}: ${CL_VM_NAMES:-none}"
   echo "    - their $(count_lines "$CL_DISK_IDS") disk(s), $(count_lines "$CL_NIC_IDS") NIC(s), $(count_lines "$CL_PIP_IDS") public IP(s), $(count_lines "$CL_NSG_IDS") NSG(s), $(count_lines "$CL_VNET_LINES") VNet(s)"
+  if [[ -n "$CL_STAMPED_IDS" ]]; then
+    echo "    - the deploy-stamped $(count_lines "$CL_AKS_LINES") AKS cluster(s) (with their node resource groups), $(count_lines "$CL_ACR_LINES") registry(ies), $(count_lines "$CL_STAMPED_LINES") other stamped resource(s)"
+  fi
   echo "    - NOT the group, and NOT the $(count_lines "$OTHER_RES_LINES") other resource(s): ${PLAN_WHY}"
+fi
+if [[ "$PLAN" == "group" && -n "$CL_AKS_LINES" ]]; then
+  echo "    - the deploy-stamped $(count_lines "$CL_AKS_LINES") AKS cluster(s) in it, deleted first so the AKS service"
+  echo "      removes the node resource group(s) before the group delete is asked for"
 fi
 if [[ "$HAS_KVO" == "true" ]]; then
   echo "    - the KVO ${KVO_VM_NAME}, with every licence still activated on it. The"
@@ -1308,6 +1529,121 @@ wait_for_group_gone() {
   return 2
 }
 
+# ---- the deploy-stamped set: AKS clusters, then ACRs, then the rest ------
+# Clusters go through `az aks delete`, never `az resource delete`: the AKS
+# service is what removes the node resource group (MC_<rg>_<cluster>_<loc>,
+# a group of its own with the scale set, its NICs and disks, a load balancer
+# and a public IP), and a cluster deleted any other way leaves that group
+# behind and billing. The call is synchronous, five to ten minutes, and
+# runs before any VNet delete because the scale set's ipConfigurations sit
+# in the deploy's subnet until it is gone. The kubeconfig the deploy wrote
+# at $HOME/.kube/cloudlens-aks-<cluster> is removed afterwards: it names a
+# control plane that no longer exists.
+# rm_aks_kubeconfig NAME: remove $HOME/.kube/cloudlens-aks-NAME, the private
+# kubeconfig the deploy wrote, once the cluster it names is gone (deleted now
+# or already gone on a re-run). Never ~/.kube/config or any other file.
+rm_aks_kubeconfig() {
+  local kc="${HOME:-}/.kube/cloudlens-aks-${1}"
+  if [[ -z "${HOME:-}" || ! -f "$kc" ]]; then return 0; fi
+  if [[ "$DRY_RUN" == "true" ]]; then
+    dryrun_say "would remove the deploy's kubeconfig ${kc}"
+  elif rm -f "$kc" 2>/dev/null; then
+    ok "removed the deploy's kubeconfig ${kc}"
+  else
+    warn "could not remove the deploy's kubeconfig ${kc}; delete it by hand"
+  fi
+}
+del_stamped_aks() {
+  local an="" aid="" anrg=""
+  while IFS=$'\t' read -r an aid anrg; do
+    if [[ -z "${an:-}" ]]; then continue; fi
+    note "Deleting AKS cluster ${an}${anrg:+ (and its node resource group ${anrg})}; this takes 5 to 10 minutes."
+    if del_az aks delete -g "$RESOURCE_GROUP" -n "$an" --yes; then
+      ok "$(did) AKS cluster ${an}"
+      DELETED_AKS=$(( DELETED_AKS + 1 ))
+      rm_aks_kubeconfig "$an"
+    else
+      case "$DEL_ERR" in
+        *NotFound*|*"not found"*|*"could not be found"*)
+          ok "AKS cluster ${an} was already gone"; DEL_ERR=""
+          DELETED_AKS=$(( DELETED_AKS + 1 ))
+          rm_aks_kubeconfig "$an" ;;
+        *)
+          warn "could not delete AKS cluster ${an}: ${DEL_ERR}"
+          record_failure "AKS cluster ${an}" "$DEL_ERR"
+          AKS_DELETE_FAILED=true
+          # Its scale set still sits in the deploy's subnet, so the VNet
+          # exception above no longer holds for this cluster: the VNet is
+          # kept, not attempted and failed.
+          if [[ -n "$anrg" ]]; then CL_AKS_NODE_RGS="$(list_without "$(to_lower "$anrg")" "$CL_AKS_NODE_RGS")"; fi
+          CL_AKS_NODE_RG_PREFIXES="$(list_without "$(to_lower "mc_${RESOURCE_GROUP}_${an}_")" "$CL_AKS_NODE_RG_PREFIXES")" ;;
+      esac
+    fi
+  done <<< "$CL_AKS_LINES"
+  AKS_DELETE_DONE=true
+}
+del_stamped_acrs() {
+  local cn="" cid=""
+  while IFS=$'\t' read -r cn cid; do
+    if [[ -z "${cn:-}" ]]; then continue; fi
+    if del_az acr delete -g "$RESOURCE_GROUP" -n "$cn" --yes; then
+      ok "$(did) registry ${cn}"
+      DELETED_ACRS=$(( DELETED_ACRS + 1 ))
+    else
+      case "$DEL_ERR" in
+        *NotFound*|*"not found"*|*"could not be found"*)
+          ok "registry ${cn} was already gone"; DEL_ERR=""
+          DELETED_ACRS=$(( DELETED_ACRS + 1 )) ;;
+        *)
+          warn "could not delete registry ${cn}: ${DEL_ERR}"
+          record_failure "registry ${cn}" "$DEL_ERR" ;;
+      esac
+    fi
+  done <<< "$CL_ACR_LINES"
+}
+del_stamped_rest() {
+  local sn="" st="" sid=""
+  while IFS=$'\t' read -r sn st sid; do
+    if [[ -z "${sn:-}" ]]; then continue; fi
+    if del_az resource delete --ids "$sid"; then
+      ok "$(did) stamped ${sn} (${st})"
+      DELETED_STAMPED=$(( DELETED_STAMPED + 1 ))
+    else
+      case "$DEL_ERR" in
+        *NotFound*|*"not found"*|*"could not be found"*)
+          ok "stamped ${sn} was already gone"; DEL_ERR=""
+          DELETED_STAMPED=$(( DELETED_STAMPED + 1 )) ;;
+        *)
+          warn "could not delete stamped ${sn} (${st}): ${DEL_ERR}"
+          record_failure "${sn} (${st})" "$DEL_ERR" ;;
+      esac
+    fi
+  done <<< "$CL_STAMPED_LINES"
+}
+
+if [[ "$PLAN" == "group" && -n "$CL_AKS_LINES" ]]; then
+  # A stamped cluster is deleted explicitly even when the whole group goes:
+  # `az group delete` on a group that still holds a managed cluster waits on
+  # the AKS service to tear the node group down, and when that is refused
+  # (a lock, a policy, a scale set mid-operation) the group delete hangs for
+  # the whole DELETE_TIMEOUT with nothing attributing it to the cluster.
+  # Deleting it first makes the failure, if any, the cluster's own, and a
+  # refused cluster delete then ends the group plan here: asking for the
+  # group delete anyway would wait on that same cluster for DELETE_TIMEOUT
+  # and record the hang a second time. The per-resource path below still
+  # removes the VMs (their licences were released in Phase 4b) and what
+  # hangs off them; the group and the cluster stay, named in the summary.
+  del_stamped_aks
+  if [[ "$AKS_DELETE_FAILED" == "true" ]]; then
+    warn "A cluster delete was refused, so the whole-group delete is not asked for:"
+    warn "az group delete would wait on that same cluster for $(( DELETE_TIMEOUT / 60 )) minutes."
+    note "Deleting the CloudLens VMs and their leftovers instead; the group stays. Fix the"
+    note "cause named above and re-run this teardown: it removes whatever is left."
+    PLAN="resources"
+    PLAN_WHY="the AKS cluster delete was refused (see above) and az group delete would wait on the same cluster for $(( DELETE_TIMEOUT / 60 )) minutes"
+  fi
+fi
+
 if [[ "$PLAN" == "group" ]]; then
   # --no-wait and a poll of our own instead of az's blocking delete: the
   # blocking form gives no progress for up to half an hour, and a Ctrl+C in
@@ -1325,6 +1661,7 @@ if [[ "$PLAN" == "group" ]]; then
     DELETED_DISKS="$(count_lines "$CL_DISK_IDS")"; DELETED_NICS="$(count_lines "$CL_NIC_IDS")"
     DELETED_PIPS="$(count_lines "$CL_PIP_IDS")"; DELETED_NSGS="$(count_lines "$CL_NSG_IDS")"
     DELETED_VNETS="$(count_lines "$CL_VNET_LINES")"
+    DELETED_ACRS="$(count_lines "$CL_ACR_LINES")"; DELETED_STAMPED="$(count_lines "$CL_STAMPED_LINES")"
   else
     warn "Resource group ${RESOURCE_GROUP} still exists after $(( DELETE_TIMEOUT / 60 )) minutes."
     note "Azure may still be deleting it, or the delete failed on a dependency it found"
@@ -1366,6 +1703,14 @@ else
       done
     fi
   fi
+
+  # ---- then the deploy-stamped set --------------------------------------
+  # Clusters before registries (the nodes pull from the ACR until they are
+  # gone), both before the VNet sweep below (the scale set's addresses are
+  # in the deploy's subnet until the cluster is gone).
+  if [[ -n "$CL_AKS_LINES" && "$AKS_DELETE_DONE" != "true" ]]; then del_stamped_aks; fi
+  if [[ -n "$CL_ACR_LINES" ]]; then del_stamped_acrs; fi
+  if [[ -n "$CL_STAMPED_LINES" ]]; then del_stamped_rest; fi
 
   # ---- then what the VMs leave behind, in dependency order -------------
   # A NIC holds its public IP and NSG and sits in a subnet, so NICs go
@@ -1430,7 +1775,7 @@ else
     if [[ -z "${_vname:-}" ]]; then continue; fi
     _users="$(vnet_other_users "$_vname")"
     if [[ -n "$_users" ]]; then
-      warn "keeping VNet ${_vname}: still used by NIC(s) that are not CloudLens: ${_users}"
+      warn "keeping VNet ${_vname}: still used by NIC(s) that are not CloudLens$(if [[ "$AKS_DELETE_FAILED" == "true" ]]; then printf ' (or belong to the cluster that could not be deleted)'; fi): ${_users}"
       KEPT_VNETS="${KEPT_VNETS}${KEPT_VNETS:+ }${_vname}"
       continue
     fi
@@ -1472,6 +1817,47 @@ else
   fi
 fi
 
+# The clusters' node resource groups are groups of their own, outside the
+# listing above, so they are checked by name. A group that is still there
+# is Azure still tearing the scale set down, or a cluster delete that was
+# refused (reported above); either way it is named so nobody assumes the
+# nodes stopped billing.
+NODE_RGS_GONE=""; NODE_RGS_LEFT=""; NODE_RGS_UNKNOWN=""
+if [[ "$DRY_RUN" != "true" && -n "$CL_AKS_LINES" ]]; then
+  while IFS=$'\t' read -r _an _aid _anrg; do
+    if [[ -z "${_an:-}" ]]; then continue; fi
+    if [[ -z "${_anrg:-}" ]]; then
+      note "node resource group of ${_an} was not read in Phase 2; check for MC_${RESOURCE_GROUP}_${_an}_${RG_LOCATION:-<location>} by hand"
+      NODE_RGS_UNKNOWN="${NODE_RGS_UNKNOWN}${NODE_RGS_UNKNOWN:+ }${_an}"
+      continue
+    fi
+    _st="$(to_lower "$(first_line "$(ro_az group exists -n "$_anrg" -o tsv)")")"
+    # `az aks delete` returns when the cluster is gone, and the AKS service
+    # can still be finishing the node group's own removal a moment later.
+    # For a cluster this run deleted, give it NODE_RG_WAIT before calling it
+    # a failure. A cluster whose delete was refused (its node group was
+    # taken out of CL_AKS_NODE_RGS above) is asked once: its group stays.
+    if [[ "$_st" == "true" ]] && in_list "$(to_lower "$_anrg")" "$CL_AKS_NODE_RGS"; then
+      _w=0
+      note "node resource group ${_anrg} still exists; waiting up to $(( NODE_RG_WAIT / 60 ))m for Azure to finish removing it"
+      while [[ "$_st" == "true" ]] && (( _w < NODE_RG_WAIT )); do
+        sleep "$NODE_RG_POLL"; _w=$(( _w + NODE_RG_POLL ))
+        _st="$(to_lower "$(first_line "$(ro_az group exists -n "$_anrg" -o tsv)")")"
+      done
+    fi
+    case "$_st" in
+      false) ok "node resource group ${_anrg} no longer exists."; NODE_RGS_GONE="${NODE_RGS_GONE}${NODE_RGS_GONE:+ }${_anrg}" ;;
+      true)  warn "node resource group ${_anrg} still exists (Azure may still be removing it; check with: az group show -n ${_anrg})"
+             NODE_RGS_LEFT="${NODE_RGS_LEFT}${NODE_RGS_LEFT:+ }${_anrg}"
+             record_failure "node resource group ${_anrg}" "still present after the cluster delete" ;;
+      *)     warn "could not tell whether node resource group ${_anrg} still exists (az did not answer)"
+             NODE_RGS_UNKNOWN="${NODE_RGS_UNKNOWN}${NODE_RGS_UNKNOWN:+ }${_anrg}" ;;
+    esac
+  done <<< "$CL_AKS_LINES"
+elif [[ "$DRY_RUN" == "true" && -n "$CL_AKS_LINES" ]]; then
+  dryrun_say "would check with 'az group exists' that each cluster's node resource group is gone"
+fi
+
 step "Teardown summary"
 _lbl="deleted"
 if [[ "$DRY_RUN" == "true" ]]; then _lbl="would delete"; fi
@@ -1483,6 +1869,15 @@ echo "  NICs:               ${DELETED_NICS}"
 echo "  Public IPs:         ${DELETED_PIPS}"
 echo "  NSGs:               ${DELETED_NSGS}"
 echo "  VNets:              ${DELETED_VNETS}$(if [[ -n "$KEPT_VNETS" ]]; then printf ' (kept, in use by others: %s)' "$KEPT_VNETS"; fi)"
+if [[ -n "$CL_STAMPED_IDS" ]]; then
+  echo "  AKS clusters:       ${DELETED_AKS}$(if [[ "$DRY_RUN" != "true" ]]; then
+      if [[ -n "$NODE_RGS_GONE" ]]; then printf ' (node resource group(s) gone: %s)' "$NODE_RGS_GONE"; fi
+      if [[ -n "$NODE_RGS_LEFT" ]]; then printf ' (node resource group(s) STILL PRESENT: %s)' "$NODE_RGS_LEFT"; fi
+      if [[ -n "$NODE_RGS_UNKNOWN" ]]; then printf ' (node resource group(s) not verified: %s)' "$NODE_RGS_UNKNOWN"; fi
+    fi)"
+  echo "  Registries:         ${DELETED_ACRS}"
+  if [[ -n "$CL_STAMPED_LINES" ]]; then echo "  Other stamped:      ${DELETED_STAMPED}"; fi
+fi
 if [[ "$HAS_KVO" == "true" ]]; then
   if [[ "$DRY_RUN" == "true" ]]; then
     echo "  KVO licences:       not touched (dry run)"
