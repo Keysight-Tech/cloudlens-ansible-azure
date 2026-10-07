@@ -69,6 +69,23 @@ in an unpeered VNet need the public address and their egress IPs inside the
 admin CIDR: set `CLOUDLENS_SENSOR_MANAGER_ADDR` to that public IP before the
 run. The summary prints the chosen address as "Sensors register on".
 
+**Kubernetes pods too.** Pod-to-pod traffic inside an AKS node never reaches a
+VM sensor; the CloudLens Kubernetes sensor sees it. `--aks-cluster NAME` taps an
+existing AKS cluster in the resource group and `--aks-sample` builds a small
+test cluster (two nodes, Azure CNI on the shared VNet) with a demo app that
+generates continuous pod-to-pod HTTP. Phase 13b runs after the vController
+adoption: with KVO it creates the Kubernetes presence first (`k8s-<cluster>`,
+with its own vController project and Cloud Config) and the sensor DaemonSet
+registers with that presence's key; without KVO the pods register into the
+Phase 10 project. One privileged sensor pod per node (`--aks-mode daemonset`,
+the default, applied with kubectl, no helm) or a rendered sidecar snippet for
+your own Deployments (`--aks-mode sidecar`, never an automatic restart). The
+sensor image goes to an ACR the deploy creates and attaches to the cluster
+(`--aks-sensor-tar`), or comes from a registry the nodes already reach
+(`--aks-sensor-image`). Pods in the shared VNet register on the vController's
+private address. Proven live on 2026-10-07: the DaemonSet ran on both nodes
+and KVO's Kubernetes presence reported both sensors.
+
 **Tear it down** when you are done, to remove everything that deployment
 created. Put your resource group name in. It audits first, shows what it
 found, and asks before deleting anything:
@@ -153,7 +170,7 @@ Every default is overridable three ways: **CLI flag wins over env var wins over 
 | `cloudlens-rg` | `--resource-group <name>` | `CLOUDLENS_RG` | New or existing RG name |
 | `eastus2` | `--location <region>` | `CLOUDLENS_REGION` | Any Azure region |
 | `azureuser` | `--admin-user <name>` | `CLOUDLENS_ADMIN_USER` | OS-level SSH user across all VMs |
-| `*` | `--admin-cidr <cidr>` | `CLOUDLENS_ADMIN_CIDR` | Network allowed to reach SSH 22, vPB SSH 9022 and HTTPS 443 on the appliances. Asked interactively; your own public address as a /32 is offered. Mirrored traffic (VXLAN) is allowed from the VNet separately |
+| `*` | `--admin-cidr <cidr>` | `CLOUDLENS_ADMIN_CIDR` | Network allowed to reach SSH 22, vPB SSH 9022 and HTTPS 443 on the appliances. Asked interactively; your own public address as a /32 is offered. It never restricts traffic inside the virtual network: Azure's default `AllowVnetInBound` rule admits it, and the templates add explicit `VirtualNetwork` rules for 443 (and 7443 on the KVO), so the KVO, the sensors and AKS pods reach the appliances on their private addresses. Mirrored traffic (VXLAN) is allowed from the VNet separately |
 | `cloudlens-vnet` | `--vnet-name <name>` | `CLOUDLENS_VNET_NAME` | Join a VNet you already run instead of building one. It must hold the five subnets the templates expect: `vcontroller-subnet`, `kvo-subnet`, `vpb-mgmt`, `vpb-ingress`, `vpb-egress`; missing ones are named, never invented |
 | the deploy's group | `--vnet-resource-group <rg>` | `CLOUDLENS_VNET_RG` | Where that VNet lives |
 | `10.50.0.0/16` | `--vnet-cidr <cidr>` | `CLOUDLENS_VNET_CIDR` | Address space of the VNet the deploy builds, a /16; the subnets are carved as a.b.1, 2, 10, 11 and 12 .0/24 |
@@ -171,6 +188,7 @@ Every default is overridable three ways: **CLI flag wins over env var wins over 
 | (toggle) | `--with-kvo` / `--no-kvo` | n/a | Default: interactive prompt |
 | (toggle) | `--with-vpb` / `--no-vpb` | n/a | Default: interactive prompt; `--no-vpb` skips the vPB entirely |
 | (toggle) | `--no-sensors` | n/a | Skip sensor playbook chain |
+| `no` | `--with-aks`, `--aks-cluster NAME`, `--aks-sample` | `CLOUDLENS_DEPLOY_AKS`, `CLOUDLENS_AKS_CLUSTER`, `CLOUDLENS_AKS_SAMPLE` (also `_AKS_MODE`, `_AKS_POD_SELECTOR`, `_AKS_SENSOR_IMAGE`, `_AKS_SENSOR_TAR`, `_AKS_SUBNET`) | Tap AKS pods in Phase 13b. `--aks-mode daemonset` (default) or `sidecar`; `--aks-pod-selector REGEX` limits which pods the KVO collection taps (every tapped pod costs a credit); `--aks-sensor-image URI` or `--aks-sensor-tar PATH` (default: the newest `CloudLens-Sensor-*.tar` under `~/Downloads`); `CLOUDLENS_AKS_SUBNET` places the `--aks-sample` nodes (default `vcontroller-subnet`) |
 | `false` | `--rollback` / `--no-rollback` | `CLOUDLENS_ROLLBACK_ON_FAIL` | On failure: delete RG we created. Never touches pre-existing RGs. |
 | `false` | `--dry-run` | n/a | Print every az command, touch nothing |
 | n/a | `--resume` | n/a | Re-run against the same resource group; appliances already there are detected and reused, so a run interrupted after a manual step picks up where it stopped |
@@ -646,8 +664,9 @@ Auto-tunes based on discovered VM count. See [docs/SCALING.md](docs/SCALING.md) 
 | RHEL 9 (public IP, Podman auto-detected) | ✓ Sensor 6.14.0-475 registered |
 | Windows Server 2022 (WinRM bootstrapped by run-command) | ✓ Sensor registered |
 | **End-to-end** | **3/3 in the vController registry** |
+| AKS: 2-node cluster, Azure CNI in the shared VNet, sensor DaemonSet (Phase 13b) | ✓ Sensor 6.13.0-359 on both nodes; KVO's Kubernetes presence reports 2 sensors |
 
-Date verified: 2026-08-17 with `scripts/deploy-test-workload-vms.sh` (details in docs/AZURE_TAPPING_ARCHITECTURE.md). Subscription: CloudLensPublic (eastus2).
+Dates verified: the VM rows on 2026-08-17 with `scripts/deploy-test-workload-vms.sh` (details in docs/AZURE_TAPPING_ARCHITECTURE.md); the AKS row on 2026-10-07 with `deploy-stack.sh --with-kvo --aks-sample --aks-sensor-tar ...` in a fresh resource group, the vController adopted into KVO by its private address and the pod sensors registered with the Kubernetes presence's key. Subscription: CloudLensPublic (eastus2).
 
 ---
 
@@ -661,6 +680,7 @@ Date verified: 2026-08-17 with `scripts/deploy-test-workload-vms.sh` (details in
 | `apt_pkg.Error: Signed-By` | Stale Docker apt source | Playbook auto-cleans on next run |
 | Sensor not in the vController UI | Wrong project key | Check vController > Projects > API Keys |
 | Sensor not in the vController UI, `docker pull <ip>/sensor` times out | Admin CIDR narrowed and `manager_ip_or_fqdn` is the public IP, which the NSG refuses from inside the VNet | Use the vController's private IP (the deploy summary's "Sensors register on"), or set `CLOUDLENS_SENSOR_MANAGER_ADDR` to the public IP and add the VMs' egress IPs to the admin CIDR |
+| Phase 13 `[kvo-adopt] adopt failed: ... NatsError: Request timed out` | KVO was told to discover the vController by its public IP, which a narrowed admin CIDR refuses from inside the VNet (Azure SNATs VNet-to-public traffic). Deploys before 2026-10-07 passed the public address | Re-run with `--resume`: Phase 13 now discovers by the private address. By hand: KVO > Inventory > CloudLens Manager > Discover with the private IP |
 | Just deployed vPB, SSH not ready | Internal CLI service still initializing | Wait 10 to 15 minutes after the Azure deploy finishes, then SSH |
 | Just deployed the vController, UI not ready | System initialization still running | UI on port 443 ready in ~60s, full init takes ~15 minutes |
 

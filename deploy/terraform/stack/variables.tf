@@ -221,7 +221,7 @@ variable "vpb_count" {
 }
 
 variable "admin_source_cidr" {
-  description = "Source CIDR allowed to reach SSH (22), vPB SSH (9022) and HTTPS (443) on the appliance. Narrow it to your admin network: '*' is the whole internet and most policies forbid it."
+  description = "Source CIDR allowed to reach SSH (22), vPB SSH (9022) and HTTPS (443) on the appliance. Narrow it to your admin network: '*' is the whole internet and most policies forbid it. Traffic from inside the virtual network (VirtualNetwork) is admitted on 443, and 7443 on the KVO, whatever this value is."
   type        = string
   default     = "*"
 }

@@ -34,6 +34,7 @@ Most common knobs:
 | Rollback on failure | `false` | `CLOUDLENS_ROLLBACK_ON_FAIL` | `--rollback` |
 | Discovery tag key | `cloudlens` | `CLOUDLENS_DISCOVERY_TAG_KEY` | `--discovery-tag-key` |
 | Discovery tag value | `yes` | `CLOUDLENS_DISCOVERY_TAG_VALUE` | `--discovery-tag-value` |
+| AKS pod tapping (Phase 13b) | off | `CLOUDLENS_DEPLOY_AKS`, `CLOUDLENS_AKS_CLUSTER`, `CLOUDLENS_AKS_SAMPLE`, `CLOUDLENS_AKS_MODE`, `CLOUDLENS_AKS_POD_SELECTOR`, `CLOUDLENS_AKS_SENSOR_IMAGE`, `CLOUDLENS_AKS_SENSOR_TAR`, `CLOUDLENS_AKS_SUBNET` | `--aks-cluster NAME`, `--aks-sample`, `--aks-mode daemonset\|sidecar`, `--aks-pod-selector REGEX`, `--aks-sensor-image URI`, `--aks-sensor-tar PATH` |
 
 For end-to-end verification with a custom discovery tag, run `scripts/deploy-test-workload-vms.sh` first - it stands up Ubuntu + RHEL + Windows VMs tagged with your chosen pair, ready for a sensor-install test pass.
 
@@ -491,6 +492,8 @@ For the GWLB hairpin pattern (inline, a separate use case), see the
 | Phase 13 `[kvo-adopt] CLMS login failed (HTTP 401)` | The vController application password differs from the VM's OS password | The value is in `~/.cloudlens-vcontroller-creds-<rg>.json` (Phase 10); set `CLOUDLENS_VC_PASSWORD` to override, or re-run with --resume after completing the first login |
 | quickstart.sh warns `galaxy.ansible.com unreachable; continuing` | Proxy, TLS or no route to Galaxy | Harmless when azure.azcollection, ansible.windows and community.windows are already installed; otherwise the run stops and names the missing collection |
 | teardown keeps the VNet and the group | A NIC from another resource group still uses a CloudLens subnet (a workload you placed in cloudlens-vnet) | Expected: the teardown deletes only the CloudLens resources and reports the NIC; remove it first if you want the group gone |
+| Phase 13 `[kvo-adopt] adopt failed: Cannot get discover CloudLens vController from CloudLens service: NatsError: Request timed out` | KVO was given the vController's public address (deploys before 2026-10-07 did that), which a narrowed admin CIDR refuses from inside the VNet because Azure SNATs VNet-to-public traffic | Re-run with `--resume`: `kvo_adopt_clms.py --clms-internal-ip` now discovers by the private address. By hand: KVO > Inventory > CloudLens Manager > Discover with the private IP. If a policy NSG denies VNet traffic below Azure's defaults, also allow TCP 443 (vController) and TCP 7443 (KVO) from `VirtualNetwork` |
+| Phase 13b `The AKS tapping step did not complete: ...` | The engine's exit code says why: 3 no cluster access (`az aks get-credentials` / kubectl), 4 no sensor image (`--aks-sensor-image` or `--aks-sensor-tar`), 5 cluster or node pool creation failed, 6 the DaemonSet never became ready or the pods never registered | The line under it prints the exact `scripts/deploy-aks-tapping.sh` command to re-run alone; `kubectl --kubeconfig ~/.kube/cloudlens-aks-<cluster> -n cloudlens get pods -o wide` and the pods' logs show whether they reach the vController |
 
 ---
 
@@ -498,11 +501,13 @@ For the GWLB hairpin pattern (inline, a separate use case), see the
 
 | Device | Inbound rules the templates create | Source |
 |---|---|---|
-| **vController mgmt NIC** | TCP/22 (SSH), TCP/443 (web) | `adminSourceCidr` (ARM) / `admin_source_cidr` (Terraform) / `--admin-cidr` (deploy-stack.sh); default `*`, narrow it |
-| **KVO mgmt NIC** | TCP/22 (SSH), TCP/443 (web) | same admin CIDR |
-| **vPB mgmt NIC** | TCP/22, TCP/9022 (KCOS SSH), TCP/443 (mgmt web) from the admin CIDR; UDP/4789 (standard VXLAN) and UDP/10800-10801 (Keysight VXLAN, used by the GWLB hairpin) from `sensorSourcePrefix` / `sensor_source_prefix` (default `VirtualNetwork`: this VNet, peered VNets and gateway-reached ranges) | as stated |
+| **vController mgmt NIC** | TCP/22 (SSH), TCP/443 (web) from the admin CIDR; TCP/443 also from `VirtualNetwork` (`AllowHTTPSFromVNet`: the KVO, the sensors and AKS pods reach it on its private address) | `adminSourceCidr` (ARM) / `admin_source_cidr` (Terraform) / `--admin-cidr` (deploy-stack.sh); default `*`, narrow it |
+| **KVO mgmt NIC** | TCP/22 (SSH), TCP/443 (web) from the admin CIDR; TCP/443 (`AllowHTTPSFromVNet`) and TCP/7443 (`AllowKvoFromVNet`, the gRPC connection the vController opens to KVO) from `VirtualNetwork` | same admin CIDR |
+| **vPB mgmt NIC** | TCP/22, TCP/9022 (KCOS SSH), TCP/443 (mgmt web) from the admin CIDR, TCP/443 also from `VirtualNetwork` (`AllowHTTPSFromVNet`); UDP/4789 (standard VXLAN) and UDP/10800-10801 (Keysight VXLAN, used by the GWLB hairpin) from `sensorSourcePrefix` / `sensor_source_prefix` (default `VirtualNetwork`: this VNet, peered VNets and gateway-reached ranges) | as stated |
 | **vPB ingress and egress NICs** | No NSG is attached to these NICs or their subnets by the templates; Azure then allows all traffic to them. Add a subnet NSG yourself if policy requires one | n/a |
 | **Workload VMs** | TCP/22 (Linux), TCP/5985+5986 (Windows WinRM), TCP/3389 (Windows RDP) | operator IP only |
+
+Azure's default `AllowVnetInBound` rule (priority 65000) already admits every port between VNet addresses, so the `VirtualNetwork` rules change nothing on a stock NSG: they name the in-VNet ports the appliances need and keep them open where a policy adds a deny rule below the defaults. The admin CIDR matters for the public addresses: from inside the VNet those arrive SNATed, outside the CIDR, which is why adoption, sensor registration and AKS pods all use private addresses.
 
 ---
 
@@ -535,13 +540,15 @@ so they live here in OPERATIONS.md.
 | Script | Purpose |
 |---|---|
 | `quickstart.sh` | Customer-facing one-command sensor deploy. Reads `customer_input.yaml`, renders the inventory from its tag filters, auto-tunes forks, runs `deploy.yaml`. |
-| `deploy/deploy-stack.sh` | The curl-pipe-bash stack deploy, 16 phases: one shared VNet, vController + KVO (optional) + vPB via the ARM templates, automatic project key and vController password rotation, sensor chain, KVO licensing, vController and vPB adoption, traffic path, summary. `--resume`, `--dry-run`, `--admin-cidr`, `--vnet-name`. |
+| `deploy/deploy-stack.sh` | The curl-pipe-bash stack deploy, 16 phases plus 13b: one shared VNet, vController + KVO (optional) + vPB via the ARM templates, automatic project key and vController password rotation, sensor chain, KVO licensing, vController adoption by its private address, AKS pod tapping (`--aks-cluster` / `--aks-sample`), vPB adoption, traffic path, summary. `--resume`, `--dry-run`, `--admin-cidr`, `--vnet-name`. |
 | `deploy/teardown-stack.sh` | One command back down: audits the group (`--audit`), releases every licence on the group's KVO before deleting, asks before any licence loss, deletes the group only when the deploy created it and nothing else is inside, keeps a VNet that a NIC from another group still uses. |
 | `deploy/*-marketplace.json` + `*-createUiDefinition.json` | What the site's Deploy to Azure buttons open in the portal: the full stack, or vController, KVO and vPB one at a time. `deploy/arm-template.json` is the sensors-only runner VM. |
 | `deploy/shard.sh` | Splits more than 2,000 VMs into shards and runs one playbook per shard. |
 | `scripts/vcontroller_project_key.py` | Phase 10: waits for the vController API, completes the forced first-login password change to a known value, records it in the creds file before and verifies it after, creates the project and prints its key. |
 | `scripts/kvo_license.py` | Phase 12 and the teardown: activates, lists and releases KVO licences; waits for a booting KVO. |
-| `scripts/kvo_adopt_clms.py` | Phase 13: adopts the vController into KVO and creates its Cloud Config. |
+| `scripts/kvo_adopt_clms.py` | Phase 13: adopts the vController into KVO by its private address (`--clms-internal-ip`) and creates its Cloud Config. |
+| `scripts/deploy-aks-tapping.sh` | Phase 13b, also standalone: the AKS rail. Finds or creates the cluster (Azure CNI on the shared VNet), pushes the sensor tar to an ACR attached to the cluster, applies the sensor DaemonSet (or renders sidecar snippets), adds the optional sample app and verifies the pods register. Exit codes 0 done, 2 bad input, 3 no cluster access, 4 no sensor image, 5 cluster creation failed, 6 deployment failed. |
+| `scripts/kvo_k8s_config.py`, `scripts/kvo_common.py` | Phase 13b with KVO: creates the Kubernetes presence (`k8s-<cluster>`), its Cloud Config and pod collection, and writes the project key the DaemonSet registers with. |
 | `scripts/vpb_kvo_adopt.py` | Phase 14: points the vPB at KVO and adopts it; `--azure-rg/--azure-vm` drive the CLI through the VM agent with no SSH key. |
 | `scripts/vpb_wire_path.py` | Phase 15: C2DL -> vPB ingress -> egress -> tool with a monitoring policy; the egress tool must be REMOTE with an IP on the egress port. |
 | `scripts/render_azure_inventory.py` | Turns `customer_input.yaml` tag filters, resource groups and locations into the inventory quickstart.sh and the Docker image use. |

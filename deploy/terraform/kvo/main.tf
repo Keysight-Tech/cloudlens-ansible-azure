@@ -76,6 +76,36 @@ resource "azurerm_network_security_group" "kvo" {
     source_address_prefix      = var.admin_source_cidr
     destination_address_prefix = "*"
   }
+
+  # The vController and the vPB reach KVO on its private address. Azure's default AllowVnetInBound already admits this; the
+  # explicit rule names the in-VNet port and survives a policy that adds a deny
+  # rule below the defaults. Same rule as the ARM template's.
+  security_rule {
+    name                       = "AllowHTTPSFromVNet"
+    priority                   = 120
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "443"
+    source_address_prefix      = "VirtualNetwork"
+    destination_address_prefix = "*"
+  }
+
+  # The gRPC connection the vController opens to KVO (KVO User Guide ports list). Azure's default AllowVnetInBound already admits this; the
+  # explicit rule names the in-VNet port and survives a policy that adds a deny
+  # rule below the defaults. Same rule as the ARM template's.
+  security_rule {
+    name                       = "AllowKvoFromVNet"
+    priority                   = 121
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "7443"
+    source_address_prefix      = "VirtualNetwork"
+    destination_address_prefix = "*"
+  }
 }
 
 # VNet (create only when no existing VNet supplied)

@@ -110,9 +110,11 @@ def check_sources(fname, rules, ports, ref, label):
     for name, rp, src in rules:
         if not (rp & ports):
             continue
-        # VirtualNetwork is the in-VNet path (KVO, sensors and pods reaching the
-        # appliances); it is a service tag, not a wildcard, and it must sit
-        # BESIDE the admin rule, never replace it (checked below).
+        # VirtualNetwork names the in-VNet path (KVO, sensors and pods reaching
+        # the appliances). Azure's default AllowVnetInBound already admits it;
+        # the explicit rule documents the port and survives a policy deny rule
+        # below the defaults. It is a service tag, not a wildcard, and it must
+        # sit BESIDE the admin rule, never replace it (checked below).
         if src.strip() == "*" or (ref not in src and src.strip() != "VirtualNetwork"):
             bad.append("%s source=%r" % (name, src))
     detail = "; ".join(

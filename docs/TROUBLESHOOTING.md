@@ -275,6 +275,38 @@ vController (it names a different address) is ignored and the factory default
 is sent instead. Set `CLOUDLENS_VC_PASSWORD` to pass a known value, or
 complete the first login in the UI and re-run with `--resume`.
 
+### Phase 13 `[kvo-adopt] adopt failed: ... NatsError: Request timed out`
+
+KVO reached the adoption API but its discovery of the vController timed out.
+Deploys before 2026-10-07 handed KVO the vController's public IP; with a
+narrowed admin CIDR that address is refused from inside the VNet, because
+Azure SNATs VNet-to-public traffic and it arrives from a source outside the
+CIDR. Phase 13 now discovers by the private address
+(`kvo_adopt_clms.py --clms-internal-ip`), so re-run with `--resume`. By hand:
+KVO > Inventory > CloudLens Manager > Discover, with the private IP. Inside
+the VNet Azure's default `AllowVnetInBound` rule admits the traffic; if a
+policy NSG adds a deny rule below the defaults, allow TCP 443 to the
+vController and TCP 7443 to the KVO from `VirtualNetwork` (the templates
+create those rules as `AllowHTTPSFromVNet` and `AllowKvoFromVNet`).
+
+### Phase 13b `The AKS tapping step did not complete`
+
+The rest of the run continues; the line under the warning prints the exact
+`scripts/deploy-aks-tapping.sh` command to re-run the step alone. The cause
+is the engine's exit code: 3 no cluster access (`az aks get-credentials`
+failed or kubectl cannot reach the API server), 4 no sensor image (pass
+`--aks-sensor-image URI` or `--aks-sensor-tar PATH`; the default is the
+newest `CloudLens-Sensor-*.tar` under `~/Downloads`), 5 the cluster or node
+pool creation failed (quota, or the subnet is not in the shared VNet), 6 the
+DaemonSet never became ready or the pods never registered. Check with:
+
+```bash
+kubectl --kubeconfig ~/.kube/cloudlens-aks-<cluster> -n cloudlens get pods -o wide
+```
+
+A pod that is `Running` but not registering names the vController address it
+uses in its log; a cluster in the shared VNet must use the private address.
+
 ### `Missing sudo password` on Linux VMs created with password authentication
 
 SSH works but `become` fails. Set `linux.ansible_password` in

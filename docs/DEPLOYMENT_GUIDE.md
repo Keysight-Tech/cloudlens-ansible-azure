@@ -1,6 +1,6 @@
 # Deployment Guide
 
-End-to-end customer deployment in 6 steps, for a sensors-only rollout against a vController you already run. Two shortcuts exist: `deploy/deploy-stack.sh` deploys the vController (plus KVO and vPB), creates the project key itself, writes `customer_input.yaml` and runs the sensor install, so none of the steps below are typed by hand; and `quickstart.sh` performs Steps 1, 4 and 6 from an `az login` session or Azure Cloud Shell without a service principal. The Docker image (README, Tier 3) runs the same playbooks from a laptop or CI runner. Use `deploy/teardown-stack.sh` to remove an appliance stack; it releases the KVO licences first and asks before deleting.
+End-to-end customer deployment in 6 steps, for a sensors-only rollout against a vController you already run. Two shortcuts exist: `deploy/deploy-stack.sh` deploys the vController (plus KVO and vPB), creates the project key itself, writes `customer_input.yaml`, runs the sensor install and, with `--aks-cluster` or `--aks-sample`, taps AKS pods with a sensor DaemonSet (Phase 13b), so none of the steps below are typed by hand; and `quickstart.sh` performs Steps 1, 4 and 6 from an `az login` session or Azure Cloud Shell without a service principal. The Docker image (README, Tier 3) runs the same playbooks from a laptop or CI runner. Use `deploy/teardown-stack.sh` to remove an appliance stack; it releases the KVO licences first and asks before deleting.
 
 ## Step 1: Prerequisites
 

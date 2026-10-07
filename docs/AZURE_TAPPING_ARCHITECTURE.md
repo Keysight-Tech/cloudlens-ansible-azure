@@ -100,6 +100,16 @@ copy it into files/ first, as DEPLOYMENT_GUIDE.md says, or the play fails at
 "Transfer CloudLens installer". Running the chain from macOS also needs the
 Darwin fork-safety export, which quickstart.sh now sets itself.
 
+**AKS pods, proven 2026-10-07.** The same sensor as a DaemonSet:
+`deploy-stack.sh --aks-cluster NAME` (or `--aks-sample`) runs Phase 13b after
+the vController adoption, creates the KVO Kubernetes presence first, then
+applies the DaemonSet keyed to that presence from an ACR attached to the
+cluster (`scripts/deploy-aks-tapping.sh`). On Azure CNI in the shared VNet the
+pods register on the vController's private address; KVO reported the presence
+with both node sensors. The same run showed that KVO must also discover the
+vController by its private address: given the public IP with a narrowed admin
+CIDR, adoption dies with `NatsError: Request timed out`.
+
 **The honest trade:** it needs software on each monitored VM. Say so plainly to a
 customer rather than letting them assume the AWS agentless story carries over.
 The sensors' DATA path (sensor -> collector/vHub -> tool) is a separate leg and
