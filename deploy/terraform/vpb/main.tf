@@ -192,12 +192,15 @@ locals {
   egress_subnet_id  = local.create_new_vnet ? azurerm_subnet.egress[0].id : data.azurerm_subnet.egress_existing[0].id
 }
 
-# Management NIC: public IP, NSG, regular networking
+# Management NIC: public IP, NSG, accelerated networking. The Marketplace image
+# registers an interface only if it has a PCI device, and on Azure only an
+# accelerated NIC gets one; without it there is no management interface and
+# vpb-shim panics with "Could not read mgmt IP address".
 resource "azurerm_network_interface" "mgmt" {
   name                           = local.mgmt_nic_name
   resource_group_name            = local.rg_name
   location                       = local.rg_location
-  accelerated_networking_enabled = false
+  accelerated_networking_enabled = true
   ip_forwarding_enabled          = false
   tags                           = var.tags
 
@@ -278,12 +281,12 @@ resource "azurerm_linux_virtual_machine" "vpb" {
   source_image_reference {
     publisher = "keysight-technologies-cloudlens"
     offer     = "keysight-cloudlens-virtual-packet-broker"
-    sku       = "cloudlens-virtual-packet-broker-3-15-0_1"
+    sku       = "cloudlens-virtual-packet-broker-3-16-0_5"
     version   = "latest"
   }
 
   plan {
-    name      = "cloudlens-virtual-packet-broker-3-15-0_1"
+    name      = "cloudlens-virtual-packet-broker-3-16-0_5"
     publisher = "keysight-technologies-cloudlens"
     product   = "keysight-cloudlens-virtual-packet-broker"
   }

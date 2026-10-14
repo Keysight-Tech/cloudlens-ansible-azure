@@ -179,7 +179,7 @@ the filter**: an SE playbook that said VXLAN on a GRE path captured nothing
 and the demo looked broken while the tap worked perfectly.
 
 
-## Marketplace vPB on Azure: adoption blocked inside the image (2026-08-17)
+## Marketplace vPB on Azure: no management interface (2026-08-17, resolved 2026-10-14)
 
 Phases 1-13 of the deploy run unattended. Phase 14 (adopt the vPB) as
 `deploy-stack.sh` runs it looks for an SSH key (`CLOUDLENS_KEY_PEM`, default
@@ -204,11 +204,25 @@ reboot does not re-register it. The shim is the component that announces to
 KVO, so the device can never appear, regardless of network reachability
 (verified open: TCP 443 vPB -> KVO over VNet peering).
 
-The mgmt interface is written by first-boot provisioning. Our ARM template
-passes no customData; whether the image requires it, and in what format, is
-undocumented. The question is with Keysight, stated in full in the team memory
-and commit 3eb1008.
+**Root cause (proven 2026-10-14):** our template created the management NIC
+without accelerated networking. The image builds its interface inventory from
+PCI devices, and on Azure only an accelerated NIC has one (a Mellanox virtual
+function paired with the `hv_netvsc` interface). The two data NICs were
+accelerated, so only they were registered. The vPB database refuses an
+interface with no PCI address (`NOT NULL constraint failed:
+physical_interface.pci_address`).
 
-Until that answers, the Marketplace-image path stops at phase 13 on Azure. The
-GWLB architecture (chapter above) is unaffected: its vPBs are the Linux
-installer build, not this image, and have carried real traffic.
+The proof: 3.16.0-5 on Standard_D8s_v3 in eastus2 with all three NICs
+accelerated, no tag and no policy. `lspci` showed three ConnectX-4 Lx virtual
+functions with unique ids and no Microsoft MANA device; the vPB database
+recorded eth0 as `Management` (`is_mgmt=1`); `show interface-status` marked
+eth0 `* management *`; and after `kvo` / `ip` / `port 443` / `enable`
+vpb-shim stayed Running with 0 restarts, failing only to reach the
+placeholder KVO address. The templates now accelerate all three NICs.
+
+Keysight's view (vPB team, 2026-10-14) was MANA hardware, where NICs stop
+getting one PCI id each; the vPB User Guide now has a `LegacyVMNVA` tag
+section for that. It did not apply to our builds (every NIC was Mellanox with
+a unique id), but it matters on v6 sizes and some v5 hosts. Note that the
+built-in Azure Policy that adds the tag does not list Keysight as a publisher
+by default, so set the tag on the VM or override the policy's publisher list.

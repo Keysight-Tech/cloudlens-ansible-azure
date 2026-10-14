@@ -3,7 +3,7 @@
   "contentVersion": "1.0.0.0",
   "metadata": {
     "title": "Keysight CloudLens Virtual Packet Broker (vPB) from Azure Marketplace",
-    "description": "One-click deployment of a CloudLens Virtual Packet Broker v3.15.0 from Azure Marketplace. Provisions a single vPB VM with three NICs (management, ingress, egress), accelerated networking on the data-plane NICs, a public IP on the management NIC, and an NSG that opens SSH (22 and KCOS 9022), HTTPS (443) and VXLAN (UDP 4789, 10800-10801) from the sources you choose. Access on v3.15: ssh -p 9022 <adminUsername>@<public-ip> (Keysight's own Marketplace listing uses the keysight user with an SSH key pair), then sudo vpb for the CLI. There is no separate CLI password and nothing listens on port 2222: admin / ixia and port 2222 belong to v3.14 and on-prem builds. Allow 10 to 15 minutes after the deployment reports success for the vPB to be fully up; SSH on 9022 and sudo vpb can refuse connections until then.",
+    "description": "One-click deployment of a CloudLens Virtual Packet Broker v3.16.0 from Azure Marketplace. Provisions a single vPB VM with three NICs (management, ingress, egress), accelerated networking on the data-plane NICs, a public IP on the management NIC, and an NSG that opens SSH (22 and KCOS 9022), HTTPS (443) and VXLAN (UDP 4789, 10800-10801) from the sources you choose. Access on v3.15: ssh -p 9022 <adminUsername>@<public-ip> (Keysight's own Marketplace listing uses the keysight user with an SSH key pair), then sudo vpb for the CLI. There is no separate CLI password and nothing listens on port 2222: admin / ixia and port 2222 belong to v3.14 and on-prem builds. Allow 10 to 15 minutes after the deployment reports success for the vPB to be fully up; SSH on 9022 and sudo vpb can refuse connections until then.",
     "author": "Keysight Technologies"
   },
   "parameters": {
@@ -142,7 +142,7 @@
     "mgmtNicName": "[concat(parameters('vmName'), '-mgmt-nic')]",
     "imagePublisher": "keysight-technologies-cloudlens",
     "imageOffer": "keysight-cloudlens-virtual-packet-broker",
-    "imageSku": "cloudlens-virtual-packet-broker-3-15-0_1",
+    "imageSku": "cloudlens-virtual-packet-broker-3-16-0_5",
     "mgmtNicArr": "[array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', variables('mgmtNicName')),'\",\"properties\":{\"primary\":true,\"deleteOption\":\"Delete\"}}')))]",
     "ingressNic1Arr": "[if(greaterOrEquals(parameters('ingressNicCount'), 1), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-ingress-1')),'\",\"properties\":{\"primary\":false,\"deleteOption\":\"Delete\"}}'))), json('[]'))]",
     "ingressNic2Arr": "[if(greaterOrEquals(parameters('ingressNicCount'), 2), array(json(concat('{\"id\":\"',resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), '-ingress-2')),'\",\"properties\":{\"primary\":false,\"deleteOption\":\"Delete\"}}'))), json('[]'))]",
@@ -301,7 +301,7 @@
         "[resourceId('Microsoft.Network/virtualNetworks', variables('effectiveVnetName'))]"
       ],
       "properties": {
-        "enableAcceleratedNetworking": false,
+        "enableAcceleratedNetworking": true,
         "ipConfigurations": [
           {
             "name": "ipconfig1",
@@ -391,7 +391,7 @@
         "egressNicLoop"
       ],
       "plan": {
-        "name": "cloudlens-virtual-packet-broker-3-15-0_1",
+        "name": "cloudlens-virtual-packet-broker-3-16-0_5",
         "publisher": "keysight-technologies-cloudlens",
         "product": "keysight-cloudlens-virtual-packet-broker"
       },

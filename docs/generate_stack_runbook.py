@@ -855,7 +855,7 @@ def build_troubleshooting(doc: Document) -> None:
              "--offer <offer> --plan <plan>"],
             ["Deploy succeeds but VM never starts",
              "Plan name typo (case-sensitive)",
-             "Use exact plan ids: clms-6-13-0_76 and cloudlens-virtual-packet-broker-3-15-0_1"],
+             "Use exact plan ids: clms-6-13-0_76 and cloudlens-virtual-packet-broker-3-16-0_5"],
         ],
         col_widths=[2.0, 2.0, 3.0],
     )

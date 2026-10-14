@@ -75,7 +75,7 @@ earlier and is reused as is.
 |---|---|---|---|---|
 | KVO | `kvo-test-rg` | `20.230.15.87` | `10.60.1.4` | EULA accepted, admin user set |
 | vController | `demo-cloudlens-rg` | `20.122.11.40` | `10.60.10.4` | Project `cloudlens-demo` active |
-| vPB | `demo-cloudlens-rg` | `40.75.119.109` | `10.60.20.4` (mgmt) | v3.15.0-1 Marketplace image, not adopted in KVO (image defect, see OPERATIONS.md section 4c) |
+| vPB | `demo-cloudlens-rg` | `40.75.119.109` | `10.60.20.4` (mgmt) | v3.15.0-1 Marketplace image, not adopted in KVO (management NIC lacked accelerated networking, fixed in the templates 2026-10-14; see OPERATIONS.md section 4c) |
 | Vectra mock | `demo-vectra-rg` | `52.251.127.107` | `10.60.40.4` | nginx + tcpdump ready for UDP/4789 |
 | app01-ubuntu | `demo-prod-rg` | `172.172.73.189` | `10.60.30.4` | Sensor running, registered |
 | app02-ubuntu | `demo-prod-rg` | `20.14.133.93` | `10.60.30.5` | Sensor running, registered |
@@ -268,15 +268,14 @@ specific APIs to APIM Self-Hosted Gateway in AKS - which is a real,
 documented path and we have the runbook.
 
 **Q: "Why is vPB v3.15 saying License Manager Error?"**
-A: KVO auto-licenses a vPB when it adopts it, and this vPB is not
-adopted. The cause is a defect in the Azure Marketplace vPB image
-(3.15.0-1): its `vpb-shim` pod, the component that announces the device
-to KVO, crash-loops because the image carries no management interface,
-only the data ports. It is not a VNet peering or NSG problem; TCP 443
-from the vPB to the KVO was verified open. OPERATIONS.md section 4c has
-the known-issue entry and `docs/AZURE_TAPPING_ARCHITECTURE.md` has the
-evidence and the open question to Keysight. The out-of-band data path
-works regardless: the vPB is configured directly from `sudo vpb`.
+A: KVO auto-licenses a vPB when it adopts it, and this vPB was never
+adopted. Its management NIC was created without accelerated networking, so
+the Marketplace image registered no management interface and its `vpb-shim`
+pod, the component that announces the device to KVO, crash-looped with
+`Could not read mgmt IP address`. It was not a VNet peering or NSG problem.
+The templates now accelerate all three NICs (proven on 3.16.0-5, 2026-10-14);
+OPERATIONS.md section 4c has the details. The out-of-band data path works
+regardless: the vPB can be configured directly from `sudo vpb`.
 
 **Q: "Can we audit your code?"**
 A: All open source.

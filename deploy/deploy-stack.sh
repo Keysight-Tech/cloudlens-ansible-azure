@@ -79,7 +79,7 @@ KVO_PLAN="keysight_vision_orchestrator_3-0-0_55"
 
 VPB_PUBLISHER="keysight-technologies-cloudlens"
 VPB_OFFER="keysight-cloudlens-virtual-packet-broker"
-VPB_PLAN="cloudlens-virtual-packet-broker-3-15-0_1"
+VPB_PLAN="cloudlens-virtual-packet-broker-3-16-0_5"
 
 # All defaults below are env-var overridable. Customer can:
 #   - Just paste the curl line: gets the defaults below

@@ -269,8 +269,30 @@ def check_ui(fname, wants_sensor):
                "outputs sensorSourcePrefix VirtualNetwork", "got %r" % outputs.get("sensorSourcePrefix"))
 
 
+def check_vpb_nics():
+    # The Marketplace vPB registers an interface only if it has a PCI device,
+    # and on Azure only an accelerated NIC gets one. A management NIC without
+    # it leaves the vPB with no management interface and vpb-shim panics with
+    # "Could not read mgmt IP address" (proven 2026-10-14 on 3.16.0-5).
+    fname = "vpb-marketplace.json"
+    doc = load(fname)
+    if doc is None:
+        return
+    nics = resources(doc, "Microsoft.Network/networkInterfaces")
+    off = [n.get("name", "?") for n in nics
+           if n.get("properties", {}).get("enableAcceleratedNetworking") is not True]
+    report(bool(nics) and not off, fname, "every vPB NIC has accelerated networking, management included",
+           "not accelerated: %s" % ", ".join(off))
+    tf = os.path.join(TDIR, "terraform", "vpb", "main.tf")
+    with open(tf) as fh:
+        flags = re.findall(r"accelerated_networking_enabled\s*=\s*(\w+)", fh.read())
+    report(len(flags) >= 3 and all(f == "true" for f in flags), "terraform/vpb/main.tf",
+           "every vPB NIC has accelerated networking, management included", "found %s" % flags)
+
+
 for fname in sorted(PRODUCTS):
     check_product(fname, PRODUCTS[fname])
+check_vpb_nics()
 check_stack()
 for fname in sorted(UI_FILES):
     check_ui(fname, UI_FILES[fname])

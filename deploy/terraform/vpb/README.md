@@ -62,5 +62,5 @@ After `terraform apply` completes:
 az vm image terms accept \
   --publisher keysight-technologies-cloudlens \
   --offer keysight-cloudlens-virtual-packet-broker \
-  --plan cloudlens-virtual-packet-broker-3-15-0_1
+  --plan cloudlens-virtual-packet-broker-3-16-0_5
 ```

@@ -356,24 +356,28 @@ all three. If `username` is not a verb, try `user` or `auth`.
 
 Both happen one time at KVO bootstrap.
 
-**Known issue (Marketplace vPB image 3.15.0-1 in Azure, recorded 2026-08-17).**
-Even with everything above configured, `show kvo` stays `disconnected`
-because the image's `vpb-shim` pod, the component that announces the device to
-KVO, crash-loops with `Could not read mgmt IP address`: the vpbsystem
-interface inventory holds only the data ports (eth1/eth2) and no management
-interface, and the CLI cannot create one. Network reachability is not the
-cause; TCP 443 from the vPB to the KVO was verified open. The evidence and the
-open question to Keysight are in `docs/AZURE_TAPPING_ARCHITECTURE.md`
-("Marketplace vPB on Azure: adoption blocked inside the image").
+**Management NIC must have accelerated networking (resolved 2026-10-14).**
+Symptom: `show kvo` stays `disconnected`, `show interface-status` lists only
+eth1/eth2 with no `* management *` interface, and the `vpb-shim` pod
+crash-loops with `Could not read mgmt IP address`.
 
-**Workaround:** the out-of-band path (sensors -> vPB -> tool) works without
-KVO adoption; configure the vPB directly from `sudo vpb` and ignore the KVO
-status. The GWLB architecture is unaffected: its vPBs are the Linux installer
-build, not this image.
+Cause: the Marketplace image registers an interface only if it has a PCI
+device. On Azure only an accelerated NIC gets one (a Mellanox or MANA virtual
+function next to the `hv_netvsc` interface). Earlier versions of this
+template created the management NIC without accelerated networking, so the
+image never saw it. It was not an image defect: 3.16.0-5 with all three NICs
+accelerated records eth0 as `Management` and vpb-shim runs cleanly.
 
-If you need KVO adoption, open a Keysight TAC ticket with `show version`, the
-management NIC's NSG rules, and
-`sudo kubectl logs -n default <pod> -c vpb-shim`.
+Fix: all three NICs are accelerated in `deploy/vpb-marketplace.json` and
+`deploy/terraform/vpb`. For a vPB deployed by hand, enable accelerated
+networking on the management NIC as well (stop the VM, then
+`az network nic update -g <rg> -n <mgmt-nic> --accelerated-networking true`).
+Check on the vPB: `lspci` shows one virtual function per NIC, and
+`show interface-status` marks eth0 `* management *`.
+
+On sizes that Azure places on MANA hardware (v6, and some v5 hosts since May
+2026) each NIC may no longer get its own PCI id. The vPB User Guide covers this
+with the `LegacyVMNVA` VM tag.
 
 **Step 4: Confirm vPB is talking to KVO**
 
@@ -482,7 +486,7 @@ For the GWLB hairpin pattern (inline, a separate use case), see the
 | `ssh admin@localhost -p 2222` "connection refused" inside OS shell | v3.14 and earlier: the vPB CLI service is not up yet. v3.15+: nothing listens on 2222; the CLI lives inside the vpbsystem pod | v3.14: wait for the vpbsystem container to be running (`docker ps` on the generic installer, `kubectl get pods --all-namespaces` showing every pod `Running` on a Kubernetes install), then retry. v3.15+: run `sudo vpb` (section 2) |
 | vController REST API returns 405 | nginx is serving the web app but the API backend is not up yet (about 10 min after boot), or the call targets a path that does not exist on this product | Wait until POST /cloudlens/api/v1/identity/login answers 400, 401 or 422; use the /cloudlens/api/v1 families |
 | vController SSH "Permission denied" with right password | Seen in the lab before the first web UI login (section 2) | Complete the EULA and first-login password change in the browser once, then retry |
-| KVO `Devices > Adoptable` empty | vPB/vController cannot reach KVO (separate VNets without peering, or the Marketplace vPB image's missing management interface) | Deploy with deploy-stack.sh, which puts all three in one VNet; for separate VNets add peering; for the image defect see AZURE_TAPPING_ARCHITECTURE.md |
+| KVO `Devices > Adoptable` empty | vPB/vController cannot reach KVO (separate VNets without peering, or a vPB management NIC without accelerated networking, see section 4c) | Deploy with deploy-stack.sh, which puts all three in one VNet; for separate VNets add peering; for the vPB, enable accelerated networking on its management NIC (section 4c) |
 | KVO adoption shows `Licensed` but vPB does not forward traffic | License is for vController only | Activate the **vPB** license, not the vController one |
 | `nc -zv vpb-public-ip 4789` succeeds but no packets at Vectra | Match rule missing or tunnel target wrong | `show running-config` + `show statistics` to verify |
 | Workload VM SSH "no route" to vController | Missing VNet peering | Peer prod VNet to vController VNet |

@@ -511,7 +511,7 @@ If you do not have a vController, KVO or Virtual Packet Broker running yet, depl
 |---|---|---|
 | vController (formerly CLMS) | 6.14.0_89 | keysight-technologies-cloudlens / keysight-cloudlens-vcontroller / cloudlens-vcontroller-6-14-0_89 |
 | KVO (Keysight Vision Orchestrator) | 3.0.0_55 | keysight-technologies-kvop / keysight-vision-orchestrator / keysight_vision_orchestrator_3-0-0_55 |
-| vPB (Virtual Packet Broker) | 3.15.0_1 | keysight-technologies-cloudlens / keysight-cloudlens-virtual-packet-broker / cloudlens-virtual-packet-broker-3-15-0_1 |
+| vPB (Virtual Packet Broker) | 3.16.0_5 | keysight-technologies-cloudlens / keysight-cloudlens-virtual-packet-broker / cloudlens-virtual-packet-broker-3-16-0_5 |
 
 > **Note about the marketplace names:** the legacy `keysight-cloudlens-manager-preview` offer is gone. The Deploy buttons above and `deploy-stack.sh` point at the offer IDs in this table.
 
@@ -521,7 +521,7 @@ After the vController deploys (about 15 minutes to initialize), open the UI, com
 > ```bash
 > az vm image terms accept --publisher keysight-technologies-cloudlens --offer keysight-cloudlens-vcontroller --plan cloudlens-vcontroller-6-14-0_89
 > az vm image terms accept --publisher keysight-technologies-kvop --offer keysight-vision-orchestrator --plan keysight_vision_orchestrator_3-0-0_55
-> az vm image terms accept --publisher keysight-technologies-cloudlens --offer keysight-cloudlens-virtual-packet-broker --plan cloudlens-virtual-packet-broker-3-15-0_1
+> az vm image terms accept --publisher keysight-technologies-cloudlens --offer keysight-cloudlens-virtual-packet-broker --plan cloudlens-virtual-packet-broker-3-16-0_5
 > ```
 
 ### Prefer Terraform?
