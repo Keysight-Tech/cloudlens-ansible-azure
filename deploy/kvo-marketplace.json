@@ -95,7 +95,7 @@
     "nicName": "[concat(parameters('vmName'), '-nic')]",
     "imagePublisher": "keysight-technologies-kvop",
     "imageOffer": "keysight-vision-orchestrator",
-    "imageSku": "keysight_vision_orchestrator_3-0-0_55"
+    "imageSku": "keysight_vision_orchestrator_3-1-0_2222"
   },
   "resources": [
     {
@@ -222,7 +222,7 @@
         "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
       ],
       "plan": {
-        "name": "keysight_vision_orchestrator_3-0-0_55",
+        "name": "keysight_vision_orchestrator_3-1-0_2222",
         "publisher": "keysight-technologies-kvop",
         "product": "keysight-vision-orchestrator"
       },

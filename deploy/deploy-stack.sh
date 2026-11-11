@@ -70,12 +70,12 @@ VPB_TEMPLATE_URL="${REPO_RAW}/deploy/vpb-marketplace.json"
 # vController (formerly CLMS) marketplace coordinates
 CLMS_PUBLISHER="keysight-technologies-cloudlens"
 CLMS_OFFER="keysight-cloudlens-vcontroller"
-CLMS_PLAN="cloudlens-vcontroller-6-14-0_89"
+CLMS_PLAN="cloudlens-vcontroller-6-14-1_45"
 
 # KVO (Keysight Vision Orchestrator) marketplace coordinates
 KVO_PUBLISHER="keysight-technologies-kvop"
 KVO_OFFER="keysight-vision-orchestrator"
-KVO_PLAN="keysight_vision_orchestrator_3-0-0_55"
+KVO_PLAN="keysight_vision_orchestrator_3-1-0_2222"
 
 VPB_PUBLISHER="keysight-technologies-cloudlens"
 VPB_OFFER="keysight-cloudlens-virtual-packet-broker"

@@ -185,12 +185,12 @@ resource "azurerm_linux_virtual_machine" "kvo" {
   source_image_reference {
     publisher = "keysight-technologies-kvop"
     offer     = "keysight-vision-orchestrator"
-    sku       = "keysight_vision_orchestrator_3-0-0_55"
+    sku       = "keysight_vision_orchestrator_3-1-0_2222"
     version   = "latest"
   }
 
   plan {
-    name      = "keysight_vision_orchestrator_3-0-0_55"
+    name      = "keysight_vision_orchestrator_3-1-0_2222"
     publisher = "keysight-technologies-kvop"
     product   = "keysight-vision-orchestrator"
   }

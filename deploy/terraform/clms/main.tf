@@ -170,12 +170,12 @@ resource "azurerm_linux_virtual_machine" "clms" {
   source_image_reference {
     publisher = "keysight-technologies-cloudlens"
     offer     = "keysight-cloudlens-vcontroller"
-    sku       = "cloudlens-vcontroller-6-14-0_89"
+    sku       = "cloudlens-vcontroller-6-14-1_45"
     version   = "latest"
   }
 
   plan {
-    name      = "cloudlens-vcontroller-6-14-0_89"
+    name      = "cloudlens-vcontroller-6-14-1_45"
     publisher = "keysight-technologies-cloudlens"
     product   = "keysight-cloudlens-vcontroller"
   }
