@@ -179,6 +179,12 @@ CYPERF_TEMPLATE_URL="${REPO_RAW}/deploy/cyperf-marketplace.json"
 CYPERF_ADMIN_USER="admin"
 CYPERF_FACTORY_PASS='CyPerf&Keysight#1'
 CYPERF_ADDRESS=""; CYPERF_CLIENT_IP=""; CYPERF_SERVER_IP=""
+# The relay: a small Linux VM the client agent sends through, which forwards
+# to the server agent. It carries the discovery tag, so the sensor chain puts
+# a CloudLens sensor on it and every generated packet becomes tappable. On by
+# default: without it the traffic never leaves two appliances no sensor runs on.
+CYPERF_RELAY="${CLOUDLENS_CYPERF_RELAY:-true}"
+CYPERF_RELAY_IP=""; CYPERF_RELAY_PUBLIC_IP=""
 CYPERF_LAUNCH_OK=false; CYPERF_STATE="not configured"
 # Where the sample cluster's nodes go. Phase 5b builds the portal template's
 # five subnets and none of them is for workloads, so the nodes sit beside the
@@ -439,6 +445,11 @@ Kubernetes (AKS) pod tapping:
                             or answer the hidden prompt. Never an argument.
                             Quantity 1 is activated per deploy.
   --cyperf-mbps N           Traffic rate of the generated test (default 10).
+  --cyperf-relay / --no-cyperf-relay
+                            Relay VM between the agents (default on): the
+                            client sends to it, it forwards to the server, and
+                            it carries the discovery tag so a CloudLens sensor
+                            on it sees every generated packet.
   --cyperf-controller-size S, --cyperf-agent-size S
                             VM sizes (defaults Standard_D8ads_v5 and
                             Standard_D4ads_v5, Keysight's own; override when
@@ -564,12 +575,15 @@ while [[ $# -gt 0 ]]; do
     --no-vpb) DEPLOY_VPB=false; shift ;;
     --with-vpb) DEPLOY_VPB=true; shift ;;
     --no-sensors) CHAIN_SENSORS=false; shift ;;
+    --with-sensors) CHAIN_SENSORS=true; shift ;;
 
     # Kubernetes (AKS) pod tapping
     --with-cyperf) DEPLOY_CYPERF=true; shift ;;
     --no-cyperf) DEPLOY_CYPERF=false; shift ;;
     --cyperf-license-file) DEPLOY_CYPERF=true; CYPERF_LICENSE_FILE="$2"; shift 2 ;;
     --cyperf-mbps) CYPERF_MBPS="$2"; shift 2 ;;
+    --cyperf-relay) CYPERF_RELAY=true; shift ;;
+    --no-cyperf-relay) CYPERF_RELAY=false; shift ;;
     --cyperf-controller-size) CYPERF_CONTROLLER_SIZE="$2"; shift 2 ;;
     --cyperf-agent-size) CYPERF_AGENT_SIZE="$2"; shift 2 ;;
     --cyperf-version) CYPERF_VERSION="$2"; shift 2 ;;
@@ -1192,9 +1206,14 @@ if [[ "$DEPLOY_CYPERF" == "true" ]]; then
     read -rsp "  CyPerf activation code: " CYPERF_LICENSE_CODE || true; echo
     CYPERF_LICENSE_CODE="$(printf '%s' "$CYPERF_LICENSE_CODE" | tr -d '[:space:]')"
   fi
-  note "CyPerf agents are appliances and cannot host a CloudLens sensor, and Azure has"
-  note "no agentless mirror here: their traffic is generated between the agents, and"
-  note "is tapped only where it passes a VM that carries a sensor."
+  if [[ "$CYPERF_RELAY" == "true" ]]; then
+    note "CyPerf agents are appliances and cannot host a CloudLens sensor, so the traffic"
+    note "runs through a small relay VM tagged ${DISCOVERY_TAG_KEY}=${DISCOVERY_TAG_VALUE}: the sensor"
+    note "chain installs a sensor on it and every generated packet is tapped there."
+  else
+    note "No relay (--no-cyperf-relay): the traffic stays between the two agents, which"
+    note "cannot host a sensor, so CloudLens does not see it."
+  fi
 fi
 ok "Deploy CyPerf: ${DEPLOY_CYPERF}$([[ "$DEPLOY_CYPERF" == "true" ]] && echo " (${CYPERF_MBPS} Mbps, licence $([[ -n "$CYPERF_LICENSE_CODE" ]] && echo supplied || echo "NOT supplied: traffic will not start"))")"
 
@@ -1892,10 +1911,15 @@ if [[ "$DEPLOY_CYPERF" == "true" ]]; then
   step "Phase 9b: Deploy CyPerf (controller + client agent + server agent)"
   cy_controller="${CYPERF_NAME_PREFIX}-controller"
   if [[ "$DRY_RUN" == "true" ]]; then
-    dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-file deploy/cyperf-marketplace.json --parameters namePrefix=${CYPERF_NAME_PREFIX} vnetName=${VNET_NAME} mgmtSubnetName=${SUBNET_VCONTROLLER} testSubnetName=${SUBNET_VPB_INGRESS} cyperfVersion=${CYPERF_VERSION} controllerVmSize=${CYPERF_CONTROLLER_SIZE} agentVmSize=${CYPERF_AGENT_SIZE} sshPublicKey=<key>"
+    dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-file deploy/cyperf-marketplace.json --parameters namePrefix=${CYPERF_NAME_PREFIX} vnetName=${VNET_NAME} mgmtSubnetName=${SUBNET_VCONTROLLER} testSubnetName=${SUBNET_VPB_INGRESS} cyperfVersion=${CYPERF_VERSION} controllerVmSize=${CYPERF_CONTROLLER_SIZE} agentVmSize=${CYPERF_AGENT_SIZE} sshPublicKey=<key> deployRelay=${CYPERF_RELAY}"
     CYPERF_ADDRESS="203.0.113.40"; CYPERF_CLIENT_IP="10.0.0.41"; CYPERF_SERVER_IP="10.0.0.42"; CYPERF_LAUNCH_OK=true
-  elif az vm show -g "$RESOURCE_GROUP" -n "$cy_controller" >/dev/null 2>&1; then
+  elif az vm show -g "$RESOURCE_GROUP" -n "$cy_controller" >/dev/null 2>&1 \
+       && { [[ "$CYPERF_RELAY" != "true" ]] || az vm show -g "$RESOURCE_GROUP" -n "${CYPERF_NAME_PREFIX}-relay" >/dev/null 2>&1; }; then
     warn "${cy_controller} already exists, reusing"
+    if [[ "$CYPERF_RELAY" == "true" ]]; then
+      CYPERF_RELAY_IP="$(az network nic show -g "$RESOURCE_GROUP" -n "${CYPERF_NAME_PREFIX}-relay-nic" --query 'ipConfigurations[0].privateIPAddress' -o tsv 2>/dev/null || echo "")"
+      CYPERF_RELAY_PUBLIC_IP="$(az network public-ip show -g "$RESOURCE_GROUP" -n "${CYPERF_NAME_PREFIX}-relay-pip" --query ipAddress -o tsv 2>/dev/null || echo "")"
+    fi
     CYPERF_ADDRESS="$(az network public-ip show -g "$RESOURCE_GROUP" -n "${CYPERF_NAME_PREFIX}-controller-pip" --query ipAddress -o tsv 2>/dev/null || echo "")"
     CYPERF_CLIENT_IP="$(az network nic show -g "$RESOURCE_GROUP" -n "${CYPERF_NAME_PREFIX}-client-mgmt-nic" --query 'ipConfigurations[0].privateIPAddress' -o tsv 2>/dev/null || echo "")"
     CYPERF_SERVER_IP="$(az network nic show -g "$RESOURCE_GROUP" -n "${CYPERF_NAME_PREFIX}-server-mgmt-nic" --query 'ipConfigurations[0].privateIPAddress' -o tsv 2>/dev/null || echo "")"
@@ -1930,10 +1954,14 @@ if [[ "$DEPLOY_CYPERF" == "true" ]]; then
                sshPublicKey="$(cat "$cy_pub")" cyperfVersion="$CYPERF_VERSION" \
                controllerSku="$CYPERF_CONTROLLER_SKU" agentSku="$CYPERF_AGENT_SKU" \
                controllerVmSize="$CYPERF_CONTROLLER_SIZE" agentVmSize="$CYPERF_AGENT_SIZE" \
+               deployRelay="$CYPERF_RELAY" relayAdminPassword="$ADMIN_PASSWORD" \
+               relayTagKey="$DISCOVERY_TAG_KEY" relayTagValue="$DISCOVERY_TAG_VALUE" \
            --query 'properties.outputs' -o json > /tmp/cyperf-outputs.json 2>/tmp/cyperf-deploy-err; then
         CYPERF_ADDRESS="$(python3 -c "import json; print(json.load(open('/tmp/cyperf-outputs.json'))['controllerPublicIp']['value'])" 2>/dev/null || echo "")"
         CYPERF_CLIENT_IP="$(python3 -c "import json; print(json.load(open('/tmp/cyperf-outputs.json'))['clientControlIp']['value'])" 2>/dev/null || echo "")"
         CYPERF_SERVER_IP="$(python3 -c "import json; print(json.load(open('/tmp/cyperf-outputs.json'))['serverControlIp']['value'])" 2>/dev/null || echo "")"
+        CYPERF_RELAY_IP="$(python3 -c "import json; print(json.load(open('/tmp/cyperf-outputs.json'))['relayTestIp']['value'])" 2>/dev/null || echo "")"
+        CYPERF_RELAY_PUBLIC_IP="$(python3 -c "import json; print(json.load(open('/tmp/cyperf-outputs.json'))['relayPublicIp']['value'])" 2>/dev/null || echo "")"
         [[ -n "$CYPERF_ADDRESS" && -n "$CYPERF_CLIENT_IP" && -n "$CYPERF_SERVER_IP" ]] && CYPERF_LAUNCH_OK=true
       else
         warn "The CyPerf deployment failed; the rest of the run continues. Azure said:"
@@ -1945,6 +1973,9 @@ if [[ "$DEPLOY_CYPERF" == "true" ]]; then
   fi
   if [[ "$CYPERF_LAUNCH_OK" == "true" ]]; then
     ok "CyPerf controller at ${CYPERF_ADDRESS}; agents ${CYPERF_CLIENT_IP} (client) and ${CYPERF_SERVER_IP} (server)."
+    if [[ -n "$CYPERF_RELAY_IP" ]]; then
+      ok "CyPerf relay at ${CYPERF_RELAY_IP} (public ${CYPERF_RELAY_PUBLIC_IP:-none}), tagged ${DISCOVERY_TAG_KEY}=${DISCOVERY_TAG_VALUE} for the sensor chain."
+    fi
   fi
 fi
 
@@ -2540,7 +2571,8 @@ if [[ "$DEPLOY_CYPERF" == "true" ]]; then
     CLOUDLENS_CYPERF_LICENSE_CODE="$CYPERF_LICENSE_CODE" \
       python3 "$CYPERF_SCRIPT" --controller "$CYPERF_ADDRESS" --insecure \
         --client-ip "$CYPERF_CLIENT_IP" --server-ip "$CYPERF_SERVER_IP" \
-        --mbps "$CYPERF_MBPS" --session-name "${RESOURCE_GROUP} traffic" || cy_rc=$?
+        --mbps "$CYPERF_MBPS" --session-name "${RESOURCE_GROUP} traffic" \
+        --dut-host "$CYPERF_RELAY_IP" || cy_rc=$?
     case "$cy_rc" in
       0) CYPERF_STATE="licensed, traffic running at ${CYPERF_MBPS} Mbps"
          ok "CyPerf is licensed, both agents are connected and traffic is running (${CYPERF_MBPS} Mbps, client to server)." ;;
@@ -2687,6 +2719,7 @@ VSUMMARY
 Controller UI:      https://${CYPERF_ADDRESS}/   (${CYPERF_ADMIN_USER} / factory default password, change it under Settings)
 Client agent:       ${CYPERF_CLIENT_IP} (management interface)
 Server agent:       ${CYPERF_SERVER_IP} (management interface)
+Relay VM:           ${CYPERF_RELAY_IP:-none}   (client -> relay -> server; carries the sensor that taps the traffic)
 State:              ${CYPERF_STATE}
 Licence:            released by teardown-stack.sh before the group is deleted
 

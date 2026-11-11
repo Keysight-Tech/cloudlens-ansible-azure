@@ -92,6 +92,42 @@
       "metadata": {
         "description": "Its password. The default is the documented product default."
       }
+    },
+    "deployRelay": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Add a small Linux relay VM between the agents. The client agent sends to the relay, the relay forwards to the server agent, so every generated packet crosses a VM that can carry a CloudLens sensor. Without it the traffic stays between two appliances no sensor can run on."
+      }
+    },
+    "relayVmSize": {
+      "type": "string",
+      "defaultValue": "Standard_B2s"
+    },
+    "relayAdminUsername": {
+      "type": "string",
+      "defaultValue": "azureuser",
+      "metadata": {
+        "description": "The sensor install logs in as this user."
+      }
+    },
+    "relayAdminPassword": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional password for that user (the deploy's admin password), so the sensor install works with or without an SSH key. Empty = key only."
+      }
+    },
+    "relayTagKey": {
+      "type": "string",
+      "defaultValue": "cloudlens",
+      "metadata": {
+        "description": "Discovery tag put on the relay so the sensor install finds it."
+      }
+    },
+    "relayTagValue": {
+      "type": "string",
+      "defaultValue": "yes"
     }
   },
   "variables": {
@@ -113,7 +149,32 @@
     "serverMgmtNic": "[concat(parameters('namePrefix'), '-server-mgmt-nic')]",
     "serverTestNic": "[concat(parameters('namePrefix'), '-server-test-nic')]",
     "controllerSku": "[parameters('controllerSku')]",
-    "agentSku": "[parameters('agentSku')]"
+    "agentSku": "[parameters('agentSku')]",
+    "relayName": "[concat(parameters('namePrefix'), '-relay')]",
+    "relayNic": "[concat(parameters('namePrefix'), '-relay-nic')]",
+    "relayPip": "[concat(parameters('namePrefix'), '-relay-pip')]",
+    "relayLinuxKeyOnly": {
+      "disablePasswordAuthentication": true,
+      "ssh": {
+        "publicKeys": [
+          {
+            "path": "[concat('/home/', parameters('relayAdminUsername'), '/.ssh/authorized_keys')]",
+            "keyData": "[parameters('sshPublicKey')]"
+          }
+        ]
+      }
+    },
+    "relayLinuxWithPassword": {
+      "disablePasswordAuthentication": false,
+      "ssh": {
+        "publicKeys": [
+          {
+            "path": "[concat('/home/', parameters('relayAdminUsername'), '/.ssh/authorized_keys')]",
+            "keyData": "[parameters('sshPublicKey')]"
+          }
+        ]
+      }
+    }
   },
   "resources": [
     {
@@ -523,6 +584,101 @@
           ]
         }
       }
+    },
+    {
+      "condition": "[parameters('deployRelay')]",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('relayPip')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "sku": {
+        "name": "Standard"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Static"
+      }
+    },
+    {
+      "condition": "[parameters('deployRelay')]",
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('relayNic')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]",
+        "[resourceId('Microsoft.Network/publicIPAddresses', variables('relayPip'))]"
+      ],
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('testSubnetId')]"
+              },
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('relayPip'))]"
+              }
+            }
+          }
+        ],
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+        }
+      }
+    },
+    {
+      "condition": "[parameters('deployRelay')]",
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('relayName')]",
+      "location": "[parameters('location')]",
+      "tags": "[union(variables('tags'), createObject('cloudlensRole', 'cyperf-relay'), createObject(parameters('relayTagKey'), parameters('relayTagValue')))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('relayNic'))]",
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('serverTestNic'))]"
+      ],
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[parameters('relayVmSize')]"
+        },
+        "osProfile": {
+          "computerName": "[variables('relayName')]",
+          "adminUsername": "[parameters('relayAdminUsername')]",
+          "adminPassword": "[if(empty(parameters('relayAdminPassword')), json('null'), parameters('relayAdminPassword'))]",
+          "customData": "[base64(concat('#!/bin/bash\n# CloudLens CyPerf relay: forward every TCP connection except SSH to the\n# CyPerf server agent, answering from this VM, so both legs cross its NIC.\nSERVER=', reference(resourceId('Microsoft.Network/networkInterfaces', variables('serverTestNic'))).ipConfigurations[0].properties.privateIPAddress, '\ncat > /usr/local/sbin/cyperf-relay.sh <<EOS\n#!/bin/bash\nsysctl -w net.ipv4.ip_forward=1 >/dev/null\niptables -t nat -C PREROUTING -p tcp -m multiport ! --dports 22 -j DNAT --to-destination $SERVER 2>/dev/null || iptables -t nat -A PREROUTING -p tcp -m multiport ! --dports 22 -j DNAT --to-destination $SERVER\niptables -t nat -C POSTROUTING -p tcp -d $SERVER -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -p tcp -d $SERVER -j MASQUERADE\nEOS\nchmod 755 /usr/local/sbin/cyperf-relay.sh\ncat > /etc/systemd/system/cyperf-relay.service <<EOS\n[Unit]\nDescription=CloudLens CyPerf relay (DNAT to the CyPerf server agent)\nAfter=network-online.target\nWants=network-online.target\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/local/sbin/cyperf-relay.sh\n[Install]\nWantedBy=multi-user.target\nEOS\nsystemctl daemon-reload\nsystemctl enable --now cyperf-relay.service\n'))]",
+          "linuxConfiguration": "[if(empty(parameters('relayAdminPassword')), variables('relayLinuxKeyOnly'), variables('relayLinuxWithPassword'))]"
+        },
+        "storageProfile": {
+          "osDisk": {
+            "createOption": "FromImage",
+            "deleteOption": "Delete",
+            "managedDisk": {
+              "storageAccountType": "StandardSSD_LRS"
+            }
+          },
+          "imageReference": {
+            "publisher": "Canonical",
+            "offer": "0001-com-ubuntu-server-jammy",
+            "sku": "22_04-lts-gen2",
+            "version": "latest"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('relayNic'))]",
+              "properties": {
+                "primary": true,
+                "deleteOption": "Delete"
+              }
+            }
+          ]
+        }
+      }
     }
   ],
   "outputs": {
@@ -549,6 +705,14 @@
     "serverTestIp": {
       "type": "string",
       "value": "[reference(resourceId('Microsoft.Network/networkInterfaces', variables('serverTestNic'))).ipConfigurations[0].properties.privateIPAddress]"
+    },
+    "relayTestIp": {
+      "type": "string",
+      "value": "[if(parameters('deployRelay'), reference(resourceId('Microsoft.Network/networkInterfaces', variables('relayNic')), '2023-09-01', 'Full').properties.ipConfigurations[0].properties.privateIPAddress, '')]"
+    },
+    "relayPublicIp": {
+      "type": "string",
+      "value": "[if(parameters('deployRelay'), reference(resourceId('Microsoft.Network/publicIPAddresses', variables('relayPip')), '2023-09-01', 'Full').properties.ipAddress, '')]"
     }
   }
 }
