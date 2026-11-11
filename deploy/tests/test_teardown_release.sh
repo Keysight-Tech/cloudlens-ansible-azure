@@ -166,6 +166,20 @@ if [[ "${STUB_AKS:-0}" == "1" ]]; then
 ${AKS_NAME}|$AKS_T
 ${ACR_NAME}|$ACR_T"
 fi
+# STUB_CYPERF=1: the CyPerf add-on (deploy-stack.sh --with-cyperf). A
+# controller from a non-CloudLens Marketplace plan, a plain Ubuntu relay, one
+# shared NSG. All but the disks are tagged deployedBy + cloudlensComponent.
+if [[ "${STUB_CYPERF:-0}" == "1" ]]; then
+  RES="$RES
+cloudlens-cyperf-controller|$VM_T
+cloudlens-cyperf-controller-nic|$NIC_T
+cloudlens-cyperf-controller-pip|$PIP_T
+cloudlens-cyperf-controller_OsDisk_1_eee|$DISK_T
+cloudlens-cyperf-relay|$VM_T
+cloudlens-cyperf-relay-nic|$NIC_T
+cloudlens-cyperf-relay_OsDisk_1_fff|$DISK_T
+cloudlens-cyperf-nsg|$NSG_T"
+fi
 if [[ "${STUB_EMPTY_GROUP:-0}" == "1" ]]; then RES=""; fi
 rid() { printf '%s/%s/%s' "$P" "$2" "$1"; }
 
@@ -175,6 +189,7 @@ vm_product() {
     vcontroller) echo "keysight-cloudlens-vcontroller" ;;
     kvo) echo "keysight-vision-orchestrator" ;;
     vpb) echo "keysight-cloudlens-virtual-packet-broker" ;;
+    cloudlens-cyperf-controller) echo "keysight-cyperf" ;;
     *) echo "None" ;;
   esac
 }
@@ -183,6 +198,8 @@ vm_disk() {
     vcontroller) rid vcontroller_OsDisk_1_aaa "$DISK_T" ;;
     kvo) rid kvo_OsDisk_1_bbb "$DISK_T" ;;
     vpb) rid vpb_OsDisk_1_ccc "$DISK_T" ;;
+    cloudlens-cyperf-controller) rid cloudlens-cyperf-controller_OsDisk_1_eee "$DISK_T" ;;
+    cloudlens-cyperf-relay) rid cloudlens-cyperf-relay_OsDisk_1_fff "$DISK_T" ;;
     *) rid customer_OsDisk_1_ddd "$DISK_T" ;;
   esac
 }
@@ -191,6 +208,8 @@ vm_nics() {
     vcontroller) rid vcontroller-nic "$NIC_T" ;;
     kvo) rid kvo-nic "$NIC_T" ;;
     vpb) printf '%s %s %s' "$(rid vpb-mgmt-nic "$NIC_T")" "$(rid vpb-ingress-1 "$NIC_T")" "$(rid vpb-egress-1 "$NIC_T")" ;;
+    cloudlens-cyperf-controller) rid cloudlens-cyperf-controller-nic "$NIC_T" ;;
+    cloudlens-cyperf-relay) rid cloudlens-cyperf-relay-nic "$NIC_T" ;;
     *) rid customer-nic "$NIC_T" ;;
   esac
 }
@@ -246,6 +265,11 @@ case "$cmd" in
   "group delete")
     shift 2; rec group delete "$@" ;;
   "vm list")
+    # Phase 4c asks for the CyPerf controller by its role tag.
+    if printf '%s\n' "$@" | grep -q -- 'cloudlensRole'; then
+      if [[ "${STUB_CYPERF:-0}" == "1" ]] && ! gone "$(rid cloudlens-cyperf-controller "$VM_T")"; then echo cloudlens-cyperf-controller; fi
+      exit 0
+    fi
     while IFS='|' read -r n t; do
       [[ "$t" == "$VM_T" ]] || continue
       gone "$(rid "$n" "$t")" && continue
@@ -267,6 +291,16 @@ case "$cmd" in
   "vm delete")
     shift 2; rec vm delete "$@" ;;
   "resource list")
+    # The CyPerf add-on's listing: only resources carrying both of its tags.
+    if printf '%s\n' "$@" | grep -q -- 'cloudlensComponent'; then
+      if [[ "${STUB_CYPERF:-0}" == "1" ]]; then
+        for n in "cloudlens-cyperf-controller|$VM_T" "cloudlens-cyperf-controller-nic|$NIC_T" "cloudlens-cyperf-controller-pip|$PIP_T" \
+                 "cloudlens-cyperf-relay|$VM_T" "cloudlens-cyperf-relay-nic|$NIC_T" "cloudlens-cyperf-nsg|$NSG_T"; do
+          gone "$(rid "${n%%|*}" "${n##*|}")" || printf '%s\n' "$(rid "${n%%|*}" "${n##*|}")"
+        done
+      fi
+      exit 0
+    fi
     # The teardown's second listing asks only for VNets carrying the deploy's
     # tag; only the shared VNet has it.
     if printf '%s\n' "$@" | grep -q -- '--resource-type'; then
@@ -395,7 +429,7 @@ begin_case() {
   # behaviour defaults, overridden per case before run_teardown
   export LIST_COUNT=0 RELEASE_RC=0 STUB_NO_TAG=0 STUB_OTHER=0 STUB_DELETE_OPTION=0 STUB_SHARED_VNET=0 STUB_FOREIGN_NIC=0
   export STUB_AKS=0 STUB_AKS_UNTAGGED=0 STUB_AKS_ONETAG="" STUB_AKS_SHOW_FAIL=0 STUB_AKS_DELETE_FAIL=0 STUB_NODE_RG_TARGET=0
-  export STUB_RES_LIST_FAIL=0 STUB_EMPTY_GROUP=0
+  export STUB_RES_LIST_FAIL=0 STUB_EMPTY_GROUP=0 STUB_CYPERF=0
   export STUB_GROUP_SHOW_FAIL=0 STUB_AKS_DELETE_NOTFOUND=0 STUB_NODE_RG_LAG=0
   rm -f "${AZ_LOG}.nodergcalls"
   # A scratch HOME of its own for every case, never the real one: the
@@ -428,11 +462,20 @@ flunk() { CASE_OK=false; CASE_NOTES="${CASE_NOTES}      expected: $1"$'\n'; }
 # TEST_HOME (set by begin_case) is the HOME the teardown sees: the deploy's
 # kubeconfig lives at $HOME/.kube/cloudlens-aks-<cluster>, and the real one
 # must never be touched by a test.
+# scripts/cyperf_setup.py, stubbed: it records that the CyPerf licence release
+# was asked for and never touches a network.
+cat > "$WORK/cyperf_stub.py" <<'CYSTUB'
+import os, sys
+open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "cyperf.log"), "a").write(" ".join(sys.argv[1:]) + "\n")
+sys.exit(0)
+CYSTUB
+
 run_teardown() {
   RC=0
   HOME="$TEST_HOME" \
   PATH="$STUB_BIN:$PATH" \
   CLOUDLENS_KVO_LICENSE_PY="$WORK/kvo_license_stub.py" \
+  CLOUDLENS_CYPERF_SETUP_PY="$WORK/cyperf_stub.py" \
   CLOUDLENS_KVO_HTTP_TIMEOUT=2 CLOUDLENS_KVO_RELEASE_TIMEOUT=5 CLOUDLENS_PROBE_TIMEOUT=20 \
   CLOUDLENS_NODE_RG_WAIT="${NODE_RG_WAIT_T:-3}" CLOUDLENS_NODE_RG_POLL=1 \
   python3 "$WORK/nosetty.py" bash "$TEARDOWN_STACK_SH" "$@" </dev/null >"$OUT" 2>&1 || RC=$?
@@ -955,6 +998,38 @@ begin_case "32: the node group outlives the wait after a successful cluster dele
   rc_nonzero
   out_has "node resource group MC_cl-rg_cloudlens-aks-rg-aks_eastus2 still exists (Azure may still be removing it"
   out_has "Some resources could not be removed"
+end_case
+
+begin_case "33: the CyPerf add-on (controller, relay, NSG) is ours by its tags: nothing is 'other', the whole tagged group goes"
+  LIST_COUNT=0 STUB_CYPERF=1 STUB_SHARED_VNET=1
+  run_teardown --resource-group cl-rg --yes
+  rc_is 0
+  out_lacks "Other resources in the group (NOT CloudLens"
+  az_has "group delete"
+  grep -q -- "--release-license" "$WORK/cyperf.log" 2>/dev/null || flunk "the CyPerf licence release to be asked for"
+  out_has "Phase 4c: Release the CyPerf licence"
+end_case
+
+begin_case "34: CyPerf add-on with --keep-resource-group: its two VMs, its public IP and its NSG are deleted one by one"
+  LIST_COUNT=0 STUB_CYPERF=1 STUB_SHARED_VNET=1
+  run_teardown --resource-group cl-rg --yes --keep-resource-group
+  rc_is 0
+  az_has "vm delete .*virtualMachines/cloudlens-cyperf-controller"
+  az_has "vm delete .*virtualMachines/cloudlens-cyperf-relay"
+  az_has "cloudlens-cyperf-nsg"
+  az_has "cloudlens-cyperf-controller-pip"
+  out_lacks "cloudlens-cyperf-relay	Microsoft.Compute/virtualMachines"
+  out_lacks "Some resources could not be removed"
+end_case
+
+begin_case "35: a customer VM beside the CyPerf add-on stays 'other': the add-on's tags claim nothing else"
+  LIST_COUNT=0 STUB_CYPERF=1 STUB_OTHER=1
+  run_teardown --resource-group cl-rg --yes
+  rc_is 0
+  out_has "Other resources in the group (NOT CloudLens"
+  az_has "vm delete .*virtualMachines/cloudlens-cyperf-relay"
+  if grep -q -- "vm delete .*virtualMachines/customer-web01" "$AZ_LOG"; then flunk "the customer VM NOT to be deleted"; fi
+  if grep -q -- "group delete" "$AZ_LOG"; then flunk "no whole-group delete with a customer VM in the group"; fi
 end_case
 
 echo "${PASS} PASS, ${FAIL} FAIL"

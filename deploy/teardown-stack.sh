@@ -689,6 +689,19 @@ if [[ -n "$RG_LOCATION" ]]; then note "location ${RG_LOCATION}"; fi
 _vms="$(ro_az vm list -g "$RESOURCE_GROUP" \
   --query "[].[name, plan.product, id, storageProfile.osDisk.managedDisk.id, join(' ', networkProfile.networkInterfaces[].id)]" -o tsv)"
 
+# ---- the CyPerf add-on, by its tags --------------------------------------
+# deploy-stack.sh --with-cyperf builds a CyPerf controller, two agents and a
+# relay VM from deploy/cyperf-marketplace.json. None of them is a CloudLens
+# Marketplace product (the relay is a plain Ubuntu VM), so the plan rule below
+# cannot claim them: on 2026-11-11 a teardown released the CyPerf licence and
+# then listed all four VMs under "Other resources ... never deleted", kept the
+# group because of them, and left them running with their NICs, disks, public
+# IPs and the VNet. The template tags every resource it creates with
+# deployedBy=cloudlens-stack AND cloudlensComponent=cyperf; both tags together
+# are the evidence. Disks carry no tags and are claimed through their VM.
+CL_CYPERF_IDS="$(to_lower "$(tokens "$(ro_az resource list -g "$RESOURCE_GROUP" \
+  --query "[?tags.cloudlensComponent=='cyperf' && tags.deployedBy=='${DEPLOYED_BY_TAG}'].id" -o tsv)")")"
+
 # ---- everything in the group --------------------------------------------
 # The two tag columns are the deploy stamp (evidence 4). The key has a colon
 # in it, so JMESPath needs it quoted: tags."cloudlens:stack". Read on this
@@ -740,7 +753,12 @@ while IFS=$'\t' read -r _vn _vp _vid _vdisk _vnics; do
   _vp="$(det_clean "${_vp:-}")"
   case "$_vp" in
     "$PRODUCT_VCONTROLLER"|"$PRODUCT_KVO"|"$PRODUCT_VPB") ;;
-    *) continue ;;
+    *) # not a CloudLens product: ours only when it is part of the CyPerf add-on
+       if [[ -n "$CL_CYPERF_IDS" ]] && in_list "$(to_lower "$_vid")" "$CL_CYPERF_IDS"; then
+         if [[ -z "$_vp" ]]; then _vp="cyperf-relay"; fi
+       else
+         continue
+       fi ;;
   esac
   _vdisk="$(det_clean "${_vdisk:-}")"
   _vnics="$(tokens "${_vnics:-}")"
@@ -772,7 +790,7 @@ done <<< "$_vms"
 
 if [[ -n "$CL_VM_NAMES" ]]; then
   PREFIX_NAMES="$CL_VM_NAMES"
-  ok "CloudLens VMs (by Marketplace plan): $(count_words "$CL_VM_NAMES")"
+  ok "CloudLens VMs (by Marketplace plan, plus the CyPerf add-on by its tags): $(count_words "$CL_VM_NAMES")"
 else
   # No CloudLens VM left: the usual reason is that someone deleted the VMs
   # by hand and the disks and public IPs are still billing. Their names
@@ -843,6 +861,15 @@ while IFS=$'\t' read -r _rn _rt _rid _rdb _rst; do
       # Deleted with its VM; listed so the audit is complete.
       if name_from_cl_vm "$_rn"; then _cls="ext"; fi ;;
   esac
+  if [[ "$_cls" == "other" && -n "$CL_CYPERF_IDS" ]] && in_list "$_ridl" "$CL_CYPERF_IDS"; then
+    case "$_rtl" in
+      microsoft.network/networkinterfaces)     _cls="nic" ;;
+      microsoft.network/publicipaddresses)     _cls="pip" ;;
+      microsoft.network/networksecuritygroups) _cls="nsg" ;;
+      microsoft.compute/virtualmachines)       _cls="other" ;;   # a VM is only ever claimed by the loop above
+      *)                                       _cls="stamped" ;;
+    esac
+  fi
   if [[ "$_cls" == "other" && "$_stamped" == "true" ]]; then
     case "$_rtl" in
       microsoft.containerservice/managedclusters) _cls="aks" ;;
@@ -1522,9 +1549,15 @@ release_cyperf_licence() {
   step "Phase 4c: Release the CyPerf licence"
   addr="$(first_line "$(ro_az vm list-ip-addresses -g "$RESOURCE_GROUP" -n "$vm" \
         --query "[0].virtualMachine.network.publicIpAddresses[0].ipAddress" -o tsv)")"
-  for c in "$SCRIPT_DIR/../scripts/cyperf_setup.py" "$PWD/scripts/cyperf_setup.py" "$HOME/cloudlens-ansible-azure/scripts/cyperf_setup.py"; do
-    [[ -f "$c" ]] && { py="$c"; break; }
-  done
+  # CLOUDLENS_CYPERF_SETUP_PY names the script outright (the tests use it, the
+  # same way CLOUDLENS_KVO_LICENSE_PY does for the KVO release).
+  if [[ -n "${CLOUDLENS_CYPERF_SETUP_PY:-}" ]]; then
+    [[ -f "$CLOUDLENS_CYPERF_SETUP_PY" ]] && py="$CLOUDLENS_CYPERF_SETUP_PY"
+  else
+    for c in "$SCRIPT_DIR/../scripts/cyperf_setup.py" "$PWD/scripts/cyperf_setup.py" "$HOME/cloudlens-ansible-azure/scripts/cyperf_setup.py"; do
+      [[ -f "$c" ]] && { py="$c"; break; }
+    done
+  fi
   if [[ "$DRY_RUN" == "true" ]]; then
     dryrun_say "would release the CyPerf licence on ${vm} (${addr:-no public address}) with cyperf_setup.py --release-license"
     return 0
