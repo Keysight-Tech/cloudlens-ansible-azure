@@ -1505,6 +1505,52 @@ elif [[ "$HAS_KVO" == "true" ]]; then
 fi
 
 # =====================================================================
+# Phase 4c: release the CyPerf licence
+#
+# deploy-stack.sh --with-cyperf puts a CyPerf controller in the group (VM tag
+# cloudlensRole=cyperf-controller). The activation code it holds returns to
+# the entitlement only while that controller is alive, exactly like KVO's, so
+# it is released here, after the teardown was confirmed and before anything
+# is deleted. A failed release is reported and the teardown continues: the
+# operator already confirmed the delete, and one activation is the cost.
+# =====================================================================
+release_cyperf_licence() {
+  local vm="" pip_id="" addr="" py="" c=""
+  vm="$(first_line "$(ro_az vm list -g "$RESOURCE_GROUP" \
+        --query "[?tags.cloudlensRole=='cyperf-controller'].name | [0]" -o tsv)")"
+  [[ -z "$vm" || "$vm" == "None" ]] && return 0
+  step "Phase 4c: Release the CyPerf licence"
+  addr="$(first_line "$(ro_az vm list-ip-addresses -g "$RESOURCE_GROUP" -n "$vm" \
+        --query "[0].virtualMachine.network.publicIpAddresses[0].ipAddress" -o tsv)")"
+  for c in "$SCRIPT_DIR/../scripts/cyperf_setup.py" "$PWD/scripts/cyperf_setup.py" "$HOME/cloudlens-ansible-azure/scripts/cyperf_setup.py"; do
+    [[ -f "$c" ]] && { py="$c"; break; }
+  done
+  if [[ "$DRY_RUN" == "true" ]]; then
+    dryrun_say "would release the CyPerf licence on ${vm} (${addr:-no public address}) with cyperf_setup.py --release-license"
+    return 0
+  fi
+  if [[ -z "$addr" || "$addr" == "None" ]]; then
+    warn "CyPerf controller ${vm} has no public address to reach; its licence is NOT released."
+    return 0
+  fi
+  if [[ -z "$py" ]] || ! command -v python3 >/dev/null 2>&1; then
+    warn "scripts/cyperf_setup.py or python3 not found; the CyPerf licence is NOT released."
+    note "Release it by hand first: CyPerf UI > Settings > License Manager > Deactivate."
+    return 0
+  fi
+  if python3 "$py" --controller "$addr" --insecure --release-license; then
+    ok "CyPerf licence released (or none was installed): the activation returns to your entitlement."
+  else
+    warn "The CyPerf licence could NOT be released (controller unreachable or it refused)."
+    warn "Its activation stays consumed until Keysight support resets it. Continuing."
+  fi
+  return 0
+}
+if [[ "${AUDIT_ONLY:-false}" != "true" ]]; then
+  release_cyperf_licence
+fi
+
+# =====================================================================
 # Phase 5: delete
 # =====================================================================
 step "Phase 5: Delete"

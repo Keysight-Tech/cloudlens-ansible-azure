@@ -153,6 +153,33 @@ AKS_SENSOR_TAR="${CLOUDLENS_AKS_SENSOR_TAR:-}"
 # and each selected pod consumes one credit (vTAP UG), so the sample app gets
 # a selector of its own two deployments in Phase 13b.
 AKS_POD_SELECTOR="${CLOUDLENS_AKS_POD_SELECTOR:-}"
+# CyPerf traffic generator (optional): one controller plus a client and a
+# server agent in the shared virtual network, from deploy/cyperf-marketplace.json.
+# Blank = the interview asks; flags/env win. The licence activation code is a
+# secret: it comes from the environment, a mode-600 file or a hidden prompt,
+# and never reaches a command line, the log or the summary.
+DEPLOY_CYPERF="${CLOUDLENS_DEPLOY_CYPERF:-}"
+CYPERF_LICENSE_CODE="${CLOUDLENS_CYPERF_LICENSE_CODE:-}"
+CYPERF_LICENSE_FILE="${CLOUDLENS_CYPERF_LICENSE_FILE:-}"
+CYPERF_MBPS="${CLOUDLENS_CYPERF_MBPS:-10}"
+# Keysight's own template sizes. Both are in the Dadsv5 family, 16 vCPU in
+# all, and many subscriptions hold only 10 there: the quota check says so and
+# names these two overrides.
+CYPERF_CONTROLLER_SIZE="${CLOUDLENS_CYPERF_CONTROLLER_SIZE:-Standard_D8ads_v5}"
+CYPERF_AGENT_SIZE="${CLOUDLENS_CYPERF_AGENT_SIZE:-Standard_D4ads_v5}"
+CYPERF_PUBLISHER="keysighttechnologies_cyperf"
+CYPERF_OFFER="keysight-cyperf"
+# Newest release is resolved from the Marketplace at deploy time; these are
+# the fallback when the listing cannot be read.
+CYPERF_VERSION="${CLOUDLENS_CYPERF_VERSION:-}"
+CYPERF_VERSION_FALLBACK="26.1.0"
+CYPERF_CONTROLLER_SKU=""; CYPERF_AGENT_SKU=""
+CYPERF_NAME_PREFIX="${CLOUDLENS_CYPERF_NAME:-cloudlens-cyperf}"
+CYPERF_TEMPLATE_URL="${REPO_RAW}/deploy/cyperf-marketplace.json"
+CYPERF_ADMIN_USER="admin"
+CYPERF_FACTORY_PASS='CyPerf&Keysight#1'
+CYPERF_ADDRESS=""; CYPERF_CLIENT_IP=""; CYPERF_SERVER_IP=""
+CYPERF_LAUNCH_OK=false; CYPERF_STATE="not configured"
 # Where the sample cluster's nodes go. Phase 5b builds the portal template's
 # five subnets and none of them is for workloads, so the nodes sit beside the
 # vController: that subnet always has a route to its private address, the one
@@ -401,6 +428,22 @@ Sensor discovery (which workload VMs get the sensor):
                             sensors are chained and neither is given.
 
 Kubernetes (AKS) pod tapping:
+  --with-cyperf / --no-cyperf
+                            Add a Keysight CyPerf traffic generator: one
+                            controller, one client agent and one server agent
+                            in the shared virtual network. The agents register,
+                            the licence is applied and application traffic is
+                            started between them.
+  --cyperf-license-file F   File holding the CyPerf activation code (implies
+                            --with-cyperf). Or set CLOUDLENS_CYPERF_LICENSE_CODE,
+                            or answer the hidden prompt. Never an argument.
+                            Quantity 1 is activated per deploy.
+  --cyperf-mbps N           Traffic rate of the generated test (default 10).
+  --cyperf-controller-size S, --cyperf-agent-size S
+                            VM sizes (defaults Standard_D8ads_v5 and
+                            Standard_D4ads_v5, Keysight's own; override when
+                            the Dadsv5 quota is short).
+  --cyperf-version V        Marketplace release (default: the newest).
   --with-aks / --no-aks     Tap Kubernetes pods in AKS with CloudLens sensors.
   --aks-cluster NAME        Tap THIS existing AKS cluster in the resource
                             group (implies --with-aks).
@@ -488,6 +531,7 @@ What it does (phases):
  12. KVO product licensing (an unlicensed KVO refuses every write)
  13. Adopt the vController into KVO + create its Cloud Config
  13b. AKS pod tapping (--with-aks, --aks-cluster or --aks-sample)
+ 13c. CyPerf traffic generator: licence, agents, start traffic (--with-cyperf)
  14. Adopt the vPB into KVO
  15. vPB traffic path + monitoring policy
  16. Final summary written to cloudlens-deploy-summary.txt
@@ -522,6 +566,13 @@ while [[ $# -gt 0 ]]; do
     --no-sensors) CHAIN_SENSORS=false; shift ;;
 
     # Kubernetes (AKS) pod tapping
+    --with-cyperf) DEPLOY_CYPERF=true; shift ;;
+    --no-cyperf) DEPLOY_CYPERF=false; shift ;;
+    --cyperf-license-file) DEPLOY_CYPERF=true; CYPERF_LICENSE_FILE="$2"; shift 2 ;;
+    --cyperf-mbps) CYPERF_MBPS="$2"; shift 2 ;;
+    --cyperf-controller-size) CYPERF_CONTROLLER_SIZE="$2"; shift 2 ;;
+    --cyperf-agent-size) CYPERF_AGENT_SIZE="$2"; shift 2 ;;
+    --cyperf-version) CYPERF_VERSION="$2"; shift 2 ;;
     --with-aks) DEPLOY_AKS=true; shift ;;
     --no-aks) DEPLOY_AKS=false; shift ;;
     --aks-cluster) DEPLOY_AKS=true; AKS_CLUSTER="$2"; shift 2 ;;
@@ -1110,6 +1161,43 @@ if [[ -z "$DEPLOY_VPB" ]]; then
 fi
 ok "Deploy vPB: ${DEPLOY_VPB}"
 
+# A real traffic generator? The sensors' test workloads only make light
+# traffic; CyPerf plays application traffic between a client and a server agent.
+if [[ -z "$DEPLOY_CYPERF" ]]; then
+  if [[ "$INTERACTIVE" == "true" && "$DRY_RUN" != "true" ]]; then
+    echo
+    echo "Keysight CyPerf traffic generator: adds a controller, a client agent and a"
+    echo "server agent (3 VMs, billed while they run), registers the agents and starts"
+    echo "application traffic between them. Needs a CyPerf licence activation code"
+    echo "(for example 938-1010-01, 10 agents / 10 Gbps)."
+    read -rp "Deploy CyPerf for traffic generation? [y/N]: " yn || true
+    yn_lc=$(to_lower "$yn")
+    if [[ "$yn_lc" == "y" ]] || [[ "$yn_lc" == "yes" ]]; then DEPLOY_CYPERF=true; else DEPLOY_CYPERF=false; fi
+  else
+    DEPLOY_CYPERF=false
+  fi
+fi
+if [[ "$DEPLOY_CYPERF" == "true" ]]; then
+  [[ "$CYPERF_MBPS" =~ ^[0-9]+$ ]] && (( CYPERF_MBPS >= 1 && CYPERF_MBPS <= 10000 )) \
+    || fail "--cyperf-mbps must be a whole number of Mbps between 1 and 10000 (got '${CYPERF_MBPS}')."
+  if [[ -n "$CYPERF_LICENSE_FILE" ]]; then
+    [[ -r "$CYPERF_LICENSE_FILE" ]] || fail "--cyperf-license-file: cannot read ${CYPERF_LICENSE_FILE}"
+    CYPERF_LICENSE_CODE="$(tr -d '[:space:]' < "$CYPERF_LICENSE_FILE")"
+  fi
+  # Asked now, with the other questions, so the run never stops later for it.
+  if [[ -z "$CYPERF_LICENSE_CODE" && "$INTERACTIVE" == "true" && "$DRY_RUN" != "true" ]]; then
+    echo "  CyPerf licence: paste the activation code (input is hidden). Press Enter"
+    echo "  to skip: CyPerf is still deployed and connected, and traffic starts once"
+    echo "  a code is applied (re-run with --with-cyperf --cyperf-license-file FILE)."
+    read -rsp "  CyPerf activation code: " CYPERF_LICENSE_CODE || true; echo
+    CYPERF_LICENSE_CODE="$(printf '%s' "$CYPERF_LICENSE_CODE" | tr -d '[:space:]')"
+  fi
+  note "CyPerf agents are appliances and cannot host a CloudLens sensor, and Azure has"
+  note "no agentless mirror here: their traffic is generated between the agents, and"
+  note "is tapped only where it passes a VM that carries a sensor."
+fi
+ok "Deploy CyPerf: ${DEPLOY_CYPERF}$([[ "$DEPLOY_CYPERF" == "true" ]] && echo " (${CYPERF_MBPS} Mbps, licence $([[ -n "$CYPERF_LICENSE_CODE" ]] && echo supplied || echo "NOT supplied: traffic will not start"))")"
+
 # Instance counts. Only prompt if customer did NOT already specify via
 # flags or env vars (i.e. the values are still at their hardcoded
 # defaults of 1). Skip the entire block if they answer N to keep the
@@ -1375,6 +1463,40 @@ if [[ "$DEPLOY_VPB" == "true" ]]; then
   check_quota_family "standardDSv3Family" "$LOCATION" 8
 fi
 
+# CyPerf: newest Marketplace release (controller and agent ship as a pair of
+# SKUs with the same version), and the vCPU its three VMs need.
+cyperf_resolve_release() {
+  local line="" ver="" tail=""
+  if [[ "$DRY_RUN" == "true" ]]; then
+    CYPERF_VERSION="${CYPERF_VERSION:-$CYPERF_VERSION_FALLBACK}"
+  elif [[ -z "$CYPERF_VERSION" ]]; then
+    # "sku<TAB>version" rows; newest version that has BOTH a controller and an agent SKU.
+    ver="$(az vm image list --publisher "$CYPERF_PUBLISHER" --offer "$CYPERF_OFFER" --all --location "$LOCATION" \
+             --query "[?contains(sku,'-controller-') && !contains(sku,'proxy')].version" -o tsv 2>/dev/null \
+           | sort -t. -k1,1n -k2,2n -k3,3n | tail -1 || true)"
+    if [[ -n "$ver" ]]; then
+      CYPERF_VERSION="$ver"
+    else
+      CYPERF_VERSION="$CYPERF_VERSION_FALLBACK"
+      warn "Could not list CyPerf images in ${LOCATION}; using ${CYPERF_VERSION}."
+    fi
+  fi
+  # 26.1.0 -> 2610 (Keysight's SKU naming since release 26)
+  tail="$(printf '%s' "$CYPERF_VERSION" | tr -d '.')"
+  CYPERF_CONTROLLER_SKU="keysight-cyperf-controller-${tail}"
+  CYPERF_AGENT_SKU="keysight-cyperf-agent-${tail}"
+  ok "CyPerf release: ${CYPERF_VERSION} (${CYPERF_CONTROLLER_SKU}, ${CYPERF_AGENT_SKU})"
+}
+if [[ "$DEPLOY_CYPERF" == "true" ]]; then
+  cyperf_resolve_release
+  case "$CYPERF_CONTROLLER_SIZE$CYPERF_AGENT_SIZE" in
+    *ads_v5*) check_quota_family "standardDADSv5Family" "$LOCATION" 16
+              note "CyPerf needs 16 vCPU of Dadsv5 at the default sizes. If that quota is short,"
+              note "pass --cyperf-controller-size and --cyperf-agent-size (for example"
+              note "Standard_D8s_v3 and Standard_D4s_v3) or raise the quota." ;;
+  esac
+fi
+
 # =====================================================================
 # Phase 4: Marketplace terms acceptance
 # =====================================================================
@@ -1414,6 +1536,10 @@ if [[ "$DEPLOY_KVO" == "true" ]]; then
 fi
 if [[ "$DEPLOY_VPB" == "true" ]]; then
   accept_terms "$VPB_PUBLISHER" "$VPB_OFFER" "$VPB_PLAN"
+fi
+if [[ "$DEPLOY_CYPERF" == "true" ]]; then
+  accept_terms "$CYPERF_PUBLISHER" "$CYPERF_OFFER" "$CYPERF_CONTROLLER_SKU"
+  accept_terms "$CYPERF_PUBLISHER" "$CYPERF_OFFER" "$CYPERF_AGENT_SKU"
 fi
 
 # =====================================================================
@@ -1754,6 +1880,72 @@ if [[ "$DEPLOY_VPB" == "true" ]]; then
   note "After deploy: ssh -p 9022 ${ADMIN_USERNAME}@<vpb-ip>, then 'sudo vpb' for the CLI."
 else
   step "Phase 9: vPB deployment (skipped)"
+fi
+
+# =====================================================================
+# Phase 9b: CyPerf traffic generator, infrastructure half (optional)
+# =====================================================================
+# Launched here and configured in Phase 13c: the controller needs 10 to 15
+# minutes before its API and login service answer, and that wait overlaps the
+# project key, the sensor chain and the KVO phases instead of adding to them.
+if [[ "$DEPLOY_CYPERF" == "true" ]]; then
+  step "Phase 9b: Deploy CyPerf (controller + client agent + server agent)"
+  cy_controller="${CYPERF_NAME_PREFIX}-controller"
+  if [[ "$DRY_RUN" == "true" ]]; then
+    dryrun_say "az deployment group create -g ${RESOURCE_GROUP} --template-file deploy/cyperf-marketplace.json --parameters namePrefix=${CYPERF_NAME_PREFIX} vnetName=${VNET_NAME} mgmtSubnetName=${SUBNET_VCONTROLLER} testSubnetName=${SUBNET_VPB_INGRESS} cyperfVersion=${CYPERF_VERSION} controllerVmSize=${CYPERF_CONTROLLER_SIZE} agentVmSize=${CYPERF_AGENT_SIZE} sshPublicKey=<key>"
+    CYPERF_ADDRESS="203.0.113.40"; CYPERF_CLIENT_IP="10.0.0.41"; CYPERF_SERVER_IP="10.0.0.42"; CYPERF_LAUNCH_OK=true
+  elif az vm show -g "$RESOURCE_GROUP" -n "$cy_controller" >/dev/null 2>&1; then
+    warn "${cy_controller} already exists, reusing"
+    CYPERF_ADDRESS="$(az network public-ip show -g "$RESOURCE_GROUP" -n "${CYPERF_NAME_PREFIX}-controller-pip" --query ipAddress -o tsv 2>/dev/null || echo "")"
+    CYPERF_CLIENT_IP="$(az network nic show -g "$RESOURCE_GROUP" -n "${CYPERF_NAME_PREFIX}-client-mgmt-nic" --query 'ipConfigurations[0].privateIPAddress' -o tsv 2>/dev/null || echo "")"
+    CYPERF_SERVER_IP="$(az network nic show -g "$RESOURCE_GROUP" -n "${CYPERF_NAME_PREFIX}-server-mgmt-nic" --query 'ipConfigurations[0].privateIPAddress' -o tsv 2>/dev/null || echo "")"
+    [[ -n "$CYPERF_ADDRESS" && -n "$CYPERF_CLIENT_IP" && -n "$CYPERF_SERVER_IP" ]] && CYPERF_LAUNCH_OK=true
+  else
+    # The CyPerf images accept key logins only. Use the operator's key when
+    # there is one; otherwise make one for this deployment and say where it is.
+    cy_pub=""
+    for cy_k in "$HOME/.ssh/id_ed25519.pub" "$HOME/.ssh/id_rsa.pub"; do
+      [[ -r "$cy_k" ]] && { cy_pub="$cy_k"; break; }
+    done
+    if [[ -z "$cy_pub" ]]; then
+      cy_key="$HOME/.ssh/cloudlens-cyperf-${RESOURCE_GROUP}"
+      if [[ ! -r "${cy_key}.pub" ]]; then
+        mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+        ssh-keygen -q -t rsa -b 4096 -N "" -C "cloudlens-cyperf" -f "$cy_key" >/dev/null 2>&1 || true
+      fi
+      cy_pub="${cy_key}.pub"
+    fi
+    cy_tpl="$(find_script deploy/cyperf-marketplace.json || true)"
+    cy_src=(--template-uri "$CYPERF_TEMPLATE_URL")
+    [[ -n "$cy_tpl" ]] && cy_src=(--template-file "$cy_tpl")
+    if [[ ! -r "$cy_pub" ]]; then
+      warn "No SSH public key could be found or made (${cy_pub}); CyPerf is skipped."
+    else
+      note "SSH key for the CyPerf VMs (user cyperf): ${cy_pub%.pub}"
+      note "Deploying ${cy_src[1]} (about 5 minutes; the controller then needs 10 to 15 more to boot)"
+      if az deployment group create -g "$RESOURCE_GROUP" -n "cyperf-$(date +%s)" "${cy_src[@]}" \
+           --parameters namePrefix="$CYPERF_NAME_PREFIX" vnetName="$VNET_NAME" \
+               existingVnetResourceGroup="$VNET_RG" mgmtSubnetName="$SUBNET_VCONTROLLER" \
+               testSubnetName="$SUBNET_VPB_INGRESS" adminSourceCidr="$ADMIN_CIDR" \
+               sshPublicKey="$(cat "$cy_pub")" cyperfVersion="$CYPERF_VERSION" \
+               controllerSku="$CYPERF_CONTROLLER_SKU" agentSku="$CYPERF_AGENT_SKU" \
+               controllerVmSize="$CYPERF_CONTROLLER_SIZE" agentVmSize="$CYPERF_AGENT_SIZE" \
+           --query 'properties.outputs' -o json > /tmp/cyperf-outputs.json 2>/tmp/cyperf-deploy-err; then
+        CYPERF_ADDRESS="$(python3 -c "import json; print(json.load(open('/tmp/cyperf-outputs.json'))['controllerPublicIp']['value'])" 2>/dev/null || echo "")"
+        CYPERF_CLIENT_IP="$(python3 -c "import json; print(json.load(open('/tmp/cyperf-outputs.json'))['clientControlIp']['value'])" 2>/dev/null || echo "")"
+        CYPERF_SERVER_IP="$(python3 -c "import json; print(json.load(open('/tmp/cyperf-outputs.json'))['serverControlIp']['value'])" 2>/dev/null || echo "")"
+        [[ -n "$CYPERF_ADDRESS" && -n "$CYPERF_CLIENT_IP" && -n "$CYPERF_SERVER_IP" ]] && CYPERF_LAUNCH_OK=true
+      else
+        warn "The CyPerf deployment failed; the rest of the run continues. Azure said:"
+        tail -c 1200 /tmp/cyperf-deploy-err | sed 's/^/    /' >&2 || true
+        note "Common causes: Marketplace terms not accepted (Phase 4), or vCPU quota"
+        note "for the VM family (--cyperf-controller-size / --cyperf-agent-size)."
+      fi
+    fi
+  fi
+  if [[ "$CYPERF_LAUNCH_OK" == "true" ]]; then
+    ok "CyPerf controller at ${CYPERF_ADDRESS}; agents ${CYPERF_CLIENT_IP} (client) and ${CYPERF_SERVER_IP} (server)."
+  fi
 fi
 
 # =====================================================================
@@ -2323,6 +2515,49 @@ if [[ "$DEPLOY_AKS" == "true" ]]; then
 fi
 
 # =====================================================================
+# Phase 13c: CyPerf traffic generator (configure, licence, start traffic)
+# =====================================================================
+# scripts/cyperf_setup.py waits for the controller, accepts its EULA, applies
+# the licence (quantity 1: one activation per deployment), waits for both
+# agents, builds a client-to-server application test and starts it. Safe to
+# re-run: a licensed controller is not licensed twice, a running test is kept.
+if [[ "$DEPLOY_CYPERF" == "true" ]]; then
+  step "Phase 13c: CyPerf traffic generator"
+  CYPERF_SCRIPT="$(find_script scripts/cyperf_setup.py || true)"
+  if [[ "$DRY_RUN" == "true" ]]; then
+    dryrun_say "CLOUDLENS_CYPERF_LICENSE_CODE=<$([[ -n "$CYPERF_LICENSE_CODE" ]] && echo "supplied, hidden" || echo none)> python3 scripts/cyperf_setup.py --controller ${CYPERF_ADDRESS} --client-ip ${CYPERF_CLIENT_IP} --server-ip ${CYPERF_SERVER_IP} --mbps ${CYPERF_MBPS} --insecure"
+  elif [[ "$CYPERF_LAUNCH_OK" != "true" ]]; then
+    warn "The CyPerf VMs are not there (see Phase 9b); nothing to configure."
+    CYPERF_STATE="not deployed"
+  elif [[ -z "$CYPERF_SCRIPT" ]] || ! command -v python3 >/dev/null 2>&1; then
+    warn "scripts/cyperf_setup.py or python3 unavailable; CyPerf is deployed but not configured."
+    CYPERF_STATE="deployed, not configured"
+  else
+    echo "  CyPerf controller UI: https://${CYPERF_ADDRESS}/"
+    echo "    ${CYPERF_ADMIN_USER} / ${CYPERF_FACTORY_PASS}   (CyPerf factory default: change it under Settings)"
+    cy_rc=0
+    # The code travels in the environment, never on the command line.
+    CLOUDLENS_CYPERF_LICENSE_CODE="$CYPERF_LICENSE_CODE" \
+      python3 "$CYPERF_SCRIPT" --controller "$CYPERF_ADDRESS" --insecure \
+        --client-ip "$CYPERF_CLIENT_IP" --server-ip "$CYPERF_SERVER_IP" \
+        --mbps "$CYPERF_MBPS" --session-name "${RESOURCE_GROUP} traffic" || cy_rc=$?
+    case "$cy_rc" in
+      0) CYPERF_STATE="licensed, traffic running at ${CYPERF_MBPS} Mbps"
+         ok "CyPerf is licensed, both agents are connected and traffic is running (${CYPERF_MBPS} Mbps, client to server)." ;;
+      3) CYPERF_STATE="connected, NO licence (test not started)"
+         warn "CyPerf is deployed and both agents are connected, but it has NO licence,"
+         warn "so the test cannot start. Re-run the deploy with:"
+         note "  --with-cyperf --cyperf-license-file <file holding the code>" ;;
+      4) CYPERF_STATE="connected, licence REFUSED"
+         warn "The CyPerf controller refused the activation code (its message is above)."
+         warn "Check the code, its expiry and its remaining quantity in KSM." ;;
+      *) CYPERF_STATE="deployed, setup did not complete"
+         warn "The CyPerf step did not complete (exit ${cy_rc}); the rest of the run continues." ;;
+    esac
+  fi
+fi
+
+# =====================================================================
 # Phases 14-15: the vPB half of the KVO chain
 # =====================================================================
 if [[ "$KVO_CHAIN_OK" == "true" && "$DEPLOYED_VPB" == "true" && -n "${VPB_PUBLIC_IP:-}" && "$VPB_PUBLIC_IP" != "unknown" ]]; then
@@ -2446,6 +2681,18 @@ Note:               SSH is reachable 10 to 15 minutes after deploy
 VSUMMARY
   fi
 
+  if [[ "$DEPLOY_CYPERF" == "true" && -n "${CYPERF_ADDRESS:-}" ]]; then
+    cat <<YSUMMARY
+--- CyPerf traffic generator ---
+Controller UI:      https://${CYPERF_ADDRESS}/   (${CYPERF_ADMIN_USER} / factory default password, change it under Settings)
+Client agent:       ${CYPERF_CLIENT_IP} (management interface)
+Server agent:       ${CYPERF_SERVER_IP} (management interface)
+State:              ${CYPERF_STATE}
+Licence:            released by teardown-stack.sh before the group is deleted
+
+YSUMMARY
+  fi
+
   if [[ "$DEPLOY_AKS" == "true" ]]; then
     echo "AKS pod tapping:    ${AKS_CLUSTER_NAME}, ${AKS_MODE}, registers to ${AKS_REGISTER_ADDR}"
     echo
@@ -2484,6 +2731,7 @@ echo "Log saved to:        ${LOG_FILE}"
 echo "vController UI:      https://${CLMS_PUBLIC_IP}"
 [[ "$DEPLOY_KVO" == "true" ]] && echo "KVO UI:              https://${KVO_PUBLIC_IP}"
 [[ "$DEPLOY_VPB" == "true" ]] && echo "vPB management:      ${VPB_PUBLIC_IP}"
+[[ "$DEPLOY_CYPERF" == "true" && -n "${CYPERF_ADDRESS:-}" ]] && echo "CyPerf controller:   https://${CYPERF_ADDRESS}/ (${CYPERF_STATE})"
 [[ "$DEPLOY_AKS" == "true" ]] && echo "AKS pod tapping:     ${AKS_CLUSTER_NAME}, ${AKS_MODE}, registers to ${AKS_REGISTER_ADDR}"
 echo
 note "Network: ${VNET_NAME} in ${VNET_RG} (${SUBNET_VCONTROLLER}, ${SUBNET_KVO}, ${SUBNET_VPB_MGMT}, ${SUBNET_VPB_INGRESS}, ${SUBNET_VPB_EGRESS})"

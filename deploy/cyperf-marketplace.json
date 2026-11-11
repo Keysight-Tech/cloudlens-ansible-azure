@@ -1,0 +1,554 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "CloudLens deploy add-on: Keysight CyPerf traffic generator (one controller, one client agent, one server agent) in the virtual network of an existing CloudLens deployment. Launched by deploy/deploy-stack.sh --with-cyperf. Modelled on github.com/Keysight/cyperf deployment/azure/azureresourcemanager (controller_and_agent_pair, existing VNet)."
+  },
+  "parameters": {
+    "namePrefix": {
+      "type": "string",
+      "defaultValue": "cloudlens-cyperf",
+      "metadata": {
+        "description": "Prefix for every resource this template creates."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "vnetName": {
+      "type": "string",
+      "metadata": {
+        "description": "Existing virtual network (the CloudLens shared VNet)."
+      }
+    },
+    "existingVnetResourceGroup": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Resource group of that network; empty means this one."
+      }
+    },
+    "mgmtSubnetName": {
+      "type": "string",
+      "metadata": {
+        "description": "Subnet for the controller and each agent's management interface."
+      }
+    },
+    "testSubnetName": {
+      "type": "string",
+      "metadata": {
+        "description": "Subnet for each agent's test interface. Test traffic runs client to server here."
+      }
+    },
+    "adminSourceCidr": {
+      "type": "string",
+      "metadata": {
+        "description": "CIDR allowed to reach the controller UI (443) and SSH (22)."
+      }
+    },
+    "sshPublicKey": {
+      "type": "string",
+      "metadata": {
+        "description": "SSH public key for the cyperf user. The CyPerf images do not accept password logins."
+      }
+    },
+    "cyperfVersion": {
+      "type": "string",
+      "defaultValue": "26.1.0",
+      "metadata": {
+        "description": "Marketplace image version, the same for controller and agents."
+      }
+    },
+    "controllerSku": {
+      "type": "string",
+      "defaultValue": "keysight-cyperf-controller-2610"
+    },
+    "agentSku": {
+      "type": "string",
+      "defaultValue": "keysight-cyperf-agent-2610"
+    },
+    "controllerVmSize": {
+      "type": "string",
+      "defaultValue": "Standard_D8ads_v5"
+    },
+    "agentVmSize": {
+      "type": "string",
+      "defaultValue": "Standard_D4ads_v5",
+      "metadata": {
+        "description": "Agent size. Keysight's template lists Standard_D4ads_v5, Standard_D16ads_v5 and Standard_D48ads_v5."
+      }
+    },
+    "agentAuthUsername": {
+      "type": "string",
+      "defaultValue": "admin",
+      "metadata": {
+        "description": "Controller account the agents register with."
+      }
+    },
+    "agentAuthPassword": {
+      "type": "securestring",
+      "defaultValue": "CyPerf&Keysight#1",
+      "metadata": {
+        "description": "Its password. The default is the documented product default."
+      }
+    }
+  },
+  "variables": {
+    "vnetResourceGroup": "[if(empty(parameters('existingVnetResourceGroup')), resourceGroup().name, parameters('existingVnetResourceGroup'))]",
+    "mgmtSubnetId": "[resourceId(variables('vnetResourceGroup'), 'Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('mgmtSubnetName'))]",
+    "testSubnetId": "[resourceId(variables('vnetResourceGroup'), 'Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('testSubnetName'))]",
+    "tags": {
+      "deployedBy": "cloudlens-stack",
+      "cloudlensComponent": "cyperf"
+    },
+    "nsgName": "[concat(parameters('namePrefix'), '-nsg')]",
+    "pipName": "[concat(parameters('namePrefix'), '-controller-pip')]",
+    "controllerName": "[concat(parameters('namePrefix'), '-controller')]",
+    "clientName": "[concat(parameters('namePrefix'), '-client')]",
+    "serverName": "[concat(parameters('namePrefix'), '-server')]",
+    "controllerNic": "[concat(parameters('namePrefix'), '-controller-nic')]",
+    "clientMgmtNic": "[concat(parameters('namePrefix'), '-client-mgmt-nic')]",
+    "clientTestNic": "[concat(parameters('namePrefix'), '-client-test-nic')]",
+    "serverMgmtNic": "[concat(parameters('namePrefix'), '-server-mgmt-nic')]",
+    "serverTestNic": "[concat(parameters('namePrefix'), '-server-test-nic')]",
+    "controllerSku": "[parameters('controllerSku')]",
+    "agentSku": "[parameters('agentSku')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/publicIPAddresses",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('pipName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "sku": {
+        "name": "Standard"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Static"
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('nsgName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "admin-https",
+            "properties": {
+              "priority": 100,
+              "direction": "Inbound",
+              "access": "Allow",
+              "protocol": "Tcp",
+              "sourceAddressPrefix": "[parameters('adminSourceCidr')]",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "443",
+              "description": "Controller UI and API from the admin network"
+            }
+          },
+          {
+            "name": "admin-ssh",
+            "properties": {
+              "priority": 110,
+              "direction": "Inbound",
+              "access": "Allow",
+              "protocol": "Tcp",
+              "sourceAddressPrefix": "[parameters('adminSourceCidr')]",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "22",
+              "description": "SSH from the admin network"
+            }
+          },
+          {
+            "name": "vnet-all",
+            "properties": {
+              "priority": 200,
+              "direction": "Inbound",
+              "access": "Allow",
+              "protocol": "*",
+              "sourceAddressPrefix": "VirtualNetwork",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "VirtualNetwork",
+              "destinationPortRange": "*",
+              "description": "Agent registration and test traffic inside the virtual network"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('controllerNic')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]",
+        "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]"
+      ],
+      "properties": {
+        "enableAcceleratedNetworking": false,
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('mgmtSubnetId')]"
+              },
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]"
+              }
+            }
+          }
+        ],
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('clientMgmtNic')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+      ],
+      "properties": {
+        "enableAcceleratedNetworking": false,
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('mgmtSubnetId')]"
+              }
+            }
+          }
+        ],
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('clientTestNic')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+      ],
+      "properties": {
+        "enableAcceleratedNetworking": true,
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('testSubnetId')]"
+              }
+            }
+          }
+        ],
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('serverMgmtNic')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+      ],
+      "properties": {
+        "enableAcceleratedNetworking": false,
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('mgmtSubnetId')]"
+              }
+            }
+          }
+        ],
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('serverTestNic')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+      ],
+      "properties": {
+        "enableAcceleratedNetworking": true,
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('testSubnetId')]"
+              }
+            }
+          }
+        ],
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('controllerName')]",
+      "location": "[parameters('location')]",
+      "tags": "[union(variables('tags'), createObject('cloudlensRole', 'cyperf-controller'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('controllerNic'))]"
+      ],
+      "plan": {
+        "name": "[variables('controllerSku')]",
+        "product": "keysight-cyperf",
+        "publisher": "keysighttechnologies_cyperf"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[parameters('controllerVmSize')]"
+        },
+        "osProfile": {
+          "computerName": "[variables('controllerName')]",
+          "adminUsername": "cyperf",
+          "linuxConfiguration": {
+            "disablePasswordAuthentication": true,
+            "ssh": {
+              "publicKeys": [
+                {
+                  "path": "/home/cyperf/.ssh/authorized_keys",
+                  "keyData": "[parameters('sshPublicKey')]"
+                }
+              ]
+            }
+          }
+        },
+        "storageProfile": {
+          "osDisk": {
+            "createOption": "FromImage",
+            "deleteOption": "Delete",
+            "managedDisk": {
+              "storageAccountType": "Premium_LRS"
+            }
+          },
+          "imageReference": {
+            "publisher": "keysighttechnologies_cyperf",
+            "offer": "keysight-cyperf",
+            "sku": "[variables('controllerSku')]",
+            "version": "[parameters('cyperfVersion')]"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('controllerNic'))]",
+              "properties": {
+                "primary": true,
+                "deleteOption": "Delete"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('clientName')]",
+      "location": "[parameters('location')]",
+      "tags": "[union(variables('tags'), createObject('cloudlensRole', 'cyperf-client'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('clientMgmtNic'))]",
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('clientTestNic'))]",
+        "[resourceId('Microsoft.Compute/virtualMachines', variables('controllerName'))]"
+      ],
+      "plan": {
+        "name": "[variables('agentSku')]",
+        "product": "keysight-cyperf",
+        "publisher": "keysighttechnologies_cyperf"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[parameters('agentVmSize')]"
+        },
+        "osProfile": {
+          "computerName": "[variables('clientName')]",
+          "adminUsername": "cyperf",
+          "linuxConfiguration": {
+            "disablePasswordAuthentication": true,
+            "ssh": {
+              "publicKeys": [
+                {
+                  "path": "/home/cyperf/.ssh/authorized_keys",
+                  "keyData": "[parameters('sshPublicKey')]"
+                }
+              ]
+            }
+          },
+          "customData": "[base64(concat('#!/bin/bash -xe\n bash /usr/bin/image_init_azure.sh ', reference(resourceId('Microsoft.Network/networkInterfaces', variables('controllerNic'))).ipConfigurations[0].properties.privateIPAddress, ' --username \"', parameters('agentAuthUsername'), '\" --password \"', parameters('agentAuthPassword'), '\" --fingerprint \"\" >> /var/log/image_init.log'))]"
+        },
+        "storageProfile": {
+          "osDisk": {
+            "createOption": "FromImage",
+            "deleteOption": "Delete",
+            "managedDisk": {
+              "storageAccountType": "Premium_LRS"
+            }
+          },
+          "imageReference": {
+            "publisher": "keysighttechnologies_cyperf",
+            "offer": "keysight-cyperf",
+            "sku": "[variables('agentSku')]",
+            "version": "[parameters('cyperfVersion')]"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('clientMgmtNic'))]",
+              "properties": {
+                "primary": true,
+                "deleteOption": "Delete"
+              }
+            },
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('clientTestNic'))]",
+              "properties": {
+                "primary": false,
+                "deleteOption": "Delete"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('serverName')]",
+      "location": "[parameters('location')]",
+      "tags": "[union(variables('tags'), createObject('cloudlensRole', 'cyperf-server'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('serverMgmtNic'))]",
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('serverTestNic'))]",
+        "[resourceId('Microsoft.Compute/virtualMachines', variables('controllerName'))]"
+      ],
+      "plan": {
+        "name": "[variables('agentSku')]",
+        "product": "keysight-cyperf",
+        "publisher": "keysighttechnologies_cyperf"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[parameters('agentVmSize')]"
+        },
+        "osProfile": {
+          "computerName": "[variables('serverName')]",
+          "adminUsername": "cyperf",
+          "linuxConfiguration": {
+            "disablePasswordAuthentication": true,
+            "ssh": {
+              "publicKeys": [
+                {
+                  "path": "/home/cyperf/.ssh/authorized_keys",
+                  "keyData": "[parameters('sshPublicKey')]"
+                }
+              ]
+            }
+          },
+          "customData": "[base64(concat('#!/bin/bash -xe\n bash /usr/bin/image_init_azure.sh ', reference(resourceId('Microsoft.Network/networkInterfaces', variables('controllerNic'))).ipConfigurations[0].properties.privateIPAddress, ' --username \"', parameters('agentAuthUsername'), '\" --password \"', parameters('agentAuthPassword'), '\" --fingerprint \"\" >> /var/log/image_init.log'))]"
+        },
+        "storageProfile": {
+          "osDisk": {
+            "createOption": "FromImage",
+            "deleteOption": "Delete",
+            "managedDisk": {
+              "storageAccountType": "Premium_LRS"
+            }
+          },
+          "imageReference": {
+            "publisher": "keysighttechnologies_cyperf",
+            "offer": "keysight-cyperf",
+            "sku": "[variables('agentSku')]",
+            "version": "[parameters('cyperfVersion')]"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('serverMgmtNic'))]",
+              "properties": {
+                "primary": true,
+                "deleteOption": "Delete"
+              }
+            },
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('serverTestNic'))]",
+              "properties": {
+                "primary": false,
+                "deleteOption": "Delete"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "controllerPublicIp": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))).ipAddress]"
+    },
+    "controllerPrivateIp": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Network/networkInterfaces', variables('controllerNic'))).ipConfigurations[0].properties.privateIPAddress]"
+    },
+    "clientControlIp": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Network/networkInterfaces', variables('clientMgmtNic'))).ipConfigurations[0].properties.privateIPAddress]"
+    },
+    "serverControlIp": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Network/networkInterfaces', variables('serverMgmtNic'))).ipConfigurations[0].properties.privateIPAddress]"
+    },
+    "clientTestIp": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Network/networkInterfaces', variables('clientTestNic'))).ipConfigurations[0].properties.privateIPAddress]"
+    },
+    "serverTestIp": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Network/networkInterfaces', variables('serverTestNic'))).ipConfigurations[0].properties.privateIPAddress]"
+    }
+  }
+}
