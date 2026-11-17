@@ -1742,3 +1742,151 @@ html[data-theme="dark"] .sec-collapse{background:#141821;border-color:#252C3A;bo
 html[data-theme="dark"] .sec-collapse>summary{color:#E7ECF3}
 html[data-theme="dark"] .sec-collapse>summary:hover{background:#1A1F2A}
 
+/* ---------- Premium elevation: controls and cards stand off the page and jump under the pointer ----------
+   Loaded last on purpose; the "html" prefix and the doubled .btn class let these win over the base rules and over the flat-button block above (the fills stay flat and solid; only the depth and the motion return). Resting state: stacked
+   shadows (close key shadow, mid shadow, wide ambient shadow) on top of the existing gloss and inner bevel.
+   Hover: a spring curve that overshoots and settles. Press: the control lands. Reduced motion keeps the depth
+   and drops the movement. */
+html { --jump: cubic-bezier(.34, 1.56, .64, 1); }
+html .btn.btn, html .icon-btn, html .ghost-btn, html .copy-btn {
+  transition: transform .45s var(--jump), box-shadow .3s ease, filter .3s ease;
+}
+html .btn.btn {
+  box-shadow:
+    inset 0 1px 0 var(--neu-light),
+    inset 0 -2px 4px var(--inner-dark),
+    0 2px 4px var(--neu-dark),
+    0 12px 20px -8px oklch(0% 0 0 / .30),
+    0 28px 44px -18px oklch(0% 0 0 / .38);
+}
+html .btn.btn-primary, html .btn.primary {
+  box-shadow:
+    inset 0 1px 0 oklch(100% 0 0 / .55),
+    inset 0 -3px 6px oklch(0% 0 0 / .28),
+    0 4px 8px var(--accent-glow),
+    0 16px 28px -10px var(--accent-glow),
+    0 34px 52px -20px var(--accent-glow);
+}
+html .btn.btn-secondary, html .btn.glass {
+  box-shadow:
+    inset 0 1px 0 oklch(100% 0 0 / .8),
+    inset 0 -8px 20px oklch(0% 0 0 / .08),
+    0 3px 6px oklch(0% 0 0 / .10),
+    0 14px 24px -8px oklch(0% 0 0 / .28),
+    0 32px 50px -18px oklch(0% 0 0 / .42);
+}
+html .icon-btn, html .ghost-btn, html .copy-btn {
+  box-shadow:
+    inset 0 1px 0 var(--neu-light),
+    0 2px 4px var(--neu-dark),
+    0 10px 18px -8px oklch(0% 0 0 / .34),
+    0 22px 34px -16px oklch(0% 0 0 / .34);
+}
+html .card, html .prereq-card, html .path-card, html .step-card {
+  transition: transform .5s var(--jump), box-shadow .35s ease;
+  box-shadow:
+    inset 0 1px 0 oklch(100% 0 0 / .7),
+    inset 0 -10px 26px oklch(0% 0 0 / .08),
+    0 4px 8px -2px oklch(0% 0 0 / .12),
+    0 22px 38px -14px oklch(0% 0 0 / .34),
+    0 50px 76px -32px oklch(0% 0 0 / .42);
+}
+@media (hover: hover) and (pointer: fine) {
+  html .btn.btn:hover { transform: translateY(-6px) scale(1.035); filter: brightness(1.04); }
+  html .btn.btn:hover {
+    box-shadow:
+      inset 0 1px 0 var(--neu-light),
+      inset 0 -2px 4px var(--inner-dark),
+      0 6px 10px var(--neu-dark),
+      0 22px 34px -10px oklch(0% 0 0 / .36),
+      0 46px 66px -22px oklch(0% 0 0 / .46);
+  }
+  html .btn.btn-primary:hover, html .btn.primary:hover {
+    box-shadow:
+      inset 0 1px 0 oklch(100% 0 0 / .6),
+      inset 0 -3px 6px oklch(0% 0 0 / .24),
+      0 8px 14px var(--accent-glow),
+      0 26px 40px -10px var(--accent-glow),
+      0 52px 72px -22px var(--accent-glow);
+  }
+  html .btn.btn-secondary:hover, html .btn.glass:hover {
+    box-shadow:
+      inset 0 1px 0 oklch(100% 0 0 / .85),
+      inset 0 -8px 20px oklch(0% 0 0 / .06),
+      0 8px 12px oklch(0% 0 0 / .12),
+      0 24px 38px -10px oklch(0% 0 0 / .34),
+      0 50px 70px -22px oklch(0% 0 0 / .48);
+  }
+  html .icon-btn:hover, html .copy-btn:hover { transform: translateY(-4px) scale(1.08); }
+  html .ghost-btn:hover { transform: translateY(-4px) scale(1.04); }
+  html .card:hover { transform: translateY(-6px); }
+  html .card.lift:hover, html .card.link:hover, html .prereq-card:hover, html .path-card:hover, html .step-card:hover {
+    transform: translateY(-12px) scale(1.012);
+  }
+  html .card:hover, html .prereq-card:hover, html .path-card:hover, html .step-card:hover {
+    box-shadow:
+      inset 0 1px 0 oklch(100% 0 0 / .75),
+      inset 0 -10px 26px oklch(0% 0 0 / .06),
+      0 10px 16px -4px oklch(0% 0 0 / .14),
+      0 34px 54px -16px oklch(0% 0 0 / .40),
+      0 72px 100px -38px oklch(0% 0 0 / .50);
+  }
+  /* A card inside a card moves less, so the page does not wobble. */
+  html .card .card:hover, html .card .prereq-card:hover, html .card .step-card:hover { transform: translateY(-4px); }
+}
+html .btn.btn:active { transform: translateY(1px) scale(.975); transition-duration: .09s; }
+html .icon-btn:active, html .copy-btn:active, html .ghost-btn:active { transform: scale(.94); transition-duration: .09s; }
+@media (prefers-reduced-motion: reduce) {
+  html .btn.btn, html .icon-btn, html .ghost-btn, html .copy-btn, html .card, html .prereq-card, html .path-card, html .step-card {
+    transform: none !important; transition: box-shadow .2s ease !important;
+  }
+}
+
+/* Navigation links are glass pills, so they read as things to click: a translucent fill, a light rim,
+   a soft shadow, and the same small jump under the pointer. The current section's pill is tinted. */
+html .primary-nav { gap: 3px; }  /* 1px more than before: the header has no spare width */
+html .primary-nav a {
+  color: var(--ink);
+  background: linear-gradient(180deg, oklch(100% 0 0 / .62), oklch(100% 0 0 / .26));
+  -webkit-backdrop-filter: blur(14px) saturate(1.6);
+  backdrop-filter: blur(14px) saturate(1.6);
+  box-shadow:
+    inset 0 0 0 1px oklch(100% 0 0 / .7),   /* the rim, drawn inside so the pill is no wider */
+    inset 0 1px 0 oklch(100% 0 0 / .9),
+    inset 0 -2px 4px oklch(0% 0 0 / .05),
+    0 1px 2px oklch(0% 0 0 / .10),
+    0 8px 14px -8px oklch(0% 0 0 / .30);
+  transition: transform .42s var(--jump), box-shadow .28s ease, background .25s ease, color .2s ease;
+}
+html[data-theme="dark"] .primary-nav a {
+  background: linear-gradient(180deg, oklch(100% 0 0 / .12), oklch(100% 0 0 / .04));
+  box-shadow:
+    inset 0 0 0 1px oklch(100% 0 0 / .16),
+    inset 0 1px 0 oklch(100% 0 0 / .16),
+    0 1px 2px oklch(0% 0 0 / .5),
+    0 8px 14px -8px oklch(0% 0 0 / .7);
+}
+@media (hover: hover) and (pointer: fine) {
+  html .primary-nav a:hover {
+    transform: translateY(-4px) scale(1.05);
+    color: var(--accent-deep);
+    background: linear-gradient(180deg, oklch(100% 0 0 / .85), oklch(100% 0 0 / .45));
+    box-shadow:
+      inset 0 0 0 1px oklch(100% 0 0 / .8),
+      inset 0 1px 0 oklch(100% 0 0 / .95),
+      0 4px 8px oklch(0% 0 0 / .10),
+      0 18px 26px -10px oklch(0% 0 0 / .38);
+  }
+  html[data-theme="dark"] .primary-nav a:hover {
+    color: var(--accent-bright);
+    background: linear-gradient(180deg, oklch(100% 0 0 / .2), oklch(100% 0 0 / .08));
+  }
+}
+html .primary-nav a:active { transform: translateY(1px) scale(.96); transition-duration: .09s; }
+html .primary-nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  html .primary-nav a { transform: none !important; transition: box-shadow .2s ease, background .2s ease !important; }
+}
+/* Between the phone menu and a wide desktop they tighten so the header never
+   runs past the window. */
+@media (max-width: 1400px) { html .primary-nav a { padding: 6px 8px; font-size: 12.5px; } }
